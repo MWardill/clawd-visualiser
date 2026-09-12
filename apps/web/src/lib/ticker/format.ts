@@ -3,7 +3,7 @@
 import type { Activity, SessionPhase, TickerEvent } from "@clawd/core";
 import { hhmmss } from "../time";
 
-const ESC = "[";
+const ESC = "\u001b[";
 const RESET = `${ESC}0m`;
 const paint = (code: string, s: string): string => `${ESC}${code}m${s}${RESET}`;
 const dim = (s: string): string => paint("2", s);
@@ -48,5 +48,5 @@ export function formatTicker(e: TickerEvent): string {
 
 /** Removes the colour sequences; for tests and for plain-text fallbacks. */
 export function stripAnsi(s: string): string {
-  return s.replace(/\[[0-9;]*m/g, "");
+  return s.replace(/\u001b\[[0-9;]*m/g, "");
 }
