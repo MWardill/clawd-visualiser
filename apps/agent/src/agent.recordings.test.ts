@@ -20,6 +20,9 @@ const SECRET_KEYS = new Set([
   "current_dir", "project_dir", "tool_input", "tool_response", "delta", "message", "description", "command", "error",
 ]);
 
+/** Top-level fields whose values redaction deliberately keeps (ids, tool names, subagent types). */
+const KEPT_FIELDS = ["session_id", "agent_id", "agent_type", "tool_use_id", "tool_name"] as const;
+
 type Recorded = { route: "/ingest/hook" | "/ingest/status"; body: unknown };
 
 function recordedPayloads(text: string): Recorded[] {
@@ -68,7 +71,14 @@ describe.runIf(Boolean(SPIKE_DIR))("raw spike recordings (local only)", () => {
     const payloads: Recorded[] = [];
     for (const name of (await readdir(dir)).filter((n) => n.endsWith(".jsonl"))) payloads.push(...recordedPayloads(await readFile(join(dir, name), "utf8")));
     expect(payloads.length).toBeGreaterThan(0);
-    const found = payloads.flatMap((p) => secrets(p.body));
+    // Values the payload also carries in a field redaction keeps (e.g. Agent tool's subagent_type matching agent_type) are not content.
+    const kept = new Set(
+      payloads.flatMap((p) => {
+        const body = p.body as Record<string, unknown> | null;
+        return body ? KEPT_FIELDS.map((k) => body[k]).filter((v): v is string => typeof v === "string") : [];
+      }),
+    );
+    const found = payloads.flatMap((p) => secrets(p.body)).filter((s) => !kept.has(s.value));
     const cwds = [...new Set(payloads.map((p) => (p.body as { cwd?: unknown } | null)?.cwd).filter((c): c is string => typeof c === "string"))];
     expect(cwds.length).toBeGreaterThan(0);
 
