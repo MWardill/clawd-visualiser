@@ -411,3 +411,6 @@ differently:
 5. The detail sheet is a shadcn `Sheet` on the right; the ticker is the sheet's body.
 6. Sound (FR-25) and the resume line (FR-28) are left out; both are P1 or later and optional.
 7. The scene package depends on `@clawd/core` for types only.
+8. idle.ts gained the breathing fix (the template formula rounded to nothing on integer frames).
+9. The scene's hit test maps CSS pixels through the canvas backing store, so non-integer pixel ratios stay exact.
+10. The simulated feed publishes once more right after its source starts, so the first session's snapshot follows its ticker lines in the same call.

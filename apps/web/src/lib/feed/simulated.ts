@@ -75,8 +75,8 @@ export function createSimulatedFeed(opts: SimulatedFeedOptions = {}): Feed {
       // first session's events immediately, at t === now): the "at once" snapshot must be empty.
       publish(now());
       const stopSource = createSimulatedSource(sourceOpts).start(sink);
-      // The source's first pump ran inside start() and may have born a session: publish again so no
-      // ticker line precedes the snapshot that names its alias.
+      // The source's first pump ran inside start() and may have born a session whose ticker lines
+      // already went out; publish now so the snapshot naming that alias follows in the same call.
       publish(now());
       const handle = setI(() => {
         const t = now();

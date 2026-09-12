@@ -9,6 +9,7 @@ type Props = { sessions: SessionSnapshot[]; onSelect: (alias: string) => void };
  * until it receives focus, then shown as a small list under the top bar.
  */
 export function SessionList({ sessions, onSelect }: Props) {
+  if (sessions.length === 0) return null;
   return (
     <nav
       aria-label="Sessions"
