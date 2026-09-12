@@ -67,6 +67,11 @@ export function createStreamHub(opts: {
     if (clients.size === 0 && heartbeat !== null) {
       clearInterval(heartbeat);
       heartbeat = null;
+      if (trailing !== null) {
+        clearTimeout(trailing);
+        trailing = null;
+      }
+      pending = null;
     }
   }
 
@@ -97,10 +102,11 @@ export function createStreamHub(opts: {
         res.end('{"error":"too many streams"}');
         return;
       }
-      res.writeHead(200, { ...headers, "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", connection: "keep-alive", "x-accel-buffering": "no" });
+      res.writeHead(200, { ...headers, "content-type": "text/event-stream", "cache-control": "no-store", connection: "keep-alive", "x-accel-buffering": "no" });
       clients.add(res);
       req.on("close", () => drop(res));
       const current = SnapshotSchema.safeParse(opts.current());
+      if (!current.success) opts.log("privacy.blocked");
       const text = current.success ? frame(STREAM_EVENTS.snapshot, current.data) : null;
       if (text !== null) write(res, text);
       heartbeat ??= setInterval(() => broadcast(": heartbeat\n\n"), heartbeatMs);

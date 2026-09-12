@@ -65,7 +65,7 @@ describe("stream hub", () => {
     const res = new FakeRes();
     h.connect(new FakeReq(), res, { "access-control-allow-origin": "http://localhost:3000" });
     expect(res.status).toBe(200);
-    expect(res.headers).toMatchObject({ "content-type": "text/event-stream; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "http://localhost:3000" });
+    expect(res.headers).toMatchObject({ "content-type": "text/event-stream", "cache-control": "no-store", "access-control-allow-origin": "http://localhost:3000" });
     expect(frames(res.text)).toEqual([{ event: "snapshot", data: snap("1970-01-01T00:00:00.000Z") }]);
     expect(h.clientCount()).toBe(1);
   });
@@ -109,6 +109,29 @@ describe("stream hub", () => {
     req.close();
     expect(h.clientCount()).toBe(0);
     expect(vi.getTimerCount()).toBe(0);
+  });
+
+  it("forgets a throttled snapshot when the last client leaves, so a new client never gets a stale one", async () => {
+    const { h } = hub();
+    const first = new FakeReq();
+    h.connect(first, new FakeRes());
+    h.snapshot(snap("1970-01-01T00:00:00.001Z"));
+    h.snapshot(snap("1970-01-01T00:00:00.002Z"));
+    first.close();
+    expect(vi.getTimerCount()).toBe(0);
+    const later = new FakeRes();
+    h.connect(new FakeReq(), later);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(frames(later.text).map((f) => (f.data as Snapshot).generatedAt)).toEqual(["1970-01-01T00:00:00.000Z"]);
+  });
+
+  it("logs and sends no initial frame when the current snapshot is invalid", () => {
+    const { h, log } = hub({ current: () => ({ version: 2 }) as unknown as Snapshot });
+    const res = new FakeRes();
+    h.connect(new FakeReq(), res);
+    expect(res.status).toBe(200);
+    expect(frames(res.text)).toEqual([]);
+    expect(log).toHaveBeenCalledWith("privacy.blocked");
   });
 
   it("refuses a client over the limit", () => {
