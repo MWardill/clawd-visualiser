@@ -16,7 +16,7 @@
 - Every reducer is pure: state in, state out, `now` (epoch ms) passed in. Never call `Date.now()` inside `src/` except as an injectable default in `sources/`.
 - Wire schemas use `.strict()`; `ext` is the only extension field.
 - The forbidden list in `ingest/redact.ts` must contain exactly: `prompt`, `tool_input`, `tool_response`, `last_assistant_message`, `transcript_path`, `agent_transcript_path`, `session_name`, `cwd`, `workspace`.
-- Commit locally after each task with the trailer `Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>`. **Never push**; the user pushes.
+- Commit locally after each task with a one-line message and no trailers. **Never push**; the user pushes.
 - Run commands from the repo root `C:\mw\visualiser` unless stated. Package filter: `pnpm --filter @clawd/core <script>`.
 - Line endings LF (enforced by `.gitattributes`).
 
@@ -322,9 +322,7 @@ Expected: no output from tsc (exit 0).
 
 ```bash
 git add packages/core/package.json pnpm-lock.yaml packages/core/src/schema
-git commit -m "feat(core): wire schemas and transport constants
-
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(core): wire schemas and transport constants"
 ```
 
 ---
@@ -514,9 +512,7 @@ Expected: exit 0.
 
 ```bash
 git add packages/core/src/schema packages/core/src/ingest
-git commit -m "feat(core): redacted event schema and tool categories
-
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(core): redacted event schema and tool categories"
 ```
 
 ---
@@ -653,9 +649,7 @@ Expected: exit 0.
 
 ```bash
 git add packages/core/src/alias packages/core/src/ingest
-git commit -m "feat(core): pane key hashing and directory allowlist
-
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(core): pane key hashing and directory allowlist"
 ```
 
 ---
@@ -954,9 +948,7 @@ Expected: exit 0.
 
 ```bash
 git add packages/core/src/schema/raw.ts packages/core/src/ingest
-git commit -m "feat(core): ingest redaction with a tested forbidden list
-
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(core): ingest redaction with a tested forbidden list"
 ```
 
 ---
@@ -1242,9 +1234,7 @@ Expected: exit 0.
 
 ```bash
 git add packages/core/src/state
-git commit -m "feat(core): session reducer with display holds and the asleep timer
-
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(core): session reducer with display holds and the asleep timer"
 ```
 
 ---
@@ -1390,9 +1380,7 @@ Expected: PASS, 6 tests.
 
 ```bash
 git add packages/core/src/state/fleet.ts packages/core/src/state/fleet.test.ts
-git commit -m "feat(core): fleet reducer with pane lifecycle and tick
-
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(core): fleet reducer with pane lifecycle and tick"
 ```
 
 ---
@@ -1634,9 +1622,7 @@ Expected: exit 0.
 
 ```bash
 git add packages/core/src/alias packages/core/src/state/snapshot.ts packages/core/src/state/snapshot.test.ts
-git commit -m "feat(core): alias map and snapshot derivation
-
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(core): alias map and snapshot derivation"
 ```
 
 ---
@@ -1786,9 +1772,7 @@ Expected: exit 0.
 
 ```bash
 git add packages/core/src/state
-git commit -m "feat(core): ticker mapping from redacted events
-
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(core): ticker mapping from redacted events"
 ```
 
 ---
@@ -2055,9 +2039,7 @@ Expected: exit 0. (Vitest provides `__dirname` in ESM test files, and `@types/no
 
 ```bash
 git add packages/core/package.json pnpm-lock.yaml packages/core/src/sources packages/core/src/fixtures
-git commit -m "feat(core): source interface, fixture loader, replay source and hand-written fixtures
-
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(core): source interface, fixture loader, replay source and hand-written fixtures"
 ```
 
 ---
@@ -2376,9 +2358,7 @@ Expected: exit 0.
 
 ```bash
 git add packages/core/src/sources
-git commit -m "feat(core): deterministic simulated source emitting redacted events
-
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(core): deterministic simulated source emitting redacted events"
 ```
 
 ---
@@ -2640,9 +2620,7 @@ Expected: all test files pass; tsc exit 0. The script is outside `src`, so tsc i
 
 ```bash
 git add .gitignore packages/core/package.json pnpm-lock.yaml packages/core/scripts packages/core/src/fixtures
-git commit -m "test(core): redacted spike fixtures and golden snapshot sequences
-
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "test(core): redacted spike fixtures and golden snapshot sequences"
 ```
 
 ---
@@ -2750,9 +2728,7 @@ Expected: every package's tests pass (core: 14 test files), tsc clean in all pac
 
 ```bash
 git add packages/core/src/index.ts packages/core/src/index.test.ts packages/core/README.md README.md
-git commit -m "feat(core): public API surface at 0.1.0
-
-Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
+git commit -m "feat(core): public API surface at 0.1.0"
 ```
 
 Do not push. Tell the user M1 is complete and unpushed.
