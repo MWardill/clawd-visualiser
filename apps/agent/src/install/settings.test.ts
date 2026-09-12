@@ -87,6 +87,15 @@ describe("applyUninstall", () => {
     const settings = { hooks: {}, statusLine: { type: "command", command: "mine.sh" } };
     expect(applyUninstall(settings, undefined)).toEqual(settings);
   });
+
+  it("keeps a hooks key named __proto__ through install and uninstall", () => {
+    const original = JSON.parse('{"hooks":{"__proto__":[{"hooks":[{"type":"command","command":"odd.sh"}]}]}}') as JsonObject;
+    const installed = applyInstall(original, OPTS);
+    expect(Object.hasOwn(installed.settings.hooks as object, "__proto__")).toBe(true);
+    expect(Object.getPrototypeOf(installed.settings.hooks)).toBe(Object.prototype);
+    const restored = applyUninstall(installed.settings, undefined);
+    expect(JSON.stringify(restored)).toBe(JSON.stringify(original));
+  });
 });
 
 describe("recognising its own entries", () => {

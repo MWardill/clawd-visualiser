@@ -67,10 +67,10 @@ export function isOurStatusLine(value: unknown): boolean {
 
 /** Remove our hooks; drop groups and events that only we filled. Anything else is left as found. */
 function withoutOurHooks(hooks: JsonObject): JsonObject {
-  const out: JsonObject = {};
+  const pairs: [string, unknown][] = [];
   for (const [event, groups] of Object.entries(hooks)) {
     if (!Array.isArray(groups)) {
-      out[event] = groups;
+      pairs.push([event, groups]);
       continue;
     }
     const kept: unknown[] = [];
@@ -83,9 +83,9 @@ function withoutOurHooks(hooks: JsonObject): JsonObject {
       if (inner.length === group.hooks.length) kept.push(group);
       else if (inner.length > 0) kept.push({ ...group, hooks: inner });
     }
-    if (kept.length > 0 || groups.length === 0) out[event] = kept;
+    if (kept.length > 0 || groups.length === 0) pairs.push([event, kept]);
   }
-  return out;
+  return Object.fromEntries(pairs);
 }
 
 export function applyInstall(settings: JsonObject, opts: InstallOptions): InstallResult {
