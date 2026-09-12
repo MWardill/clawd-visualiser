@@ -15,7 +15,7 @@ const SNAPSHOT: Snapshot = {
   sessions: [{ alias: "agent-1", label: "Otter", pane: "pane-1", state: "waiting", activity: null, subagents: 1, contextPct: 50, since: iso(T0), updatedAt: iso(T0) }],
 };
 
-function harness() {
+function harness(dpr = 1) {
   const { ctx, cellsOf, texts, reset } = fakeContext();
   const frames: ((ts: number) => void)[] = [];
   const events = new Map<string, (e: unknown) => void>();
@@ -32,7 +32,7 @@ function harness() {
   const selected: string[] = [];
   const scene = mountPanesScene(canvas, {
     now: () => now,
-    devicePixelRatio: 1,
+    devicePixelRatio: dpr,
     document: null,
     requestAnimationFrame: (fn) => {
       frames.push(fn);
@@ -80,6 +80,22 @@ describe("mountPanesScene", () => {
     expect(h.scene.hitTest(inside.x, (MARGIN + TITLE_ROWS + 3 * SEAT_H) * CELL)).toBeNull();
     h.events.get("click")?.({ clientX: inside.x, clientY: inside.y });
     expect(h.selected).toEqual(["agent-1"]);
+  });
+
+  it("hit-tests correctly when a cell is not a whole number of device pixels", () => {
+    const h = harness(1.25);
+    h.scene.setSnapshot(SNAPSHOT);
+    h.setNow(T0 + 5000);
+    h.frame(0);
+    h.frame(100);
+    // PX = round(6 * 1.25) = 8 device px per cell, so a cell is 8 / 1.25 = 6.4 CSS px
+    const cssPerCell = 8 / 1.25;
+    const seat = seatOrigin(0);
+    const x = (MARGIN + seat.x + SEAT_W / 2) * cssPerCell;
+    const y = (MARGIN + seat.y + SEAT_H / 2) * cssPerCell;
+    expect(h.scene.hitTest(x, y)).toBe("agent-1");
+    // the same point measured in nominal 6 px cells lands in the wrong place
+    expect(h.scene.hitTest((MARGIN + seat.x + SEAT_W - 1) * cssPerCell + 2 * CELL, y)).toBeNull();
   });
 
   it("clears every actor at once and stops scheduling frames after destroy", () => {

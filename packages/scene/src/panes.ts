@@ -61,15 +61,34 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
   const fps = opts.fps ?? 30;
   const now = opts.now ?? (() => Date.now());
   const font = opts.font ?? DEFAULT_FONT;
-  const dpr = opts.devicePixelRatio ?? (typeof devicePixelRatio === "number" ? devicePixelRatio : 1);
   const raf = opts.requestAnimationFrame ?? ((fn) => requestAnimationFrame(fn));
   const caf = opts.cancelAnimationFrame ?? ((h) => cancelAnimationFrame(h));
   const doc = opts.document === undefined ? (typeof document === "undefined" ? null : document) : opts.document;
 
-  const PX = Math.max(1, Math.round(cell * dpr));
-  const textPx = Math.max(6, Math.round(TEXT_CSS_PX * (PX / cell)));
-  const engine = createEngine(ctx, PX);
+  let dpr = opts.devicePixelRatio ?? (typeof devicePixelRatio === "number" ? devicePixelRatio : 1);
+  let PX = Math.max(1, Math.round(cell * dpr));
+  let textPx = Math.max(6, Math.round(TEXT_CSS_PX * (PX / cell)));
+  let engine = createEngine(ctx, PX);
   const world: World = emptyWorld();
+  /** CSS size last passed to resize(); used to map a click through the backing store. */
+  let cssWidth = 0;
+  let cssHeight = 0;
+
+  /**
+   * Re-reads the pixel ratio -- a browser zoom can change it after mount -- and recomputes the
+   * backing-store cell size and text size from it. The drawing engine is recreated only when the
+   * backing cell size actually changed, so an unrelated resize does not churn it.
+   */
+  function applyRatio(): void {
+    dpr = opts.devicePixelRatio ?? (typeof devicePixelRatio === "number" ? devicePixelRatio : 1);
+    const nextPX = Math.max(1, Math.round(cell * dpr));
+    textPx = Math.max(6, Math.round(TEXT_CSS_PX * (nextPX / cell)));
+    if (nextPX !== PX) {
+      engine.clearParticles();
+      PX = nextPX;
+      engine = createEngine(ctx, PX);
+    }
+  }
   /** Drawn pane origins, easing toward the layout's targets. */
   const origins = new Map<string, { x: number; y: number }>();
   let rects = new Map<string, PaneRect>();
@@ -211,6 +230,9 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
   }
 
   function resize(cssW: number, cssH: number): void {
+    applyRatio();
+    cssWidth = cssW;
+    cssHeight = cssH;
     canvas.width = Math.max(PX, Math.round(cssW * dpr));
     canvas.height = Math.max(PX, Math.round(cssH * dpr));
     gridW = Math.floor(canvas.width / PX);
@@ -220,8 +242,9 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
   }
 
   function hitTest(cssX: number, cssY: number): string | null {
-    const gx = cssX / cell;
-    const gy = cssY / cell;
+    if (cssWidth === 0 || cssHeight === 0) return null;
+    const gx = (cssX * (canvas.width / cssWidth)) / PX;
+    const gy = (cssY * (canvas.height / cssHeight)) / PX;
     for (const a of world.actors) {
       if (a.phase !== "entering" && a.phase !== "seated" && a.phase !== "waving") continue;
       const r = rects.get(a.pane);
@@ -259,6 +282,7 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
   canvas.addEventListener("pointermove", onMove);
   doc?.addEventListener("visibilitychange", onVisibility);
 
+  applyRatio();
   resize(canvas.width / dpr, canvas.height / dpr);
   schedule();
 
@@ -287,6 +311,7 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
       canvas.removeEventListener("pointermove", onMove);
       doc?.removeEventListener("visibilitychange", onVisibility);
       engine.clearParticles();
+      canvas.style.cursor = "";
     },
   };
 }
