@@ -62,36 +62,43 @@ apps/agent/
   README.md
   hooks/                    plain dependency-free ESM, copied to ~/.clawd/bin by the installer
     clawd-hook.mjs          command hook: posts its stdin to /ingest/hook
+    clawd-lib.mjs           shared library for hook scripts
     clawd-statusline.mjs    status line: posts its stdin to /ingest/status, prints a line
   src/
-    main.ts                 CLI: serve | install | uninstall
-    version.ts              AGENT_VERSION
-    log.ts                  typed operational logger
+    agent.ts                wires everything, returns start and stop
+    cli.ts                  argument handling
     config.ts               paths, config schema, load and save
     json-file.ts            atomic JSON write (temp file and rename)
-    ingest/
-      body.ts               bounded request body reader
-      ingest.ts             raw body -> RedactedEvent | null
-    host/
-      host.ts               FleetHost: fleet, aliases, ticker buffers, snapshot change detection
-      ticker-buffer.ts      per-session ring buffers
-    store/
-      alias-store.ts        load and persist the AliasMap
-      event-log.ts          daily redacted event files and retention
-    presence/
-      poller.ts             runs `claude agents --json`, reconciles, keeps pids for focus
-      reconcile.ts          pure: poll result + fleet -> presence events
-    http/
-      server.ts             node:http server, guards, routing
-      guards.ts             host, origin and token checks
-      sse.ts                stream hub: throttle, heartbeat, client limit
+    log.ts                  typed operational logger
+    main.ts                 entry point: wires the CLI to the real process
+    stamp.ts                backup file names
+    version.ts              AGENT_VERSION
     focus/
       focus.ts              alias -> pid and folder -> PowerShell
       focus-script.ts       the PowerShell script as a constant
+    host/
+      host.ts               FleetHost: fleet, aliases, ticker buffers, snapshot change detection
+    http/
+      guards.ts             host, origin and token checks
+      server.ts             node:http server, guards, routing
+      sse.ts                stream hub: throttle, heartbeat, client limit
+    ingest/
+      body.ts               bounded request body reader
+      ingest.ts             raw body -> RedactedEvent | null
     install/
-      settings.ts           pure: settings JSON in, settings JSON out
       installer.ts          backup, copy hook scripts, write settings and config
-    agent.ts                createAgent(): wires everything, returns start and stop
+      settings.ts           pure: settings JSON in, settings JSON out
+    presence/
+      poller.ts             runs `claude agents --json`, reconciles, keeps pids for focus
+      reconcile.ts          pure: poll result + fleet -> presence events
+    store/
+      alias-store.ts        load and persist the AliasMap
+      event-log.ts          daily redacted event files and retention
+    testing/
+      events.ts
+      http.ts
+      raw.ts
+      tmp.ts
 ```
 
 Each `*.test.ts` sits next to its module. Everything that touches time, processes or the file
@@ -526,9 +533,9 @@ on `127.0.0.1:<port>`; start the 500 ms tick, the poll loop and the hourly reten
 `EADDRINUSE` exits 1 with a message naming the port. `SIGINT` and `SIGTERM` stop the timers, end
 the streams, close the server, flush the aliases and the log, and exit 0.
 
-`createAgent({ home, port, now, exec, spawn })` does all of this with injected dependencies, and
-returns `{ start(): Promise<{ port }>, stop(): Promise<void> }` so tests can run a whole agent on
-port 0.
+`startAgent({ home, port, now, log, exec, runFocus, platform, stateConfig, tickMs })` does all of
+this with injected dependencies and resolves to `{ port, stop() }` once listening, so tests can run
+a whole agent on port 0.
 
 ## 12. Operational log
 

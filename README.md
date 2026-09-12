@@ -22,13 +22,14 @@ A pnpm workspace. Packages export TypeScript source directly; the web app compil
 | Path | What it is |
 | --- | --- |
 | `apps/web` | Next.js app (App Router, Tailwind, shadcn/ui). Renders snapshots; runs on the simulated source when no agent is present. |
+| `apps/agent` | The local agent: hook and status line receivers, redaction at ingest, presence polling, snapshot and ticker streams, the settings installer and Windows window focus. See its README. |
 | `packages/core` | Contracts, redaction, state machine, aliases, simulated and replay sources, fixtures. Pure TypeScript, tested with Vitest. See its README. |
 | `packages/scene` | The canvas renderer: the Clawd pixel engine and the panes scene. Framework-free. |
 | `docs/PRD.md` | Requirements, contracts, state machine, milestones, decision log. |
 | `docs/spike-hooks.md` | What the hooks, agents list and status line actually provide, measured on real runs. |
 | `tools/hook-spike/` | The listener and settings used for those measurements; reusable for further checks. |
 
-The local agent (`apps/agent`) arrives with milestone B1.
+To see real sessions, install the agent's hooks and start it; see [apps/agent/README.md](apps/agent/README.md).
 
 ## Develop
 
