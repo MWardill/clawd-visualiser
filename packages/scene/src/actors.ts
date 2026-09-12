@@ -99,12 +99,19 @@ function syncMinis(a: Actor, count: number, now: number): void {
   const wanted = Math.min(MAX_MINIS, Math.max(0, count));
   const active = a.subs.filter((m) => !m.leaving);
   while (active.length < wanted) {
-    const used = new Set(active.map((m) => m.k));
-    let k = 0;
-    while (used.has(k)) k++;
-    const m: Mini = { k, pos: { ...MINI_HOME }, move: { from: { ...MINI_HOME }, to: miniSlot(k), t0: now, dur: TIMING.miniOut, ease: "out" }, leaving: false };
-    a.subs.push(m);
-    active.push(m);
+    const departing = a.subs.find((m) => m.leaving);
+    if (departing) {
+      departing.leaving = false;
+      departing.move = { from: { ...departing.pos }, to: miniSlot(departing.k), t0: now, dur: TIMING.miniOut, ease: "out" };
+      active.push(departing);
+    } else {
+      const used = new Set(a.subs.map((m) => m.k));
+      let k = 0;
+      while (used.has(k)) k++;
+      const m: Mini = { k, pos: { ...MINI_HOME }, move: { from: { ...MINI_HOME }, to: miniSlot(k), t0: now, dur: TIMING.miniOut, ease: "out" }, leaving: false };
+      a.subs.push(m);
+      active.push(m);
+    }
     a.sparkleUntil = now + TIMING.sparkle;
     a.glanceUntil = now + TIMING.glance;
   }

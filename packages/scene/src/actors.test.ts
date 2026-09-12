@@ -112,4 +112,18 @@ describe("reconcile", () => {
     tick(w, first + TIMING.blink);
     expect(w.actors[0]!.blinkAt).toBeGreaterThan(first);
   });
+
+  it("recalls a departing mini instead of adding a fourth when the count rises again", () => {
+    const w = reconcile(emptyWorld(), snap([session({ alias: "agent-1", subagents: 3 })]), T0);
+    const a = w.actors[0]!;
+    reconcile(w, snap([session({ alias: "agent-1", subagents: 1 })]), T0 + 100);
+    expect(a.subs.filter((m) => m.leaving)).toHaveLength(2);
+    reconcile(w, snap([session({ alias: "agent-1", subagents: 3 })]), T0 + 200);
+    expect(a.subs).toHaveLength(MAX_MINIS);
+    expect(a.subs.every((m) => !m.leaving)).toBe(true);
+    expect(a.subs.map((m) => m.k).sort()).toEqual([0, 1, 2]);
+    for (const m of a.subs) if (m.move) expect(m.move.to).toEqual(miniSlot(m.k));
+    tick(w, T0 + 200 + TIMING.miniOut);
+    expect(a.subs.every((m) => m.move === null && !m.leaving)).toBe(true);
+  });
 });
