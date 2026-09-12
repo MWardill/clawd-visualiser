@@ -82,6 +82,16 @@ describe("reduceSession", () => {
     expect(s.state).toBe("idle");
   });
 
+  it("keeps the parent on spawn when a tool ends while subagents are live or from a subagent", () => {
+    let s = run([ev("prompt", T0), ev("subagent.start", T0 + 1, { agentId: "a1", agentType: "x" }), ev("tool.start", T0 + 2, { tool: "Read", category: "read", toolUseId: "u1" })]);
+    expect(s.activity).toBe("read");
+    s = run([ev("tool.end", T0 + 3, { tool: "Read", category: "read", toolUseId: "u1", durationMs: 1 })], s);
+    expect(s.activity).toBe("spawn");
+    s = run([ev("subagent.stop", T0 + 4, { agentId: "a1", agentType: "x" }), ev("tool.end", T0 + 5, { agentId: "a1", tool: "Bash", category: "run", toolUseId: "u2", durationMs: 1 })], s);
+    expect(s.subagents).toEqual([]);
+    expect(s.activity).toBe("spawn");
+  });
+
   it("does not change state on subagent events alone", () => {
     const s = run([ev("prompt", T0), ev("stop", T0 + 1, { backgroundTasks: 0 }), ev("subagent.start", T0 + 2, { agentId: "a1", agentType: "x" })]);
     expect(s.state).toBe("idle");
