@@ -14,6 +14,12 @@ describe("fixtures", () => {
     expect(f.events.every((e) => e.v === 1)).toBe(true);
   });
 
+  it("names the fixture and the physical line number when a line will not parse", () => {
+    expect(() => parseFixture('{"fixture":1,"name":"x"}\n\n{"v":1,')).toThrow(/^fixture x line 3: /);
+    expect(() => parseFixture("{oops")).toThrow(/^fixture header line 1: /);
+    expect(() => parseFixture('{"fixture":1,"name":"x"}\n\n{"v":1,"t":1,"sessionId":"s","paneKey":"k","kind":"prompt","prompt":"hi"}')).toThrow(/^fixture x line 3: /);
+  });
+
   it("rejects a fixture with a forbidden field or a missing header", () => {
     expect(() => parseFixture('{"fixture":1,"name":"x"}\n{"v":1,"t":1,"sessionId":"s","paneKey":"k","kind":"prompt","prompt":"hi"}')).toThrow();
     expect(() => parseFixture('{"v":1,"t":1,"sessionId":"s","paneKey":"k","kind":"prompt"}')).toThrow(/header/);

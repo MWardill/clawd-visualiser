@@ -31,7 +31,7 @@ function ownLine(e: RedactedEvent, t: string): TickerEvent | null {
     case "permission.request":
       return { t, kind: "permission", tool: e.tool };
     case "permission.denied":
-      return e.tool ? { t, kind: "permission", tool: e.tool } : { t, kind: "permission" };
+      return { t, kind: "permission", ...(e.tool ? { tool: e.tool } : {}), reason: "denied" };
     case "stop":
       return { t, kind: "stop" };
     case "subagent.start":

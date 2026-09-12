@@ -28,4 +28,9 @@ describe("aliases", () => {
     expect(start).toEqual(emptyAliasMap());
     expect(ensureSessionAlias(p.map, "s1").alias).toBe("agent-1");
   });
+  it("does not mutate the input map when aliasing a session", () => {
+    const start = emptyAliasMap();
+    ensureSessionAlias(start, "s1");
+    expect(start).toEqual(emptyAliasMap());
+  });
 });

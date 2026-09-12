@@ -17,6 +17,13 @@ describe("reduceFleet", () => {
     expect(f.panes["k2"]?.firstSeenAt).toBe(T0 + 2);
   });
 
+  it("keeps one entry per session in its pane however many events that session sends", () => {
+    let f = reduceFleet(emptyFleet(), ev("s1", "k1", "prompt", T0), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, ev("s1", "k1", "tool.start", T0 + 1, { tool: "Read", category: "read", toolUseId: "u1" }), T0 + 1, DEFAULT_CONFIG);
+    f = reduceFleet(f, ev("s1", "k1", "stop", T0 + 2, { backgroundTasks: 0 }), T0 + 2, DEFAULT_CONFIG);
+    expect(f.panes["k1"]?.sessionIds).toEqual(["s1"]);
+  });
+
   it("seeds a session from a live presence but ignores presence for unknown dead sessions", () => {
     let f = reduceFleet(emptyFleet(), ev("s1", "k1", "presence", T0, { alive: true }), T0, DEFAULT_CONFIG);
     expect(f.sessions["s1"]?.state).toBe("idle");

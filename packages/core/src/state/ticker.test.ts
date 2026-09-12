@@ -26,7 +26,8 @@ describe("toTickerEvents", () => {
     expect(line(ev("tool.start", { tool: "Bash", category: "run", toolUseId: "u" }))).toEqual({ t: new Date(T0).toISOString(), kind: "tool.start", tool: "Bash", activity: "run" });
     expect(line(ev("tool.end", { tool: "Bash", category: "run", toolUseId: "u", durationMs: 12 }))).toMatchObject({ kind: "tool.end", durationMs: 12 });
     expect(line(ev("permission.request", { tool: "Write", category: "edit" }))).toMatchObject({ kind: "permission", tool: "Write" });
-    expect(line(ev("permission.denied", {}))).toEqual({ t: new Date(T0).toISOString(), kind: "permission" });
+    expect(line(ev("permission.denied", {}))).toEqual({ t: new Date(T0).toISOString(), kind: "permission", reason: "denied" });
+    expect(line(ev("permission.denied", { tool: "Write" }))).toEqual({ t: new Date(T0).toISOString(), kind: "permission", tool: "Write", reason: "denied" });
     expect(line(ev("subagent.start", { agentId: "a", agentType: "general-purpose" }))).toMatchObject({ kind: "subagent.start", agentType: "general-purpose" });
     expect(line(ev("subagent.stop", { agentId: "a", agentType: "general-purpose" }))).toMatchObject({ kind: "subagent.stop" });
     expect(line(ev("stop", { backgroundTasks: 0 }))).toMatchObject({ kind: "stop" });
@@ -41,5 +42,10 @@ describe("toTickerEvents", () => {
     for (const e of [ev("prompt"), ev("tool.start", { tool: "Read", category: "read", toolUseId: "u" })]) {
       for (const line of toTickerEvents(e, s, reduceSession(s, e, T0, DEFAULT_CONFIG))) expect(() => TickerEventSchema.parse(line)).not.toThrow();
     }
+  });
+  it("emits no state line for a session it has never seen before", () => {
+    const e = ev("prompt");
+    const after = reduceSession(newSession("s1", "k1", T0), e, T0, DEFAULT_CONFIG);
+    expect(toTickerEvents(e, null, after)).toEqual([{ t: new Date(T0).toISOString(), kind: "prompt" }]);
   });
 });
