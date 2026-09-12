@@ -31,26 +31,30 @@ export function drawClawdWalking(engine: Engine, ox: number, oy: number, eyes: E
 export function drawClawdWave(engine: Engine, ox: number, oy: number, eyes: EyeVariant, side: "left" | "right"): void {
   engine.drawClawd(ox, oy, { eyes });
   const col = PALETTE.clawd.body;
+  const right = CLAWD_BODY.anchors.handRight.x;
+  const left = CLAWD_BODY.anchors.handLeft.x;
   if (side === "right") {
-    engine.px(ox + 13, oy + 1, col);
-    engine.px(ox + 14, oy, col);
+    engine.px(ox + right, oy + 1, col);
+    engine.px(ox + right + 1, oy, col);
   } else {
-    engine.px(ox + 0, oy + 1, col);
-    engine.px(ox - 1, oy, col);
+    engine.px(ox + left, oy + 1, col);
+    engine.px(ox + left - 1, oy, col);
   }
 }
 
 /** An exclamation mark centred above the head: three cells in a column with a gap before the dot. */
 export function drawExclaim(engine: Engine, ox: number, oy: number, col: string): void {
-  engine.px(ox + 7, oy - 4, col);
-  engine.px(ox + 7, oy - 3, col);
-  engine.px(ox + 7, oy - 1, col);
+  const cx = ox + CLAWD_BODY.anchors.hatTop.x;
+  engine.px(cx, oy - 4, col);
+  engine.px(cx, oy - 3, col);
+  engine.px(cx, oy - 1, col);
 }
 
-/** A sweat drop by the right eye. */
+/** A sweat drop at the right edge of the head. */
 export function drawSweat(engine: Engine, ox: number, oy: number): void {
-  engine.px(ox + 13, oy - 1, PALETTE.state.blue);
-  engine.px(ox + 13, oy, PALETTE.state.blue);
+  const col = ox + CLAWD_BODY.anchors.handRight.x;
+  engine.px(col, oy - 1, PALETTE.state.blue);
+  engine.px(col, oy, PALETTE.state.blue);
 }
 
 /** Sparkles either side of each eye. */
