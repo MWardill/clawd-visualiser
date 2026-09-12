@@ -156,6 +156,14 @@ describe("FleetHost", () => {
     expect([...host.endedIds()]).toEqual([]);
   });
 
+  it("hands out a copy of the ended set that later events do not change", () => {
+    const { host } = makeHost();
+    const before = host.endedIds();
+    host.ingest(ev("session.end", T0, { reason: "other" }));
+    expect([...before]).toEqual([]);
+    expect([...host.endedIds()]).toEqual(["s1"]);
+  });
+
   it("writes a state line when a tick changes a session's state", () => {
     const { host, clock, seen } = makeHost();
     host.ingest(ev("prompt", T0, {}));

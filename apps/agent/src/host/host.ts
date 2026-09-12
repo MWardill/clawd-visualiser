@@ -123,7 +123,7 @@ export class FleetHost {
   }
 
   endedIds(): ReadonlySet<string> {
-    return this.ended;
+    return new Set(this.ended);
   }
 
   /** Forget ended ids the latest successful poll no longer lists: they cannot come back through presence. */
