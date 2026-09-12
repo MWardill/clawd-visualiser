@@ -65,7 +65,7 @@ apps/agent/
     clawd-lib.mjs           shared library for hook scripts
     clawd-statusline.mjs    status line: posts its stdin to /ingest/status, prints a line
   src/
-    agent.ts                wires everything, returns start and stop
+    agent.ts                startAgent(): wires everything, resolves to { port, stop } once listening
     cli.ts                  argument handling
     config.ts               paths, config schema, load and save
     json-file.ts            atomic JSON write (temp file and rename)
@@ -95,10 +95,10 @@ apps/agent/
       alias-store.ts        load and persist the AliasMap
       event-log.ts          daily redacted event files and retention
     testing/
-      events.ts
-      http.ts
-      raw.ts
-      tmp.ts
+      events.ts             typed RedactedEvent builder and T0 for tests
+      http.ts               request, stream and SSE helpers for tests
+      raw.ts                canary raw hook, status line and agents-list payloads
+      tmp.ts                temp directories removed after each test
 ```
 
 Each `*.test.ts` sits next to its module. Everything that touches time, processes or the file
