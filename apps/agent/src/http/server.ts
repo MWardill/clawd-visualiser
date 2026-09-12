@@ -49,12 +49,6 @@ function sendJson(res: ServerResponse, status: number, body: unknown, headers: H
   res.end(text);
 }
 
-/** Answer without reading the body; resume() lets any body drain so the socket stays usable. */
-function refuse(req: IncomingMessage, res: ServerResponse, status: number, body: unknown, headers: Headers = {}): void {
-  req.resume();
-  sendJson(res, status, body, headers);
-}
-
 function safeDecode(segment: string): string | null {
   try {
     return decodeURIComponent(segment);
@@ -76,14 +70,20 @@ export function createAgentServer(deps: ServerDeps): Server {
 
   const port = (): number => (server.address() as AddressInfo | null)?.port ?? 0;
 
-  /** Every API body is checked for forbidden keys and live directories before it is written. */
-  function sendApi(res: ServerResponse, status: number, body: unknown, headers: Headers): void {
+  /** Every JSON body is checked for forbidden keys and live directories before it is written. */
+  function send(res: ServerResponse, status: number, body: unknown, headers: Headers = {}): void {
     if (containsForbidden(body, deps.sensitive()) !== null) {
       deps.log("privacy.blocked");
       sendJson(res, 500, { error: "blocked" }, headers);
       return;
     }
     sendJson(res, status, body, headers);
+  }
+
+  /** Answer without reading the body; resume() lets any body drain so the socket stays usable. */
+  function refuse(req: IncomingMessage, res: ServerResponse, status: number, body: unknown, headers: Headers = {}): void {
+    req.resume();
+    send(res, status, body, headers);
   }
 
   async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -105,7 +105,7 @@ export function createAgentServer(deps: ServerDeps): Server {
     }
     const body = await readBody(req, route === "hook" ? limits.hook : limits.status);
     // Answer first: {} carries no decision and no context, and nothing below can reach Claude Code.
-    sendJson(res, 200, {});
+    send(res, 200, {});
     if (!body.ok) {
       if (body.reason === "tooLarge") deps.counts.tooLarge++;
       return;
@@ -147,9 +147,9 @@ export function createAgentServer(deps: ServerDeps): Server {
       then();
     };
 
-    if (path === ENDPOINTS.snapshot) return onlyGet(() => sendApi(res, 200, deps.host.snapshot(), cors));
+    if (path === ENDPOINTS.snapshot) return onlyGet(() => send(res, 200, deps.host.snapshot(), cors));
     if (path === ENDPOINTS.health) {
-      return onlyGet(() => sendApi(res, 200, HealthSchema.parse({ ok: true, version: AGENT_VERSION, sessions: deps.host.sessionCount() }), cors));
+      return onlyGet(() => send(res, 200, HealthSchema.parse({ ok: true, version: AGENT_VERSION, sessions: deps.host.sessionCount() }), cors));
     }
     if (path === ENDPOINTS.stream) return onlyGet(() => deps.stream.connect(req, res, cors));
     if (path === ENDPOINTS.command) {
@@ -161,8 +161,8 @@ export function createAgentServer(deps: ServerDeps): Server {
       return onlyGet(() => {
         const alias = safeDecode(ticker);
         const lines = alias === null ? null : deps.host.tickerFor(alias);
-        if (lines === null) sendApi(res, 404, { error: "unknown alias" }, cors);
-        else sendApi(res, 200, lines, cors);
+        if (lines === null) send(res, 404, { error: "unknown alias" }, cors);
+        else send(res, 200, lines, cors);
       });
     }
     return refuse(req, res, 404, { error: "not found" }, cors);
@@ -173,13 +173,16 @@ export function createAgentServer(deps: ServerDeps): Server {
     const type = (req.headers["content-type"] ?? "").split(";")[0]?.trim().toLowerCase();
     if (type !== "application/json") return refuse(req, res, 415, { error: "content-type must be application/json" }, cors);
     const body = await readBody(req, limits.command);
-    if (!body.ok) return sendApi(res, 413, { error: "command too large" }, cors);
+    if (!body.ok) {
+      if (body.reason === "tooLarge") return send(res, 413, { error: "command too large" }, cors);
+      return;
+    }
     const parsed = parseJson(body.body);
     const command = parsed.ok ? CommandSchema.safeParse(parsed.value) : null;
-    if (!command?.success) return sendApi(res, 400, { error: "invalid command" }, cors);
+    if (!command?.success) return send(res, 400, { error: "invalid command" }, cors);
     if (command.data.type === "focus") {
       const sessionId = deps.host.sessionIdFor(command.data.alias);
-      if (sessionId === null) return sendApi(res, 404, { error: "unknown alias" }, cors);
+      if (sessionId === null) return send(res, 404, { error: "unknown alias" }, cors);
       res.writeHead(202, { ...cors, "cache-control": "no-store" });
       res.end();
       try {

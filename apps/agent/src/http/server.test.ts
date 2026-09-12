@@ -223,4 +223,19 @@ describe("api routes", () => {
     expect(reply.status).toBe(500);
     expect(reply.body).not.toContain(CANARY);
   });
+
+  it("checks error bodies too, not only successful ones", async () => {
+    const { port, log } = await start({ sensitive: () => ["origin not allowed"] });
+    const reply = await send(port, { path: "/api/health", headers: { origin: "https://evil.example" } });
+    expect(reply.status).toBe(500);
+    expect(reply.body).not.toContain("origin not allowed");
+    expect(log).toHaveBeenCalledWith("privacy.blocked");
+  });
+
+  it("still acknowledges hooks with {} when a live directory is configured", async () => {
+    const { port } = await start({ sensitive: () => ["C:/work/CANARY-repo"] });
+    const reply = await hook(port, rawHook("UserPromptSubmit", "s1"));
+    expect(reply.status).toBe(200);
+    expect(reply.body).toBe("{}");
+  });
 });
