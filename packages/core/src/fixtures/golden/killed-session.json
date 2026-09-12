@@ -1,0 +1,94 @@
+[
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:01:40.000Z",
+    "updatedAt": "2025-09-12T10:01:40.000Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:01:41.000Z",
+    "updatedAt": "2025-09-12T10:01:41.000Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "run",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:01:41.000Z",
+    "updatedAt": "2025-09-12T10:01:42.000Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "done",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:01:50.000Z",
+    "updatedAt": "2025-09-12T10:01:50.000Z"
+   }
+  ]
+ }
+]

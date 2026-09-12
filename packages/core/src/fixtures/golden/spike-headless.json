@@ -1,0 +1,906 @@
+[
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:30.750Z",
+    "updatedAt": "2025-09-12T10:00:30.750Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:30.879Z",
+    "updatedAt": "2025-09-12T10:00:30.879Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "run",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:30.879Z",
+    "updatedAt": "2025-09-12T10:00:35.373Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "read",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:30.879Z",
+    "updatedAt": "2025-09-12T10:00:36.054Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:30.879Z",
+    "updatedAt": "2025-09-12T10:00:36.094Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:50.629Z",
+    "updatedAt": "2025-09-12T10:00:50.629Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "done",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:58.148Z",
+    "updatedAt": "2025-09-12T10:00:58.148Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-2",
+    "label": "Heron",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:01:50.961Z",
+    "updatedAt": "2025-09-12T10:01:50.961Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-2",
+    "label": "Heron",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:01:51.090Z",
+    "updatedAt": "2025-09-12T10:01:51.090Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-2",
+    "label": "Heron",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "run",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:01:51.090Z",
+    "updatedAt": "2025-09-12T10:01:53.554Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-2",
+    "label": "Heron",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:01:51.090Z",
+    "updatedAt": "2025-09-12T10:02:04.731Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-2",
+    "label": "Heron",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:02:06.007Z",
+    "updatedAt": "2025-09-12T10:02:06.007Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-2",
+    "label": "Heron",
+    "pane": "pane-1",
+    "state": "done",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:02:13.443Z",
+    "updatedAt": "2025-09-12T10:02:13.443Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-3",
+    "label": "Badger",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:02:25.603Z",
+    "updatedAt": "2025-09-12T10:02:25.603Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-3",
+    "label": "Badger",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:02:25.724Z",
+    "updatedAt": "2025-09-12T10:02:25.724Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-3",
+    "label": "Badger",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "spawn",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:02:25.724Z",
+    "updatedAt": "2025-09-12T10:02:28.305Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-3",
+    "label": "Badger",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "spawn",
+    "subagents": 1,
+    "contextPct": null,
+    "since": "2025-09-12T10:02:25.724Z",
+    "updatedAt": "2025-09-12T10:02:28.363Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-3",
+    "label": "Badger",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "spawn",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:02:25.724Z",
+    "updatedAt": "2025-09-12T10:02:42.998Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-3",
+    "label": "Badger",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:02:25.724Z",
+    "updatedAt": "2025-09-12T10:02:43.081Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-3",
+    "label": "Badger",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:02:48.961Z",
+    "updatedAt": "2025-09-12T10:02:48.961Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-3",
+    "label": "Badger",
+    "pane": "pane-1",
+    "state": "done",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:02:56.546Z",
+    "updatedAt": "2025-09-12T10:02:56.546Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-4",
+    "label": "Lynx",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:03:55.863Z",
+    "updatedAt": "2025-09-12T10:03:55.863Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-4",
+    "label": "Lynx",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:03:56.001Z",
+    "updatedAt": "2025-09-12T10:03:56.001Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-4",
+    "label": "Lynx",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "run",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:03:56.001Z",
+    "updatedAt": "2025-09-12T10:04:02.426Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-4",
+    "label": "Lynx",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:03:56.001Z",
+    "updatedAt": "2025-09-12T10:04:11.026Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-4",
+    "label": "Lynx",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "spawn",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:03:56.001Z",
+    "updatedAt": "2025-09-12T10:04:13.797Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-4",
+    "label": "Lynx",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "spawn",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:03:56.001Z",
+    "updatedAt": "2025-09-12T10:04:20.727Z"
+   },
+   {
+    "alias": "agent-5",
+    "label": "Finch",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:05:19.107Z",
+    "updatedAt": "2025-09-12T10:05:19.107Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-4",
+    "label": "Lynx",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "spawn",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:03:56.001Z",
+    "updatedAt": "2025-09-12T10:04:20.727Z"
+   },
+   {
+    "alias": "agent-5",
+    "label": "Finch",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:05:19.252Z",
+    "updatedAt": "2025-09-12T10:05:19.252Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-4",
+    "label": "Lynx",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "spawn",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:03:56.001Z",
+    "updatedAt": "2025-09-12T10:04:20.727Z"
+   },
+   {
+    "alias": "agent-5",
+    "label": "Finch",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "edit",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:05:19.252Z",
+    "updatedAt": "2025-09-12T10:05:23.383Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-4",
+    "label": "Lynx",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "spawn",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:03:56.001Z",
+    "updatedAt": "2025-09-12T10:04:20.727Z"
+   },
+   {
+    "alias": "agent-5",
+    "label": "Finch",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:05:19.252Z",
+    "updatedAt": "2025-09-12T10:05:23.452Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-4",
+    "label": "Lynx",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "spawn",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:03:56.001Z",
+    "updatedAt": "2025-09-12T10:04:20.727Z"
+   },
+   {
+    "alias": "agent-5",
+    "label": "Finch",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:05:24.503Z",
+    "updatedAt": "2025-09-12T10:05:24.503Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-4",
+    "label": "Lynx",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "spawn",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:03:56.001Z",
+    "updatedAt": "2025-09-12T10:04:20.727Z"
+   },
+   {
+    "alias": "agent-5",
+    "label": "Finch",
+    "pane": "pane-1",
+    "state": "done",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:05:31.692Z",
+    "updatedAt": "2025-09-12T10:05:31.692Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-4",
+    "label": "Lynx",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "spawn",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:03:56.001Z",
+    "updatedAt": "2025-09-12T10:04:20.727Z"
+   },
+   {
+    "alias": "agent-6",
+    "label": "Vole",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:06:39.856Z",
+    "updatedAt": "2025-09-12T10:06:39.856Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-4",
+    "label": "Lynx",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "spawn",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:03:56.001Z",
+    "updatedAt": "2025-09-12T10:04:20.727Z"
+   },
+   {
+    "alias": "agent-6",
+    "label": "Vole",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:06:39.929Z",
+    "updatedAt": "2025-09-12T10:06:39.929Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-4",
+    "label": "Lynx",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "spawn",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:03:56.001Z",
+    "updatedAt": "2025-09-12T10:04:20.727Z"
+   },
+   {
+    "alias": "agent-6",
+    "label": "Vole",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "run",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:06:39.929Z",
+    "updatedAt": "2025-09-12T10:06:43.910Z"
+   }
+  ]
+ }
+]

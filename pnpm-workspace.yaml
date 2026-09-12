@@ -5,4 +5,5 @@ packages:
 # pnpm blocks dependency build scripts unless approved here.
 # unrs-resolver (via eslint-config-next) installs its native binary in a postinstall step.
 allowBuilds:
+  esbuild: true
   unrs-resolver: true

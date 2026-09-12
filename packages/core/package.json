@@ -12,10 +12,12 @@
   "scripts": {
     "test": "vitest run",
     "test:watch": "vitest",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "fixtures": "tsx scripts/redact-spike.ts"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",
+    "tsx": "^4.23.13",
     "typescript": "^5",
     "vitest": "^5"
   },

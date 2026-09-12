@@ -1,5 +1,5 @@
 # spike captures contain prompts, paths, costs and rate limits from real sessions
-tools/hook-spike/spike-events.jsonl
+tools/hook-spike/*.jsonl
 tools/hook-spike/listener.pid
 
 # unzipped clawd-animation skill download; the skills are installed under ~/.claude/skills

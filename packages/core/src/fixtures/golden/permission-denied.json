@@ -1,0 +1,140 @@
+[
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:00.000Z",
+    "updatedAt": "2025-09-12T10:00:00.000Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:01.000Z",
+    "updatedAt": "2025-09-12T10:00:01.000Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "edit",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:01.000Z",
+    "updatedAt": "2025-09-12T10:00:03.000Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "waiting",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:03.100Z",
+    "updatedAt": "2025-09-12T10:00:03.100Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:30.000Z",
+    "updatedAt": "2025-09-12T10:00:30.000Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:32.000Z",
+    "updatedAt": "2025-09-12T10:00:32.000Z"
+   }
+  ]
+ }
+]

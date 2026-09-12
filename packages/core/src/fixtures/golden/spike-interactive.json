@@ -1,0 +1,324 @@
+[
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:28.099Z",
+    "updatedAt": "2025-09-12T10:00:28.099Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:36.745Z",
+    "updatedAt": "2025-09-12T10:00:36.745Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "run",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:36.745Z",
+    "updatedAt": "2025-09-12T10:00:39.868Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "run",
+    "subagents": 0,
+    "contextPct": 5,
+    "since": "2025-09-12T10:00:36.745Z",
+    "updatedAt": "2025-09-12T10:00:41.690Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": 5,
+    "since": "2025-09-12T10:00:36.745Z",
+    "updatedAt": "2025-09-12T10:00:54.336Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": 5,
+    "since": "2025-09-12T10:00:56.878Z",
+    "updatedAt": "2025-09-12T10:00:56.878Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": 5,
+    "since": "2025-09-12T10:01:08.175Z",
+    "updatedAt": "2025-09-12T10:01:08.175Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "other",
+    "subagents": 0,
+    "contextPct": 5,
+    "since": "2025-09-12T10:01:08.175Z",
+    "updatedAt": "2025-09-12T10:01:11.192Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "waiting",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": 5,
+    "since": "2025-09-12T10:01:11.211Z",
+    "updatedAt": "2025-09-12T10:01:11.211Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": 5,
+    "since": "2025-09-12T10:01:29.139Z",
+    "updatedAt": "2025-09-12T10:01:29.139Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": 5,
+    "since": "2025-09-12T10:01:31.254Z",
+    "updatedAt": "2025-09-12T10:01:31.254Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": 5,
+    "since": "2025-09-12T10:01:36.617Z",
+    "updatedAt": "2025-09-12T10:01:36.617Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "idle",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": 5,
+    "since": "2025-09-12T10:01:40.012Z",
+    "updatedAt": "2025-09-12T10:01:40.012Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "done",
+    "activity": null,
+    "subagents": 0,
+    "contextPct": 5,
+    "since": "2025-09-12T10:02:08.488Z",
+    "updatedAt": "2025-09-12T10:02:08.488Z"
+   }
+  ]
+ }
+]
