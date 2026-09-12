@@ -73,6 +73,9 @@ has and must print a line itself, or the user's status bar goes blank.
 - Behaviour with the listener down. The docs say HTTP hook failures never block; this run did not test it.
 - Cloud sessions and Remote Control sessions in the agents list.
 - Which shell commands prompt in a plain terminal session rather than the VS Code terminal.
+- Whether Claude Code queues a second `PermissionRequest` while one dialog is already open, and what
+  hook order it fires in when it does.
+- What `PostToolUse` does after a denial: whether it fires at all, and if so what it carries.
 
 ## Interactive checklist
 

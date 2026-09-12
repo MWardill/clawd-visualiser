@@ -33,7 +33,8 @@ packages/core/src/
     events.ts              RedactedEvent union
     raw.ts                 shapes of raw hook / status line / agents-list payloads, loosely typed
   ingest/
-    redact.ts              redact(raw, context) -> RedactedEvent | null
+    redact.ts              redact(raw, context) -> RedactedEvent | null; also exports
+                            redactPresence(entry, alive, context) -> RedactedEvent | null
     allowlist.ts           directory allowlist matching
     categories.ts          tool name -> activity category
   state/
@@ -41,9 +42,10 @@ packages/core/src/
     fleet.ts               reduceFleet(fleet, event, now); tick(fleet, now)
     snapshot.ts            deriveSnapshot(fleet, aliases, now) -> Snapshot
     ticker.ts              toTickerEvent(event, prev) -> TickerEvent | null
+    apply.ts               applyEvent(fleet, event, now, cfg) -> { fleet, before, after, ticker }
     config.ts              thresholds with defaults
   alias/
-    names.ts               label list and assignment
+    names.ts               label lists (sessions, panes) and ensureSessionAlias / ensurePaneAlias
     pane.ts                paneKey(cwd) hashing
   sources/
     source.ts              Source interface
@@ -52,6 +54,11 @@ packages/core/src/
   fixtures/
     *.jsonl                redacted recordings
     load.ts                parse and validate a fixture
+    frames.ts              snapshotFrames(fixture) -> SnapshotFrame[], for golden tests
+
+packages/core/scripts/
+  redact-spike.ts          regenerates the committed fixtures and their golden files from the
+                            spike recordings; run with `pnpm --filter @clawd/core fixtures` (see §9)
 ```
 
 Each folder exports through `index.ts`; nothing imports across folders except through those
@@ -167,7 +174,7 @@ type SessionState = {
   waitingOn: string | null;   // toolUseId of the pending permission
   inFlight: { toolUseId: string; tool: string }[];  // parent tool calls started, not yet ended
   backgroundTasks: number;
-  subagents: Set<string>;     // live agent ids
+  subagents: string[];        // live agent ids; an array, not a Set, so state stays JSON-serialisable
   contextPct: number | null;
   firstSeenAt: number;        // set once, never changed; the snapshot's sort key
   displayHold: { state: SessionState["state"]; until: number } | null;  // min display duration
@@ -192,6 +199,12 @@ Two tool calls can be in flight at once, so `inFlight` is a list and not a singl
 | idle | `tick` past `asleepAfterMs` | asleep |
 | idle / asleep | `prompt` | working |
 | any | `session.end`, or `presence.alive === false` | done |
+
+A second `permission.request` that arrives while the session is already `waiting` is ignored outright
+(the "not already waiting" guard in the table above): the first request's `waitingOn` wins, and there
+is no queue. What Claude Code itself does when two tools each want a permission dialog at once —
+whether it queues the second `PermissionRequest` behind the first, and in what hook order — is not
+measured (see `docs/spike-hooks.md`), so that scenario is unhandled rather than deliberately resolved.
 
 A `stop` carries Claude Code's own `background_tasks`, and on that question it is authoritative:
 a count of zero clears the locally tracked subagent set, so a `SubagentStop` we never received
@@ -244,11 +257,16 @@ ticker lines derived from that same pair, so no host has to keep the two halves 
 
 ## 6. Aliases
 
-- `names.ts`: a fixed list of about sixty animal names. `assignLabel(map, sessionId)` returns the
-  existing label or picks the next unused one; the map is a plain object so the agent can persist it
-  as JSON.
-- Aliases are `agent-<n>` and `pane-<n>` with monotonically increasing `n`, also from the map.
-- The map type is `AliasMap = { sessions: Record<sessionId, { alias, label }>, panes: Record<paneKey, { alias, label }>, next: number }`.
+- `names.ts`: a fixed list of about sixty animal names (session labels) and a separate list of
+  tree names (pane labels). `ensureSessionAlias(map, sessionId)` and `ensurePaneAlias(map, paneKey)`
+  each return the existing `{ alias, label }` for a known id, or mint the next one; both return
+  `{ map, alias, label }` so the caller gets the (possibly unchanged) map back alongside the result
+  it asked for. The map is a plain object so the agent can persist it as JSON.
+- Aliases are `agent-<n>` and `pane-<n>`, numbered from the map's own counters rather than shared.
+- The map type is
+  `AliasMap = { sessions: Record<sessionId, { alias, label }>, panes: Record<paneKey, { alias, label }>, nextSession: number, nextPane: number }`.
+  Once every name in a list is taken, later labels repeat with a suffix (`Otter 2`, `Otter 3`, ...)
+  rather than colliding.
 
 ## 7. Sources
 
@@ -289,9 +307,12 @@ reduced to categories; it never publishes ticker events.
 
 ## 9. Fixtures
 
-- Source recordings are the spike's `spike-events.jsonl` files (headless and interactive). A
-  one-off script in `tools/` runs them through `redact()` with a test allowlist and writes
-  `packages/core/src/fixtures/spike-headless.jsonl` and `spike-interactive.jsonl`.
+- Source recordings are the spike's `spike-events-headless.jsonl` and `spike-events-interactive.jsonl`
+  files under `tools/hook-spike/`. `packages/core/scripts/redact-spike.ts`, run with
+  `pnpm --filter @clawd/core fixtures` (tsx, no build step), runs them through `redact()` with a
+  test allowlist and writes `packages/core/src/fixtures/spike-headless.jsonl` and
+  `spike-interactive.jsonl`, then regenerates the golden snapshot sequences (`fixtures/golden/*.json`,
+  via `snapshotFrames`) for every fixture.
 - Before writing, the script scrubs what redaction legitimately keeps but a committed file must
   not carry: session, tool-use and agent ids are renumbered in order of first appearance as
   `rec-n`, `use-n` and `sub-n`, and `status` events lose `costUsd`, `rateLimit5h` and `rateLimit7d`.
