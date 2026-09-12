@@ -38,12 +38,15 @@ packages/core/src/
     allowlist.ts           directory allowlist matching
     categories.ts          tool name -> activity category
   state/
-    session.ts             reduceSession(state, event, now) -> state
-    fleet.ts               reduceFleet(fleet, event, now); tick(fleet, now)
-    snapshot.ts            deriveSnapshot(fleet, aliases, now) -> Snapshot
-    ticker.ts              toTickerEvent(event, prev) -> TickerEvent | null
+    session.ts             reduceSession(state, event, now, cfg) -> state; tickSession(state, now, cfg)
+    fleet.ts               reduceFleet(fleet, event, now, cfg); tickFleet(fleet, now, cfg)
+    snapshot.ts            deriveSnapshot(fleet, aliases, now) -> { snapshot, aliases }
+    ticker.ts              toTickerEvents(event, before, after, now) -> TickerEvent[]
     apply.ts               applyEvent(fleet, event, now, cfg) -> { fleet, before, after, ticker }
     config.ts              thresholds with defaults
+  own.ts                   own-property lookup for records keyed by ids that arrive off the wire
+  testing/
+    events.ts              test-only typed event builder and epoch; not exported
   alias/
     names.ts               label lists (sessions, panes) and ensureSessionAlias / ensurePaneAlias
     pane.ts                paneKey(cwd) hashing
@@ -61,8 +64,9 @@ packages/core/scripts/
                             spike recordings; run with `pnpm --filter @clawd/core fixtures` (see §9)
 ```
 
-Each folder exports through `index.ts`; nothing imports across folders except through those
-barrels. The reducers are pure: state in, state out, `now` passed in as a number of milliseconds.
+Each folder exports through `index.ts`, and `src/index.ts` is the only public surface, pinned by
+name in `index.test.ts`; inside the package, modules import what they need by path. The reducers
+are pure: state in, state out, `now` passed in as a number of milliseconds.
 
 ## 3. Data model
 
@@ -92,7 +96,7 @@ Variants, with their extra fields:
 | `tool.end` | `tool`, `category`, `toolUseId`, `durationMs: number` | PostToolUse |
 | `permission.request` | `tool`, `category` | PermissionRequest |
 | `permission.denied` | `tool?` | PermissionDenied |
-| `stop` | `backgroundTasks: number` | Stop, counting only the `background_tasks` entries of type `subagent`; a background shell is not work the session waits on |
+| `stop` | `backgroundTasks: number` | Stop, counting only the `background_tasks` entries of type `subagent`; a background shell is not work the session waits on. An entry that cannot be read counts for nothing rather than costing the whole Stop |
 | `subagent.start` | `agentId`, `agentType: string` | SubagentStart |
 | `subagent.stop` | `agentId`, `agentType` | SubagentStop |
 | `status` | `contextPct?: number`, `costUsd?: number`, `rateLimit5h?: number`, `rateLimit7d?: number`, `model?: string` | status line command |
@@ -101,7 +105,8 @@ Variants, with their extra fields:
 `tool` is the built-in tool name, or `"mcp"` for any MCP tool (open question 5 in the PRD).
 `category` is derived by `categories.ts`: `read`, `edit`, `run`, `web`, `spawn`, `other`.
 
-Internal helper subagents, a `SubagentStop` with an empty `agent_type`, are dropped at ingest.
+Internal helper subagents (an `agent_id` with an empty `agent_type`) are dropped at ingest, whichever
+hook the event came from.
 
 ### 3.2 Wire schemas
 
@@ -111,11 +116,13 @@ declared twice.
 
 ```ts
 Snapshot        { version: 1, generatedAt, panes: PaneSnapshot[], sessions: SessionSnapshot[], ext? }
-PaneSnapshot    { pane, label, collision }
+PaneSnapshot    { pane, label, collision? }
 SessionSnapshot { alias, label, pane, state, activity, subagents, contextPct, since, updatedAt, ext? }
 TickerEvent     { t, kind, activity?, tool?, durationMs?, agentType?, state?, contextPct?, reason? }
 Command         { type: "focus", alias } | { type: "ping" }
 ```
+
+`collision` is absent until collision detection (M7) computes it; an optional field, per §11.
 
 Schemas use `.strict()` on the wire types so unknown top-level fields fail validation, and `ext` is
 the sanctioned place for extras. `ext` is `z.record(z.unknown()).optional()` and is stripped before
@@ -128,8 +135,9 @@ publishing in cloud mode.
 never breaks ingest. The schemas parse in zod's default strip mode rather than passthrough, so
 parsing is itself the first redaction step: every field we never named is gone before ingest reads
 the payload. Fields we never read are never typed, which keeps them out of the code by
-construction. The status line is the loosest of them: every section and every figure is optional
-and nullable, since a session reports nulls before its first turn.
+construction. The status line is the loosest of them: every section may be omitted and every figure is
+nullable, since a session reports nulls before its first turn. (No recording has a whole section
+set to null; if one turns up, the sections become nullable too.)
 
 ## 4. Ingest redaction
 
@@ -141,7 +149,9 @@ function redact(raw: unknown, ctx: IngestContext): RedactedEvent | null;
 - Determines the hook event from `hook_event_name` (or the status line shape), parses with the
   matching raw schema, and returns the redacted variant with only the allowlisted fields copied.
 - Returns `null` for sessions whose `cwd` is outside the allowlist, for internal helper subagents,
-  and for events we don't model, such as `MessageDisplay`.
+  and for events we don't model, such as `MessageDisplay`. An allowlist entry admits its directory
+  and everything beneath it; a filesystem root such as `/` admits everything on it; an empty or
+  blank entry admits nothing, so a stray separator in a configured list cannot open the boundary.
 - Never copies `prompt`, `tool_input`, `tool_response`, `last_assistant_message`,
   `transcript_path`, `agent_transcript_path`, `session_name`, `cwd` (it becomes `paneKey`), or the
   status line's `workspace`. These names form the **forbidden list** exported for tests.
@@ -171,13 +181,14 @@ type SessionState = {
   activity: Activity | null;
   since: number;              // when `state` began
   lastEventAt: number;
-  waitingOn: string | null;   // toolUseId of the pending permission
-  inFlight: { toolUseId: string; tool: string }[];  // parent tool calls started, not yet ended
+  waitingOn: string | null;   // toolUseId of the pending permission, when one could be resolved
+  waitingAgent: string | null; // the subagent whose permission request is pending; null for the parent's own
+  inFlight: { toolUseId: string; tool: string; category: ToolCategory }[];  // parent tool calls started, not yet ended
   backgroundTasks: number;
   subagents: string[];        // live agent ids; an array, not a Set, so state stays JSON-serialisable
   contextPct: number | null;
   firstSeenAt: number;        // set once, never changed; the snapshot's sort key
-  displayHold: { state: SessionState["state"]; until: number } | null;  // min display duration
+  displayHold: { state: SessionState["state"]; activity: Activity | null; until: number } | null;  // what was shown before the last transition
 };
 ```
 
@@ -191,12 +202,13 @@ Two tool calls can be in flight at once, so `inFlight` is a list and not a singl
 | From | Event | To |
 | --- | --- | --- |
 | any but done | `prompt` | working |
-| working | `tool.start` / `tool.end` | working, activity updated (`think` between tool.end and the next event) |
-| any but done, not already waiting | `permission.request` | waiting. `waitingOn` is the request's own `tool_use_id` when it has one, else the newest call in flight with the same tool name, else the newest call in flight, else null (asleep and idle cover a request that arrives before, or long after, its prompt event) |
-| waiting | `tool.end` with that toolUseId, or any `tool.end` when no id was resolved, or `permission.denied` | working |
+| working | `tool.start` / `tool.end` | working, activity re-derived: the newest parent tool still in flight, else `spawn` while subagents are live, else `think` |
+| any but done, not already waiting | `permission.request` | waiting. `waitingOn` is the request's own `tool_use_id` when it has one, else the newest call in flight with the same tool name, else the newest call in flight, else null (asleep and idle cover a request that arrives before, or long after, its prompt event). A request raised inside a subagent (`agentId` set) matches nothing in `inFlight`; it records the subagent in `waitingAgent` instead |
+| waiting | `tool.end` with that toolUseId, or, when no id was resolved, a `tool.end` from the same origin (the parent for the parent's request, the subagent named in `waitingAgent` for its own), or `permission.denied` | working; a denied call leaves `inFlight` |
 | working or waiting | `stop` with no subagent tasks and no live subagents | idle; any wait ends |
 | working or waiting | `stop` with subagent tasks | working, activity `spawn`; any wait ends |
 | idle | `tick` past `asleepAfterMs` | asleep |
+| working | `tick` past `staleWorkingMs` since the last event | idle. The Stop never came: a user interrupt, a lost hook. Generous (15 minutes), since one tool call can run for minutes |
 | idle / asleep | `prompt` | working |
 | any | `session.end`, or `presence.alive === false` | done |
 
@@ -208,52 +220,65 @@ measured (see `docs/spike-hooks.md`), so that scenario is unhandled rather than 
 
 A `stop` carries Claude Code's own `background_tasks`, and on that question it is authoritative:
 a count of zero clears the locally tracked subagent set, so a `SubagentStop` we never received
-cannot wedge the parent on `spawn` for the rest of its life. A `stop` also ends a wait whose
-`PostToolUse` never arrived.
+cannot wedge the parent on `spawn` for the rest of its life. `subagent.stop` reconciles that count
+one subagent at a time, so the last one to finish clears it and the parent reads `think` again
+rather than `spawn` until its next Stop. A `stop` also ends a wait whose `PostToolUse` never arrived.
 
 `subagent.start` and `subagent.stop` update the set and never change `state`. `status` updates
-`contextPct`. `tool.start` inside a subagent (`agentId` set) updates `activity` to `spawn` on the
-parent rather than the tool's own category, so the parent reads as "running subagents".
+`contextPct`. `tool.start` inside a subagent (`agentId` set) reads as `spawn` on the parent rather
+than the tool's own category, so the parent reads as "running subagents"; a parent tool still in
+flight takes precedence, as it does everywhere activity is derived.
 
-Timers live in `tick(fleet, now)`, called by the host on an interval: it applies the asleep
-threshold. Minimum display duration works in two halves: when the reducer changes `state` it
-records the previous state in `displayHold` with `until = now + minDisplayMs`, and
-`deriveSnapshot` reports that held state until `until` has passed, then the real one. `since`
-always reflects the real transition time, so the nameplate clock is never wrong by the hold.
+Timers live in `tickFleet(fleet, now, cfg)`, called by the host on an interval: it applies the
+asleep threshold and the stale-working threshold. Minimum display duration works in two halves:
+when the reducer changes `state` it records the previous state and activity in `displayHold` with
+`until = now + minDisplayMs`, unless a hold is still running, in which case that hold is kept, so
+a burst of transitions shows one state per `minDisplayMs` rather than a phantom hold of whichever
+transient state came last. `deriveSnapshot` reports the held state and activity until `until` has
+passed, then the real ones. `since` always reflects the real transition time, so the nameplate
+clock is never wrong by the hold.
 
 ### 5.3 Fleet
 
 ```ts
-type Fleet = { sessions: Map<string, SessionState>; panes: Map<string, PaneState> };
-function reduceFleet(f: Fleet, e: RedactedEvent, now: number): Fleet;
-function tick(f: Fleet, now: number): Fleet;
+type Fleet = { sessions: Record<string, SessionState>; panes: Record<string, PaneState> };
+function reduceFleet(f: Fleet, e: RedactedEvent, now: number, cfg: StateConfig): Fleet;
+function tickFleet(f: Fleet, now: number, cfg: StateConfig): Fleet;
 ```
 
-Panes are created on the first event for a paneKey and dropped when their last session has been
-`done` for `doneLingerMs`. `done` sessions themselves linger for the same period so the view can
-play the exit, then are removed.
+Plain records rather than Maps, so a fleet is JSON-serialisable and comparable in tests; lookups
+go through `own()`, so an id such as `constructor` is never an inherited hit. Panes are created on
+the first event for a paneKey and dropped when their last session has been `done` for
+`doneLingerMs`. `done` sessions themselves linger for the same period so the view can play the
+exit, then are removed. An event that only ever ends a session (`session.end`, a dead `presence`)
+creates nothing on first sight: it describes a session we never knew.
 
 ### 5.4 Snapshot derivation
 
 ```ts
-function deriveSnapshot(f: Fleet, aliases: AliasMap, now: number): Snapshot;
+function deriveSnapshot(f: Fleet, aliases: AliasMap, now: number): { snapshot: Snapshot; aliases: AliasMap };
 ```
 
-Applies display holds, maps session ids and pane keys to aliases and labels, sorts panes and
+Applies display holds (state and activity), maps session ids and pane keys to aliases and labels, sorts panes and
 sessions by first appearance (sessions tie-breaking on session id, so the order is deterministic
 and a state change never reshuffles the fleet), and validates the result against the schema before
 returning it.
-`deriveSnapshot` is where the local-only identifiers are left behind.
+`deriveSnapshot` is where the local-only identifiers are left behind. It returns the alias map
+alongside the snapshot, since a first sight may have minted aliases the host must persist.
 
 ### 5.5 Ticker
 
-`toTickerEvent(e, prevState, nextState)` maps a redacted event to zero or one `TickerEvent`, adding
-a synthetic `state` line whenever the reducer changed the session's state. This is the only source
-of ticker lines, so the ticker can never carry more than the redacted event does.
+`toTickerEvents(e, before, after, now)` maps a redacted event to zero, one or two `TickerEvent`s:
+the event's own line, then a synthetic `state` line whenever the reducer changed the session's
+state (a first sight has no previous state, so no `state` line). Lines are stamped with `now`, the
+clock the reducer was given, so a replayed or rescaled event never puts the ticker and the snapshot
+on different clocks. This is the only source of ticker lines, so the ticker can never carry more
+than the redacted event does.
 
 `applyEvent(fleet, e, now, cfg)` is the one call a host makes per event. It reduces the fleet and
 returns `{ fleet, before, after, ticker }`: the session as it was, the session as it is, and the
 ticker lines derived from that same pair, so no host has to keep the two halves in step itself.
+An event the reducer left untouched (the session is done) yields no lines.
 
 ## 6. Aliases
 
@@ -334,7 +359,7 @@ All Vitest, all pure:
 - **Golden:** each fixture reduced to a sequence of snapshots, compared to a committed expected
   file. Regenerated deliberately with a script when the design changes.
 - **Simulator:** same seed, same event sequence; every emitted event validates; the reduced fleet
-  never has a session in an impossible combination (for example waiting with no `waitingOn`).
+  never has a session in an impossible combination (for example idle or asleep with an activity).
 - **Ticker:** never contains a key outside the `TickerEvent` schema.
 
 ## 11. Versioning and extension
@@ -352,5 +377,7 @@ All Vitest, all pure:
 - Redis publishing helpers for cloud mode.
 - `StopFailure` and an error flag. Nothing in M1 sets one, so `SessionState` does not carry it and
   an errored session reads as whatever its last hook said.
-- Presence for sessions the poller has never seen. Track B should emit `presence` only for sessions
-  it has already seen, or accept that a late poll can re-create a just-removed session as idle.
+- Presence for sessions the poller has never seen. The fleet ignores a dead `presence` (and a
+  `session.end`) for a session it has never seen, but a live `presence` for a session it has just
+  pruned re-creates it as idle. Track B should emit `presence` only for sessions it has already
+  seen, or accept that.
