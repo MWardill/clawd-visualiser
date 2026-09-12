@@ -38,6 +38,8 @@ export function createSimulatedFeed(opts: SimulatedFeedOptions = {}): Feed {
 
   return {
     start(listener: FeedListener) {
+      // A restart mints aliases afresh; ticker history from the last run must not attach to them.
+      rings.clear();
       let fleet: Fleet = emptyFleet();
       let aliases: AliasMap = emptyAliasMap();
       let lastKey = "";
@@ -73,6 +75,9 @@ export function createSimulatedFeed(opts: SimulatedFeedOptions = {}): Feed {
       // first session's events immediately, at t === now): the "at once" snapshot must be empty.
       publish(now());
       const stopSource = createSimulatedSource(sourceOpts).start(sink);
+      // The source's first pump ran inside start() and may have born a session: publish again so no
+      // ticker line precedes the snapshot that names its alias.
+      publish(now());
       const handle = setI(() => {
         const t = now();
         fleet = tickFleet(fleet, t, SIMULATED_CONFIG);

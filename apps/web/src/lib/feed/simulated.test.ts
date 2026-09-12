@@ -28,7 +28,7 @@ function harness(seed = 1) {
       for (const fn of intervals) fn();
     }
   };
-  return { feed, snapshots, ticker, advance, stop };
+  return { feed, snapshots, ticker, advance, stop, now: () => now };
 }
 
 describe("simulated feed", () => {
@@ -82,5 +82,29 @@ describe("simulated feed", () => {
     expect(await h.feed.backfill("agent-999")).toEqual([]);
     expect(await h.feed.focus(alias)).toBe(false);
     h.stop();
+  });
+
+  it("names every ticker alias in a snapshot by the time start returns", () => {
+    const h = harness();
+    // slot 0 is born on the source's first pump, inside start()
+    expect(h.ticker.length).toBeGreaterThan(0);
+    const known = new Set(h.snapshots.at(-1)!.sessions.map((s) => s.alias));
+    for (const [alias] of h.ticker) expect(known.has(alias), alias).toBe(true);
+    h.stop();
+  });
+
+  it("forgets every ticker ring when it is restarted", async () => {
+    const h = harness();
+    h.advance(30_000);
+    const alias = h.ticker[0]![0];
+    const before = await h.feed.backfill(alias);
+    expect(before.length).toBeGreaterThan(3);
+    h.stop();
+    const restartedAt = h.now();
+    const stopAgain = h.feed.start({ onSnapshot: () => {}, onTicker: () => {} });
+    const after = await h.feed.backfill(alias);
+    expect(after.length).toBeLessThan(before.length);
+    for (const line of after) expect(Date.parse(line.t)).toBeGreaterThanOrEqual(restartedAt);
+    stopAgain();
   });
 });
