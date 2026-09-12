@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { emptyAliasMap } from "../alias/names";
+import { emptyAliasMap, ensureSessionAlias } from "../alias/names";
 import type { RedactedEvent } from "../schema/events";
 import { SnapshotSchema } from "../schema/snapshot";
 import { DEFAULT_CONFIG } from "./config";
@@ -34,7 +34,7 @@ describe("deriveSnapshot", () => {
     expect(real.activity).toBeNull();
   });
 
-  it("keeps aliases stable across calls and orders panes by first sight, sessions by since", () => {
+  it("keeps aliases stable across calls and orders panes and sessions by first sight", () => {
     let f = reduceFleet(emptyFleet(), ev("late", "k2", "prompt", T0 + 50), T0 + 50, DEFAULT_CONFIG);
     f = reduceFleet(f, ev("early", "k1", "prompt", T0), T0, DEFAULT_CONFIG);
     const first = deriveSnapshot(f, emptyAliasMap(), T0 + 100);
@@ -42,5 +42,32 @@ describe("deriveSnapshot", () => {
     expect(second.snapshot.sessions.map((s) => s.alias)).toEqual(first.snapshot.sessions.map((s) => s.alias));
     expect(first.snapshot.panes.map((p) => p.pane)).toEqual(["pane-1", "pane-2"]);
     expect(first.snapshot.sessions.map((s) => s.since)).toEqual([new Date(T0).toISOString(), new Date(T0 + 50).toISOString()]);
+  });
+  it("keeps session order stable when an earlier session changes state later", () => {
+    let f = reduceFleet(emptyFleet(), ev("a", "k1", "prompt", T0), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, ev("b", "k1", "prompt", T0 + 50), T0 + 50, DEFAULT_CONFIG);
+    const first = deriveSnapshot(f, emptyAliasMap(), T0 + 60);
+    f = reduceFleet(f, ev("a", "k1", "stop", T0 + 100, { backgroundTasks: 0 }), T0 + 100, DEFAULT_CONFIG);
+    const second = deriveSnapshot(f, first.aliases, T0 + 100 + DEFAULT_CONFIG.minDisplayMs);
+    expect(first.snapshot.sessions.map((x) => x.alias)).toEqual(["agent-1", "agent-2"]);
+    expect(second.snapshot.sessions.map((x) => x.alias)).toEqual(["agent-1", "agent-2"]);
+    expect(second.snapshot.sessions[0]?.state).toBe("idle");
+  });
+
+  it("breaks a tie on first sight with the session id, whatever order the events arrived in", () => {
+    const seeded = ensureSessionAlias(ensureSessionAlias(emptyAliasMap(), "alpha").map, "zeta").map;
+    const build = (ids: string[]) => ids.reduce((f, id) => reduceFleet(f, ev(id, "k1", "prompt", T0), T0, DEFAULT_CONFIG), emptyFleet());
+    for (const order of [["zeta", "alpha"], ["alpha", "zeta"]]) {
+      expect(deriveSnapshot(build(order), seeded, T0 + 10).snapshot.sessions.map((x) => x.alias)).toEqual(["agent-1", "agent-2"]);
+    }
+  });
+
+  it("reports updatedAt from the last event and counts live subagents", () => {
+    let f = reduceFleet(emptyFleet(), ev("s1", "k1", "prompt", T0), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, ev("s1", "k1", "subagent.start", T0 + 10, { agentId: "a1", agentType: "x" }), T0 + 10, DEFAULT_CONFIG);
+    f = reduceFleet(f, ev("s1", "k1", "subagent.start", T0 + 20, { agentId: "a2", agentType: "x" }), T0 + 20, DEFAULT_CONFIG);
+    const only = deriveSnapshot(f, emptyAliasMap(), T0 + 5000).snapshot.sessions[0]!;
+    expect(only.subagents).toBe(2);
+    expect(only.updatedAt).toBe(new Date(T0 + 20).toISOString());
   });
 });
