@@ -11,7 +11,7 @@
 ## Global Constraints
 
 - Spec: `docs/superpowers/specs/2026-09-12-core-contract-design.md`. Read it before starting.
-- `packages/core/src` contains no I/O and no `node:` imports: no `fs`, `http`, timers of its own, or DOM. Test files may import `node:fs` and `node:path`.
+- `packages/core/src` contains no I/O and no `node:` imports: no `fs`, `http`, or DOM. `sources/` may default to the global timers but must accept injected ones. Test files may import `node:fs` and `node:path`.
 - `zod` is the only runtime dependency of `@clawd/core`. Dev dependencies may be added (`@types/node`, `tsx`).
 - Every reducer is pure: state in, state out, `now` (epoch ms) passed in. Never call `Date.now()` inside `src/` except as an injectable default in `sources/`.
 - Wire schemas use `.strict()`; `ext` is the only extension field.
@@ -1888,9 +1888,16 @@ describe("createReplaySource", () => {
   });
 
   it("treats a backwards gap as zero", () => {
-    const got: number[] = [];
-    createReplaySource({ name: "y", events: [ev(T0 + 5, "prompt"), ev(T0, "stop")] }, { speed: Infinity }).start((e) => got.push(e.t));
-    expect(got).toEqual([T0 + 5, T0]);
+    vi.useFakeTimers();
+    try {
+      const got: number[] = [];
+      createReplaySource({ name: "y", events: [ev(T0 + 5, "prompt"), ev(T0, "stop")] }).start((e) => got.push(e.t));
+      expect(got).toEqual([T0 + 5]);
+      vi.advanceTimersByTime(0);
+      expect(got).toEqual([T0 + 5, T0]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
 ```
