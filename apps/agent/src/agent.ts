@@ -34,11 +34,7 @@ const COUNTS_MS = 60_000;
 export function reportCounts(counts: IngestCounts, log: Logger): void {
   if (Object.values(counts).every((n) => n === 0)) return;
   log("ingest.counts", { ...counts });
-  counts.accepted = 0;
-  counts.dropped = 0;
-  counts.tooLarge = 0;
-  counts.badJson = 0;
-  counts.unauthorised = 0;
+  Object.assign(counts, newIngestCounts());
 }
 
 function listen(server: Server, port: number): Promise<number> {

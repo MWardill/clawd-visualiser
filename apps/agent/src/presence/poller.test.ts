@@ -121,6 +121,19 @@ describe("presence poller", () => {
     expect(await b).toBe(true);
   });
 
+  it("discards a poll that finishes after stop, so nothing reaches the host", async () => {
+    const t = setup();
+    let release: (r: ExecResult) => void = () => {};
+    t.exec.mockImplementationOnce(() => new Promise<ExecResult>((resolve) => { release = resolve; }));
+    const pending = t.poller.pollOnce();
+    t.poller.stop();
+    release({ ok: true, stdout: JSON.stringify([rawAgentEntry("s1")]) });
+    expect(await pending).toBe(false);
+    expect(t.host.sessionCount()).toBe(0);
+    expect(t.poller.lookup("s1")).toBeNull();
+    expect(t.log).not.toHaveBeenCalledWith("presence.failed");
+  });
+
   it("polls on its interval until stopped", async () => {
     vi.useFakeTimers();
     try {

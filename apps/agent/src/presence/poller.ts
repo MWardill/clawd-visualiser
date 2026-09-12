@@ -63,9 +63,11 @@ export function createPresencePoller(deps: {
   let inFlight: Promise<boolean> | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let running = false;
+  let stopped = false;
 
   async function run(): Promise<boolean> {
     const result = await deps.exec(`${deps.command} agents --json`, { timeoutMs: POLL_TIMEOUT_MS, maxBuffer: POLL_MAX_BUFFER });
+    if (stopped) return false;
     const entries = result.ok ? parseArray(result.stdout) : null;
     if (entries === null) {
       deps.log("presence.failed");
@@ -108,6 +110,7 @@ export function createPresencePoller(deps: {
     start() {
       if (running) return;
       running = true;
+      stopped = false;
       const loop = async (): Promise<void> => {
         await pollOnce();
         if (running) timer = setTimeout(() => void loop(), deps.intervalMs);
@@ -115,6 +118,7 @@ export function createPresencePoller(deps: {
       void loop();
     },
     stop() {
+      stopped = true;
       running = false;
       if (timer !== null) {
         clearTimeout(timer);
