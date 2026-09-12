@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { RawHookSchema } from "../schema/raw";
 import { FORBIDDEN_KEYS, containsForbidden, redact } from "./redact";
 
 const cwd = "C:\\mw\\visualiser";
@@ -72,5 +73,35 @@ describe("redact", () => {
     expect(containsForbidden({ a: { prompt: "x" } })).toBe("prompt");
     expect(containsForbidden({ a: ["C:/mw/visualiser"] }, ["C:/mw/visualiser"])).toBe("C:/mw/visualiser");
     expect(containsForbidden({ tool: "Bash" }, ["secret"])).toBeNull();
+  });
+  it("parses in strip mode, so a raw payload loses its forbidden fields before ingest reads it", () => {
+    expect(RawHookSchema.parse(raw.prompt)).not.toHaveProperty("prompt");
+    expect(RawHookSchema.parse(raw.stop)).not.toHaveProperty("last_assistant_message");
+    expect(RawHookSchema.parse(raw.preTool)).not.toHaveProperty("tool_input");
+  });
+
+  it("counts only subagent background tasks and never reads a background shell's command", () => {
+    const mixed = {
+      ...common,
+      hook_event_name: "Stop",
+      background_tasks: [
+        { id: "a1", type: "subagent", status: "running", description: "Explore the repo", agent_type: "Explore" },
+        { id: "b1", type: "shell", status: "running", description: "sleep 40", command: "sleep 40" },
+      ],
+    };
+    expect(redact(mixed, ctx)).toMatchObject({ kind: "stop", backgroundTasks: 1 });
+    expect(RawHookSchema.parse(mixed).background_tasks).toEqual([{ type: "subagent" }, { type: "shell" }]);
+    expect(redact({ ...mixed, background_tasks: [mixed.background_tasks[1]] }, ctx)).toMatchObject({ kind: "stop", backgroundTasks: 0 });
+  });
+
+  it("tolerates a status line with null or missing figures, and rejects one with no figures at all", () => {
+    const nulled = { ...raw.statusLine, context_window: { used_percentage: null }, rate_limits: { five_hour: { used_percentage: null }, seven_day: {} } };
+    expect(redact(nulled, ctx)).toMatchObject({ kind: "status", costUsd: 1.342142 });
+    expect(redact(nulled, ctx)).not.toHaveProperty("contextPct");
+    expect(redact(nulled, ctx)).not.toHaveProperty("rateLimit5h");
+    const { context_window: _contextWindow, ...noContext } = raw.statusLine;
+    expect(redact(noContext, ctx)).toMatchObject({ kind: "status", costUsd: 1.342142 });
+    expect(redact({ session_id: "x", cwd }, ctx)).toBeNull();
+    expect(redact({ session_id: "x", cwd, workspace: { current_dir: cwd } }, ctx)).toBeNull();
   });
 });

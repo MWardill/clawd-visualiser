@@ -28,8 +28,16 @@ export function redact(raw: unknown, ctx: IngestContext): RedactedEvent | null {
   const hook = RawHookSchema.safeParse(raw);
   if (hook.success) return redactHook(hook.data, ctx);
   const status = RawStatusLineSchema.safeParse(raw);
-  if (status.success) return redactStatus(status.data, ctx);
+  if (status.success && isStatusLine(status.data)) return redactStatus(status.data, ctx);
   return null;
+}
+
+/**
+ * The envelope alone is not a status line: after stripping, a payload must still carry at least
+ * one figure we read, or it is some other shape we do not model.
+ */
+function isStatusLine(p: RawStatusLine): boolean {
+  return p.context_window !== undefined || p.cost !== undefined || p.rate_limits !== undefined || p.model !== undefined;
 }
 
 function validate(event: unknown): RedactedEvent | null {
@@ -60,7 +68,9 @@ function redactHook(p: RawHook, ctx: IngestContext): RedactedEvent | null {
     case "PermissionDenied":
       return validate({ ...base, kind: "permission.denied", ...(p.tool_name ? { tool: normaliseTool(p.tool_name) } : {}) });
     case "Stop":
-      return validate({ ...base, kind: "stop", backgroundTasks: p.background_tasks?.length ?? 0 });
+      // Only subagents count: a background shell is the user's own long-running command, not work
+      // the session is waiting on, so a session with one reads idle.
+      return validate({ ...base, kind: "stop", backgroundTasks: (p.background_tasks ?? []).filter((t) => t.type === "subagent").length });
     case "SubagentStart":
     case "SubagentStop":
       // Internal helpers (the session-naming helper) have an empty agent_type. Drop them.
@@ -73,8 +83,8 @@ function redactHook(p: RawHook, ctx: IngestContext): RedactedEvent | null {
 
 function redactStatus(p: RawStatusLine, ctx: IngestContext): RedactedEvent | null {
   if (!isAllowed(p.cwd, ctx.allowlist)) return null;
-  const pct = (v: number | undefined): number | undefined => (typeof v === "number" ? Math.min(100, Math.max(0, v)) : undefined);
-  const contextPct = pct(p.context_window.used_percentage);
+  const pct = (v: number | null | undefined): number | undefined => (typeof v === "number" ? Math.min(100, Math.max(0, v)) : undefined);
+  const contextPct = pct(p.context_window?.used_percentage);
   const costUsd = p.cost?.total_cost_usd;
   const rateLimit5h = pct(p.rate_limits?.five_hour?.used_percentage);
   const rateLimit7d = pct(p.rate_limits?.seven_day?.used_percentage);
