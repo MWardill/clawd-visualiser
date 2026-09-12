@@ -1,6 +1,6 @@
 import { paneKey } from "../alias/pane";
 import { RedactedEventSchema, type RedactedEvent } from "../schema/events";
-import { RawHookSchema, RawStatusLineSchema, type RawHook, type RawStatusLine } from "../schema/raw";
+import { RawAgentEntrySchema, RawHookSchema, RawStatusLineSchema, type RawHook, type RawStatusLine } from "../schema/raw";
 import { isAllowed } from "./allowlist";
 import { categoryFor, normaliseTool } from "./categories";
 
@@ -38,6 +38,16 @@ export function redact(raw: unknown, ctx: IngestContext): RedactedEvent | null {
  */
 function isStatusLine(p: RawStatusLine): boolean {
   return p.context_window !== undefined || p.cost !== undefined || p.rate_limits !== undefined || p.model !== undefined;
+}
+
+/**
+ * Turn one entry of an agents-list poll into a presence event. `alive` is the poller's verdict:
+ * true for an entry in the latest poll, false for a session that has dropped out of it.
+ */
+export function redactPresence(entry: unknown, alive: boolean, ctx: IngestContext): RedactedEvent | null {
+  const parsed = RawAgentEntrySchema.safeParse(entry);
+  if (!parsed.success || !isAllowed(parsed.data.cwd, ctx.allowlist)) return null;
+  return validate({ v: 1 as const, t: ctx.now, sessionId: parsed.data.sessionId, paneKey: paneKey(parsed.data.cwd), kind: "presence", alive });
 }
 
 function validate(event: unknown): RedactedEvent | null {

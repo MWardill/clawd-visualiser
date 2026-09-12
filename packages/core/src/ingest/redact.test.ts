@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { RawHookSchema } from "../schema/raw";
-import { FORBIDDEN_KEYS, containsForbidden, redact } from "./redact";
+import { FORBIDDEN_KEYS, containsForbidden, redact, redactPresence } from "./redact";
 
 const cwd = "C:\\mw\\visualiser";
 const ctx = { now: 1_757_671_200_000, allowlist: ["C:\\mw"] };
@@ -103,5 +103,27 @@ describe("redact", () => {
     expect(redact(noContext, ctx)).toMatchObject({ kind: "status", costUsd: 1.342142 });
     expect(redact({ session_id: "x", cwd }, ctx)).toBeNull();
     expect(redact({ session_id: "x", cwd, workspace: { current_dir: cwd } }, ctx)).toBeNull();
+  });
+});
+
+describe("redactPresence", () => {
+  /** One entry of `claude agents --json`, shaped as the spike recorded it. */
+  const entry = { pid: 1234, cwd, kind: "interactive", startedAt: "2026-09-12T16:20:00.000Z", sessionId: "e82c9e2a", name: "Run whoami bash command" };
+
+  it("turns an agents-list entry into a presence event on the same pane, keeping no name or path", () => {
+    for (const alive of [true, false]) {
+      const event = redactPresence(entry, alive, ctx);
+      expect(event).toMatchObject({ kind: "presence", alive, v: 1, t: ctx.now, sessionId: "e82c9e2a" });
+      expect(event?.paneKey).toBe(redact(raw.prompt, ctx)?.paneKey);
+      expect(containsForbidden(event, ["Run whoami bash command", cwd, "interactive"])).toBeNull();
+    }
+  });
+
+  it("drops entries outside the allowlist and junk", () => {
+    expect(redactPresence(entry, true, { ...ctx, allowlist: ["C:\\git"] })).toBeNull();
+    expect(redactPresence({ pid: 1234, kind: "interactive" }, true, ctx)).toBeNull();
+    expect(redactPresence({ sessionId: "", cwd }, true, ctx)).toBeNull();
+    expect(redactPresence("nonsense", true, ctx)).toBeNull();
+    expect(redactPresence(null, true, ctx)).toBeNull();
   });
 });

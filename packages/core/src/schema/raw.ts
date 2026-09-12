@@ -39,3 +39,10 @@ export const RawStatusLineSchema = z.object({
   model: z.object({ display_name: z.string().nullish() }).optional(),
 });
 export type RawStatusLine = z.infer<typeof RawStatusLineSchema>;
+
+/**
+ * One entry of `claude agents --json`, the presence poll. The entry also carries `pid`, `kind`,
+ * `startedAt` and `name`; `name` is session-name content, so none of them are named here.
+ */
+export const RawAgentEntrySchema = z.object({ sessionId: z.string().min(1), cwd: z.string().min(1) });
+export type RawAgentEntry = z.infer<typeof RawAgentEntrySchema>;
