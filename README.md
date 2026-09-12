@@ -1,0 +1,36 @@
+# Clawd Visualiser
+
+A dashboard that shows every Claude Code session on your machine as a Clawd, the Claude Code crab,
+sitting in a terminal-style pane for its repository. At a glance you can see which sessions are
+working, which are waiting on you and which are asleep, and click one to jump to its window.
+
+It costs zero model tokens: everything is observed through Claude Code's hooks and a small local
+process, and the model is never asked to report on itself. No session content is ever displayed or
+transmitted. Prompts, tool arguments and outputs, file paths and assistant text are stripped at
+ingest; what remains is state, activity category and timing.
+
+## Status
+
+Design complete, build starting. The product requirements are in [docs/PRD.md](docs/PRD.md), and the
+measured facts about Claude Code's hooks that the design rests on are in
+[docs/spike-hooks.md](docs/spike-hooks.md).
+
+## Layout
+
+| Path | What it is |
+| --- | --- |
+| `docs/PRD.md` | Requirements, contracts, state machine, milestones, decision log. |
+| `docs/spike-hooks.md` | What the hooks, agents list and status line actually provide, measured on real runs. |
+| `tools/hook-spike/` | The listener and settings used for those measurements; reusable for further checks. |
+
+The application itself lands as a monorepo: a shared core package holding the contracts and the
+state machine, a canvas scene package for the Clawds, a Next.js web app, and a local agent. See the
+PRD for the plan and the order of work.
+
+## Credits
+
+- **Clawd** is the Claude Code mascot by Anthropic.
+- The character engine, the canonical 14 by 8 Clawd matrix and its expression vocabulary come from
+  the **clawd-animation** skill by mmguo, found at <https://mmguo.dev/clawd/>. The visualiser draws
+  its Clawds with that engine and follows its rules: one flat body colour, single-pixel eyes, no mouth,
+  mood carried by eyes, accessories and particles.
