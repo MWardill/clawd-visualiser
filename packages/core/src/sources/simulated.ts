@@ -1,9 +1,9 @@
 import type { RedactedEvent, ToolCategory } from "../schema/events";
-import type { StateConfig } from "../state/config";
+import { DEFAULT_CONFIG, type StateConfig } from "../state/config";
 import type { Sink, Source } from "./source";
 
-/** Short timers so a demo shows sleeping and departures within a minute or two. */
-export const SIMULATED_CONFIG: StateConfig = { asleepAfterMs: 20_000, minDisplayMs: 1_500, doneLingerMs: 4_000 };
+/** The defaults with a short asleep timer, so a demo shows sleeping and departures within a minute or two. */
+export const SIMULATED_CONFIG: StateConfig = { ...DEFAULT_CONFIG, asleepAfterMs: 20_000 };
 
 /** mulberry32: small, seedable, good enough for a demo. */
 function rng(seed: number): () => number {
@@ -146,6 +146,7 @@ export function createSimulatedFleet(opts: SimulatedFleetOptions = {}): { next(n
         return;
       }
       default:
+        s.phase satisfies never;
         return;
     }
   }

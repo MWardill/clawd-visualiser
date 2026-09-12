@@ -1,3 +1,4 @@
+import { own } from "../own";
 import type { ToolCategory } from "../schema/events";
 
 const TABLE: Record<string, ToolCategory> = {
@@ -20,5 +21,5 @@ export function normaliseTool(name: string): string {
 }
 
 export function categoryFor(tool: string): ToolCategory {
-  return TABLE[tool] ?? "other";
+  return own(TABLE, tool) ?? "other";
 }

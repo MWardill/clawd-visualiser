@@ -1,6 +1,8 @@
-import type { RedactedEvent } from "../schema/events";
+import type { RedactedEvent, ToolCategory } from "../schema/events";
 import type { Activity, SessionPhase } from "../schema/snapshot";
 import type { StateConfig } from "./config";
+
+export type InFlightTool = { toolUseId: string; tool: string; category: ToolCategory };
 
 export type SessionState = {
   sessionId: string;
@@ -10,18 +12,20 @@ export type SessionState = {
   /** When `state` began. */
   since: number;
   lastEventAt: number;
-  /** toolUseId of the pending permission while waiting. */
+  /** toolUseId of the pending permission while waiting, when one could be resolved. */
   waitingOn: string | null;
+  /** The subagent whose permission request is pending, or null when it is the parent's own. */
+  waitingAgent: string | null;
   /** Parent tool calls started and not yet ended, oldest first. Subagent calls are not tracked. */
-  inFlight: { toolUseId: string; tool: string }[];
+  inFlight: InFlightTool[];
   backgroundTasks: number;
   /** Live subagent ids. An array, not a Set, so state is JSON-serialisable and comparable. */
   subagents: string[];
   contextPct: number | null;
   /** When the session was first seen. Never changes; the snapshot's sort key. */
   firstSeenAt: number;
-  /** The previous state, shown until `until` so quick flips do not flicker. */
-  displayHold: { state: SessionPhase; until: number } | null;
+  /** What was shown before the last transition, held until `until` so quick flips do not flicker. */
+  displayHold: { state: SessionPhase; activity: Activity | null; until: number } | null;
 };
 
 export function newSession(sessionId: string, paneKey: string, now: number): SessionState {
@@ -33,6 +37,7 @@ export function newSession(sessionId: string, paneKey: string, now: number): Ses
     since: now,
     lastEventAt: now,
     waitingOn: null,
+    waitingAgent: null,
     inFlight: [],
     backgroundTasks: 0,
     subagents: [],
@@ -44,11 +49,20 @@ export function newSession(sessionId: string, paneKey: string, now: number): Ses
 
 function transition(s: SessionState, to: SessionPhase, now: number, cfg: StateConfig): SessionState {
   if (s.state === to) return s;
-  return { ...s, state: to, since: now, displayHold: { state: s.state, until: now + cfg.minDisplayMs } };
+  // A hold still running is kept, so a burst of transitions shows one state per minDisplayMs
+  // rather than a phantom hold of whichever transient state came last.
+  const displayHold = s.displayHold && now < s.displayHold.until ? s.displayHold : { state: s.state, activity: s.activity, until: now + cfg.minDisplayMs };
+  return { ...s, state: to, since: now, displayHold };
 }
 
 const busy = (s: SessionState): boolean => s.backgroundTasks > 0 || s.subagents.length > 0;
 const resting = (s: SessionState): boolean => s.state === "idle" || s.state === "asleep";
+/** What a working session is doing: its newest parent tool, else spawning while subagents run, else thinking. */
+const activityOf = (s: SessionState, spawning = false): Activity => s.inFlight.at(-1)?.category ?? (spawning || busy(s) ? "spawn" : "think");
+/** Re-derive activity for a working session; resting and waiting ones keep what they have. */
+const settle = (s: SessionState, spawning = false): SessionState => (s.state === "working" ? { ...s, activity: activityOf(s, spawning) } : s);
+const endWait = (s: SessionState): SessionState => ({ ...s, waitingOn: null, waitingAgent: null });
+const rest = (s: SessionState): SessionState => ({ ...endWait(s), activity: null });
 
 /** Pure: applies one event to one session. `now` is the event time. */
 export function reduceSession(prev: SessionState, e: RedactedEvent, now: number, cfg: StateConfig): SessionState {
@@ -58,55 +72,67 @@ export function reduceSession(prev: SessionState, e: RedactedEvent, now: number,
     case "session.start":
       return s;
     case "session.end":
-      return transition({ ...s, activity: null, waitingOn: null }, "done", now, cfg);
+      return rest(transition(s, "done", now, cfg));
     case "presence":
-      return e.alive ? s : transition({ ...s, activity: null, waitingOn: null }, "done", now, cfg);
+      return e.alive ? s : rest(transition(s, "done", now, cfg));
     case "prompt":
-      return transition({ ...s, activity: "think", waitingOn: null }, "working", now, cfg);
+      return settle(transition(endWait(s), "working", now, cfg));
     case "tool.start": {
       if (e.agentId) {
-        s = { ...s, activity: "spawn" };
-      } else {
-        const others = s.inFlight.filter((t) => t.toolUseId !== e.toolUseId);
-        s = { ...s, activity: e.category, inFlight: [...others, { toolUseId: e.toolUseId, tool: e.tool }] };
+        s = resting(s) ? transition(s, "working", now, cfg) : s;
+        return { ...s, activity: activityOf(s, true) };
       }
-      return resting(s) ? transition(s, "working", now, cfg) : s;
+      const others = s.inFlight.filter((t) => t.toolUseId !== e.toolUseId);
+      s = { ...s, inFlight: [...others, { toolUseId: e.toolUseId, tool: e.tool, category: e.category }] };
+      s = resting(s) ? transition(s, "working", now, cfg) : s;
+      return { ...s, activity: activityOf(s) };
     }
     case "tool.end": {
       if (!e.agentId) s = { ...s, inFlight: s.inFlight.filter((t) => t.toolUseId !== e.toolUseId) };
-      // A wait with no resolved id is ended by any parent tool finishing: the id was never known.
-      if (s.state === "waiting" && ((!e.agentId && s.waitingOn === null) || s.waitingOn === e.toolUseId)) {
-        s = transition({ ...s, waitingOn: null }, "working", now, cfg);
+      // A wait with no resolved id ends when a tool from the same origin finishes: the parent's
+      // own tool for the parent's request, the subagent's tool for a request raised inside it.
+      const sameOrigin = (e.agentId ?? null) === s.waitingAgent;
+      if (s.state === "waiting" && ((s.waitingOn === null && sameOrigin) || s.waitingOn === e.toolUseId)) {
+        s = transition(endWait(s), "working", now, cfg);
       }
-      return s.state === "working" ? { ...s, activity: e.agentId || busy(s) ? "spawn" : "think" } : s;
+      return settle(s, Boolean(e.agentId));
     }
     case "permission.request": {
       if (s.state === "waiting") return s;
+      // Subagent calls are not tracked, so a request raised inside one has nothing to match against.
+      if (e.agentId) return transition({ ...s, waitingOn: e.toolUseId ?? null, waitingAgent: e.agentId }, "waiting", now, cfg);
       // PermissionRequest carries no tool_use_id, so match the newest in-flight call of the same
       // tool, else the newest call of any tool, else wait with no id at all.
-      const sameTool = [...s.inFlight].reverse().find((t) => t.tool === e.tool);
+      let sameTool: InFlightTool | undefined;
+      for (let i = s.inFlight.length - 1; i >= 0 && !sameTool; i--) if (s.inFlight[i]?.tool === e.tool) sameTool = s.inFlight[i];
       const waitingOn = e.toolUseId ?? sameTool?.toolUseId ?? s.inFlight.at(-1)?.toolUseId ?? null;
-      return transition({ ...s, waitingOn }, "waiting", now, cfg);
+      return transition({ ...s, waitingOn, waitingAgent: null }, "waiting", now, cfg);
     }
-    case "permission.denied":
-      return s.state === "waiting" ? transition({ ...s, waitingOn: null, activity: "think" }, "working", now, cfg) : s;
+    case "permission.denied": {
+      if (s.state !== "waiting") return s;
+      // The denied call will not run, so it is no longer in flight.
+      s = { ...s, inFlight: s.inFlight.filter((t) => t.toolUseId !== s.waitingOn) };
+      return settle(transition(endWait(s), "working", now, cfg));
+    }
     case "stop": {
       // Claude Code's own background_tasks is authoritative: zero means no subagent is live,
       // whatever we tracked (a lost SubagentStop must not wedge the parent on spawn).
       s = { ...s, backgroundTasks: e.backgroundTasks, subagents: e.backgroundTasks === 0 ? [] : s.subagents, inFlight: [] };
       if (s.state !== "working" && s.state !== "waiting") return s;
-      if (busy(s)) return transition({ ...s, waitingOn: null, activity: "spawn" }, "working", now, cfg);
-      return transition({ ...s, activity: null, waitingOn: null }, "idle", now, cfg);
+      if (busy(s)) return settle(transition(endWait(s), "working", now, cfg));
+      return rest(transition(s, "idle", now, cfg));
     }
     case "subagent.start": {
       const subagents = s.subagents.includes(e.agentId) ? s.subagents : [...s.subagents, e.agentId];
-      return { ...s, subagents, activity: s.state === "working" ? "spawn" : s.activity };
+      return settle({ ...s, subagents });
     }
     case "subagent.stop":
-      return { ...s, subagents: s.subagents.filter((id) => id !== e.agentId) };
+      // The stop's count is reconciled one subagent at a time, so the last one to finish clears it.
+      return settle({ ...s, subagents: s.subagents.filter((id) => id !== e.agentId), backgroundTasks: Math.max(0, s.backgroundTasks - 1) });
     case "status":
       return e.contextPct === undefined ? s : { ...s, contextPct: e.contextPct };
     default:
+      e satisfies never;
       return s;
   }
 }
@@ -114,5 +140,7 @@ export function reduceSession(prev: SessionState, e: RedactedEvent, now: number,
 /** Pure: applies the passage of time. Called by the host on an interval. */
 export function tickSession(s: SessionState, now: number, cfg: StateConfig): SessionState {
   if (s.state === "idle" && now - s.since >= cfg.asleepAfterMs) return transition(s, "asleep", now, cfg);
+  // A Stop that never came (an interrupt, a lost hook): a long-quiet working session is not working.
+  if (s.state === "working" && now - s.lastEventAt >= cfg.staleWorkingMs) return { ...rest(transition(s, "idle", now, cfg)), inFlight: [] };
   return s;
 }

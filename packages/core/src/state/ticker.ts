@@ -5,10 +5,12 @@ import type { SessionState } from "./session";
 /**
  * Zero, one or two ticker lines for an event: the event's own line, then a `state` line when the
  * reducer changed the session's state. This is the only source of ticker lines, so the ticker can
- * never carry more than the redacted event does.
+ * never carry more than the redacted event does. Lines are stamped with `now`, the same clock the
+ * reducer was given, so a replayed or rescaled event never puts the ticker and the snapshot on
+ * different clocks.
  */
-export function toTickerEvents(e: RedactedEvent, before: SessionState | null, after: SessionState): TickerEvent[] {
-  const t = new Date(e.t).toISOString();
+export function toTickerEvents(e: RedactedEvent, before: SessionState | null, after: SessionState, now: number = e.t): TickerEvent[] {
+  const t = new Date(now).toISOString();
   const lines: TickerEvent[] = [];
   const own = ownLine(e, t);
   if (own) lines.push(own);
@@ -43,6 +45,7 @@ function ownLine(e: RedactedEvent, t: string): TickerEvent | null {
     case "presence":
       return null;
     default:
+      e satisfies never;
       return null;
   }
 }

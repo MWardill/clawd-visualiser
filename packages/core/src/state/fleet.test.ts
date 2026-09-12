@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { RedactedEvent } from "../schema/events";
 import { DEFAULT_CONFIG } from "./config";
+import { emptyAliasMap } from "../alias/names";
 import { emptyFleet, reduceFleet, tickFleet } from "./fleet";
+import { deriveSnapshot } from "./snapshot";
 
 const T0 = 1_757_671_200_000;
 const ev = (sessionId: string, paneKey: string, kind: string, t: number, extra: Record<string, unknown> = {}) =>
@@ -60,5 +62,20 @@ describe("reduceFleet", () => {
     const before = emptyFleet();
     reduceFleet(before, ev("s1", "k1", "prompt", T0), T0, DEFAULT_CONFIG);
     expect(before).toEqual(emptyFleet());
+  });
+
+  it("ignores a session.end for a session it has never seen", () => {
+    const f = reduceFleet(emptyFleet(), ev("ghost", "k1", "session.end", T0, { reason: "other" }), T0, DEFAULT_CONFIG);
+    expect(f.sessions["ghost"]).toBeUndefined();
+    expect(f.panes["k1"]).toBeUndefined();
+  });
+
+  it("treats ids that name inherited object properties as ordinary ids", () => {
+    let f = reduceFleet(emptyFleet(), ev("constructor", "toString", "prompt", T0), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, ev("constructor", "toString", "tool.start", T0 + 1, { tool: "Read", category: "read", toolUseId: "u1" }), T0 + 1, DEFAULT_CONFIG);
+    expect(f.sessions["constructor"]?.state).toBe("working");
+    expect(f.panes["toString"]?.sessionIds).toEqual(["constructor"]);
+    expect(deriveSnapshot(f, emptyAliasMap(), T0 + 2).snapshot.sessions).toHaveLength(1);
+    expect(tickFleet(f, T0 + 2, DEFAULT_CONFIG).panes["toString"]).toBeDefined();
   });
 });

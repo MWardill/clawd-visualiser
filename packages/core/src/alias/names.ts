@@ -1,3 +1,5 @@
+import { own } from "../own";
+
 /** Display labels for sessions. Generated, never the session's own name. */
 export const SESSION_LABELS = [
   "Otter", "Heron", "Badger", "Lynx", "Finch", "Vole", "Stoat", "Wren", "Pike", "Newt",
@@ -35,14 +37,14 @@ function nextLabel(pool: readonly string[], taken: Iterable<string>): string {
 }
 
 export function ensureSessionAlias(map: AliasMap, sessionId: string): { map: AliasMap; alias: string; label: string } {
-  const existing = map.sessions[sessionId];
+  const existing = own(map.sessions, sessionId);
   if (existing) return { map, ...existing };
   const entry = { alias: `agent-${map.nextSession}`, label: nextLabel(SESSION_LABELS, Object.values(map.sessions).map((e) => e.label)) };
   return { map: { ...map, sessions: { ...map.sessions, [sessionId]: entry }, nextSession: map.nextSession + 1 }, ...entry };
 }
 
 export function ensurePaneAlias(map: AliasMap, paneKey: string): { map: AliasMap; alias: string; label: string } {
-  const existing = map.panes[paneKey];
+  const existing = own(map.panes, paneKey);
   if (existing) return { map, ...existing };
   const entry = { alias: `pane-${map.nextPane}`, label: nextLabel(PANE_LABELS, Object.values(map.panes).map((e) => e.label)) };
   return { map: { ...map, panes: { ...map.panes, [paneKey]: entry }, nextPane: map.nextPane + 1 }, ...entry };

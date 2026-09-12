@@ -1,11 +1,17 @@
 import { ensurePaneAlias, ensureSessionAlias, type AliasMap } from "../alias/names";
-import { SnapshotSchema, type SessionPhase, type SessionSnapshot, type Snapshot } from "../schema/snapshot";
+import { SnapshotSchema, type Activity, type SessionPhase, type SessionSnapshot, type Snapshot } from "../schema/snapshot";
 import type { Fleet } from "./fleet";
 import type { SessionState } from "./session";
 
+/** What to show right now: the held previous state and activity until the hold expires. */
+function displayed(s: SessionState, now: number): { state: SessionPhase; activity: Activity | null } {
+  const shown = s.displayHold && now < s.displayHold.until ? s.displayHold : s;
+  return { state: shown.state, activity: shown.state === "working" ? shown.activity : null };
+}
+
 /** The state to show right now: the held previous state until the hold expires. */
 export function displayedState(s: SessionState, now: number): SessionPhase {
-  return s.displayHold && now < s.displayHold.until ? s.displayHold.state : s.state;
+  return displayed(s, now).state;
 }
 
 /**
@@ -29,13 +35,13 @@ export function deriveSnapshot(f: Fleet, aliases: AliasMap, now: number): { snap
       map = sr.map;
       const pr = ensurePaneAlias(map, s.paneKey);
       map = pr.map;
-      const state = displayedState(s, now);
+      const { state, activity } = displayed(s, now);
       return {
         alias: sr.alias,
         label: sr.label,
         pane: pr.alias,
         state,
-        activity: state === "working" ? s.activity : null,
+        activity,
         subagents: s.subagents.length,
         contextPct: s.contextPct,
         since: new Date(s.since).toISOString(),

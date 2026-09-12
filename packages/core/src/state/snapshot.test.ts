@@ -70,4 +70,12 @@ describe("deriveSnapshot", () => {
     expect(only.subagents).toBe(2);
     expect(only.updatedAt).toBe(new Date(T0 + 20).toISOString());
   });
+
+  it("shows the held activity with the held state", () => {
+    let f = reduceFleet(emptyFleet(), ev("s1", "k1", "prompt", T0), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, ev("s1", "k1", "tool.start", T0 + 1, { tool: "Edit", category: "edit", toolUseId: "u1" }), T0 + 1, DEFAULT_CONFIG);
+    f = reduceFleet(f, ev("s1", "k1", "stop", T0 + 5000, { backgroundTasks: 0 }), T0 + 5000, DEFAULT_CONFIG);
+    const held = deriveSnapshot(f, emptyAliasMap(), T0 + 5100).snapshot.sessions[0]!;
+    expect(held).toMatchObject({ state: "working", activity: "edit" });
+  });
 });

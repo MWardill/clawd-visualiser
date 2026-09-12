@@ -33,4 +33,11 @@ describe("aliases", () => {
     ensureSessionAlias(start, "s1");
     expect(start).toEqual(emptyAliasMap());
   });
+
+  it("aliases an id that names an inherited object property like any other", () => {
+    const r = ensureSessionAlias(emptyAliasMap(), "constructor");
+    expect(r.alias).toBe("agent-1");
+    expect(r.map.sessions["constructor"]).toEqual({ alias: "agent-1", label: r.label });
+    expect(ensurePaneAlias(emptyAliasMap(), "toString").alias).toBe("pane-1");
+  });
 });

@@ -16,4 +16,9 @@ describe("tool categories", () => {
     expect(normaliseTool("mcp__atlassian__getJiraIssue")).toBe("mcp");
     expect(normaliseTool("Bash")).toBe("Bash");
   });
+
+  it("does not mistake an inherited object property for a table entry", () => {
+    expect(categoryFor("constructor")).toBe("other");
+    expect(categoryFor("toString")).toBe("other");
+  });
 });

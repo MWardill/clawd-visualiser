@@ -106,11 +106,34 @@
     "label": "Otter",
     "pane": "pane-1",
     "state": "working",
-    "activity": "think",
+    "activity": "run",
     "subagents": 0,
     "contextPct": null,
     "since": "2025-09-12T10:00:30.879Z",
     "updatedAt": "2025-09-12T10:00:36.094Z"
+   }
+  ]
+ },
+ {
+  "version": 1,
+  "panes": [
+   {
+    "pane": "pane-1",
+    "label": "Oak",
+    "collision": false
+   }
+  ],
+  "sessions": [
+   {
+    "alias": "agent-1",
+    "label": "Otter",
+    "pane": "pane-1",
+    "state": "working",
+    "activity": "think",
+    "subagents": 0,
+    "contextPct": null,
+    "since": "2025-09-12T10:00:30.879Z",
+    "updatedAt": "2025-09-12T10:00:48.973Z"
    }
   ]
  },
@@ -405,34 +428,11 @@
     "label": "Badger",
     "pane": "pane-1",
     "state": "working",
-    "activity": "spawn",
-    "subagents": 0,
-    "contextPct": null,
-    "since": "2025-09-12T10:02:25.724Z",
-    "updatedAt": "2025-09-12T10:02:42.998Z"
-   }
-  ]
- },
- {
-  "version": 1,
-  "panes": [
-   {
-    "pane": "pane-1",
-    "label": "Oak",
-    "collision": false
-   }
-  ],
-  "sessions": [
-   {
-    "alias": "agent-3",
-    "label": "Badger",
-    "pane": "pane-1",
-    "state": "working",
     "activity": "think",
     "subagents": 0,
     "contextPct": null,
     "since": "2025-09-12T10:02:25.724Z",
-    "updatedAt": "2025-09-12T10:02:43.081Z"
+    "updatedAt": "2025-09-12T10:02:42.998Z"
    }
   ]
  },

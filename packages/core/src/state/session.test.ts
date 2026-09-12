@@ -22,7 +22,7 @@ describe("reduceSession", () => {
   it("tracks tool activity and returns to think after a tool ends", () => {
     let s = run([ev("prompt", T0), ev("tool.start", T0 + 1, { tool: "Edit", category: "edit", toolUseId: "u1" })]);
     expect(s.activity).toBe("edit");
-    expect(s.inFlight).toEqual([{ toolUseId: "u1", tool: "Edit" }]);
+    expect(s.inFlight).toEqual([{ toolUseId: "u1", tool: "Edit", category: "edit" }]);
     s = run([ev("tool.end", T0 + 2, { tool: "Edit", category: "edit", toolUseId: "u1", durationMs: 1 })], s);
     expect(s.activity).toBe("think");
     expect(s.inFlight).toEqual([]);
@@ -101,7 +101,7 @@ describe("reduceSession", () => {
 
   it("records a display hold when the state changes", () => {
     const s = run([ev("prompt", T0 + 100)]);
-    expect(s.displayHold).toEqual({ state: "idle", until: T0 + 100 + DEFAULT_CONFIG.minDisplayMs });
+    expect(s.displayHold).toEqual({ state: "idle", activity: null, until: T0 + 100 + DEFAULT_CONFIG.minDisplayMs });
   });
 
   it("falls asleep after the threshold and wakes on a prompt", () => {
@@ -135,7 +135,7 @@ describe("reduceSession", () => {
     expect(s.waitingOn).toBe("u1");
     s = run([ev("tool.end", T0 + 4, { tool: "Read", category: "read", toolUseId: "u2", durationMs: 1 })], s);
     expect(s.state).toBe("waiting");
-    expect(s.inFlight).toEqual([{ toolUseId: "u1", tool: "Bash" }]);
+    expect(s.inFlight).toEqual([{ toolUseId: "u1", tool: "Bash", category: "run" }]);
     s = run([ev("tool.end", T0 + 5, { tool: "Bash", category: "run", toolUseId: "u1", durationMs: 1 })], s);
     expect(s.state).toBe("working");
     expect(s.inFlight).toEqual([]);
@@ -212,5 +212,57 @@ describe("reduceSession", () => {
     expect(start.firstSeenAt).toBe(T0);
     const s = run([ev("prompt", T0 + 10), ev("tool.start", T0 + 11, { tool: "Read", category: "read", toolUseId: "u1" }), ev("stop", T0 + 12, { backgroundTasks: 0 }), ev("session.end", T0 + 13, { reason: "other" })], start);
     expect(s.firstSeenAt).toBe(T0);
+  });
+
+  it("keeps the newest remaining tool's activity when one of a parallel batch ends", () => {
+    let s = run([ev("prompt", T0), ev("tool.start", T0 + 1, { tool: "Read", category: "read", toolUseId: "u1" }), ev("tool.start", T0 + 2, { tool: "Bash", category: "run", toolUseId: "u2" })]);
+    expect(s.inFlight).toEqual([{ toolUseId: "u1", tool: "Read", category: "read" }, { toolUseId: "u2", tool: "Bash", category: "run" }]);
+    s = run([ev("tool.end", T0 + 3, { tool: "Bash", category: "run", toolUseId: "u2", durationMs: 1 })], s);
+    expect(s.activity).toBe("read");
+    s = run([ev("tool.end", T0 + 4, { tool: "Read", category: "read", toolUseId: "u1", durationMs: 1 })], s);
+    expect(s.activity).toBe("think");
+  });
+
+  it("returns to think once the last subagent stops, even after a stop reported it running", () => {
+    const s = run([ev("prompt", T0), ev("subagent.start", T0 + 1, { agentId: "a1", agentType: "x" }), ev("stop", T0 + 2, { backgroundTasks: 1 }), ev("subagent.stop", T0 + 3, { agentId: "a1", agentType: "x" }), ev("tool.start", T0 + 4, { tool: "Read", category: "read", toolUseId: "u1" }), ev("tool.end", T0 + 5, { tool: "Read", category: "read", toolUseId: "u1", durationMs: 1 })]);
+    expect(s.backgroundTasks).toBe(0);
+    expect(s.activity).toBe("think");
+  });
+
+  it("ends a subagent's permission wait when that subagent's tool finishes", () => {
+    let s = run([ev("prompt", T0), ev("stop", T0 + 1, { backgroundTasks: 1 }), ev("tool.start", T0 + 2, { agentId: "a1", tool: "Bash", category: "run", toolUseId: "u5" }), ev("permission.request", T0 + 3, { agentId: "a1", tool: "Bash", category: "run" })]);
+    expect(s.state).toBe("waiting");
+    // A parent tool ending says nothing about the subagent's dialog.
+    s = run([ev("tool.end", T0 + 4, { tool: "Read", category: "read", toolUseId: "p1", durationMs: 1 })], s);
+    expect(s.state).toBe("waiting");
+    s = run([ev("tool.end", T0 + 5, { agentId: "a1", tool: "Bash", category: "run", toolUseId: "u5", durationMs: 1 })], s);
+    expect(s.state).toBe("working");
+  });
+
+  it("does not bind a subagent's permission request to a parent tool of the same name", () => {
+    const s = run([ev("prompt", T0), ev("tool.start", T0 + 1, { tool: "Bash", category: "run", toolUseId: "p1" }), ev("permission.request", T0 + 2, { agentId: "a1", tool: "Bash", category: "run" })]);
+    expect(s.state).toBe("waiting");
+    expect(s.waitingOn).toBeNull();
+  });
+
+  it("goes idle when a working session has been quiet for the stale threshold", () => {
+    let s = run([ev("prompt", T0), ev("tool.start", T0 + 1, { tool: "Bash", category: "run", toolUseId: "u1" })]);
+    s = tickSession(s, T0 + 1 + DEFAULT_CONFIG.staleWorkingMs - 1, DEFAULT_CONFIG);
+    expect(s.state).toBe("working");
+    s = tickSession(s, T0 + 1 + DEFAULT_CONFIG.staleWorkingMs, DEFAULT_CONFIG);
+    expect(s.state).toBe("idle");
+    expect(s.activity).toBeNull();
+    expect(s.inFlight).toEqual([]);
+  });
+
+  it("holds the previous activity along with the previous state", () => {
+    const s = run([ev("prompt", T0), ev("tool.start", T0 + 5000, { tool: "Edit", category: "edit", toolUseId: "u1" }), ev("permission.request", T0 + 5001, { tool: "Edit", category: "edit" })]);
+    expect(s.displayHold).toEqual({ state: "working", activity: "edit", until: T0 + 5001 + DEFAULT_CONFIG.minDisplayMs });
+  });
+
+  it("keeps an active hold rather than restarting it on a rapid second transition", () => {
+    const s = run([ev("prompt", T0), ev("tool.start", T0 + 5000, { tool: "Write", category: "edit", toolUseId: "u1" }), ev("permission.request", T0 + 5000, { tool: "Write", category: "edit" }), ev("permission.denied", T0 + 5100, { tool: "Write" })]);
+    expect(s.state).toBe("working");
+    expect(s.displayHold).toEqual({ state: "working", activity: "edit", until: T0 + 5000 + DEFAULT_CONFIG.minDisplayMs });
   });
 });

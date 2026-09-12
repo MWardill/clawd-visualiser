@@ -1,3 +1,4 @@
+import { own } from "../own";
 import type { RedactedEvent } from "../schema/events";
 import type { TickerEvent } from "../schema/ticker";
 import type { StateConfig } from "./config";
@@ -16,8 +17,10 @@ export type Applied = {
 
 /** The one call a host makes per event: reduce, then derive the ticker lines from the before/after pair. */
 export function applyEvent(fleet: Fleet, e: RedactedEvent, now: number, cfg: StateConfig): Applied {
-  const before = fleet.sessions[e.sessionId] ?? null;
+  const before = own(fleet.sessions, e.sessionId) ?? null;
   const next = reduceFleet(fleet, e, now, cfg);
-  const after = next.sessions[e.sessionId] ?? null;
-  return { fleet: next, before, after, ticker: after ? toTickerEvents(e, before, after) : [] };
+  const after = own(next.sessions, e.sessionId) ?? null;
+  // A session the reducer left untouched (it is done) has nothing new to say.
+  const ticker = after && after !== before ? toTickerEvents(e, before, after, now) : [];
+  return { fleet: next, before, after, ticker };
 }

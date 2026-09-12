@@ -34,4 +34,19 @@ describe("applyEvent", () => {
     expect(r.after).toBeNull();
     expect(r.ticker).toEqual([]);
   });
+
+  it("emits no ticker lines for an event a done session ignores", () => {
+    let r = applyEvent(emptyFleet(), ev("s1", "prompt", T0), T0, DEFAULT_CONFIG);
+    r = applyEvent(r.fleet, ev("s1", "session.end", T0 + 10, { reason: "other" }), T0 + 10, DEFAULT_CONFIG);
+    expect(r.ticker.map((l) => l.kind)).toEqual(["session.end", "state"]);
+    r = applyEvent(r.fleet, ev("s1", "prompt", T0 + 20), T0 + 20, DEFAULT_CONFIG);
+    expect(r.after).toBe(r.before);
+    expect(r.ticker).toEqual([]);
+  });
+
+  it("stamps ticker lines with the host's clock, the same one the reducer used", () => {
+    const r = applyEvent(emptyFleet(), ev("s1", "prompt", T0), T0 + 500, DEFAULT_CONFIG);
+    expect(r.after?.since).toBe(T0 + 500);
+    expect(r.ticker[0]?.t).toBe(new Date(T0 + 500).toISOString());
+  });
 });
