@@ -1,0 +1,6 @@
+{"fixture":1,"name":"killed-session"}
+{"v":1,"t":1757671300000,"sessionId":"fix-2","paneKey":"0f1e2d3c4b5a6978","kind":"session.start","source":"startup"}
+{"v":1,"t":1757671301000,"sessionId":"fix-2","paneKey":"0f1e2d3c4b5a6978","kind":"prompt"}
+{"v":1,"t":1757671302000,"sessionId":"fix-2","paneKey":"0f1e2d3c4b5a6978","kind":"tool.start","tool":"Bash","category":"run","toolUseId":"toolu_fix_2"}
+{"v":1,"t":1757671305000,"sessionId":"fix-2","paneKey":"0f1e2d3c4b5a6978","kind":"presence","alive":true}
+{"v":1,"t":1757671310000,"sessionId":"fix-2","paneKey":"0f1e2d3c4b5a6978","kind":"presence","alive":false}

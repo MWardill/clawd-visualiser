@@ -1,0 +1,7 @@
+{"fixture":1,"name":"permission-denied"}
+{"v":1,"t":1757671200000,"sessionId":"fix-1","paneKey":"a1b2c3d4e5f60718","kind":"session.start","source":"startup"}
+{"v":1,"t":1757671201000,"sessionId":"fix-1","paneKey":"a1b2c3d4e5f60718","kind":"prompt"}
+{"v":1,"t":1757671203000,"sessionId":"fix-1","paneKey":"a1b2c3d4e5f60718","kind":"tool.start","tool":"Write","category":"edit","toolUseId":"toolu_fix_1"}
+{"v":1,"t":1757671203100,"sessionId":"fix-1","paneKey":"a1b2c3d4e5f60718","kind":"permission.request","tool":"Write","category":"edit"}
+{"v":1,"t":1757671230000,"sessionId":"fix-1","paneKey":"a1b2c3d4e5f60718","kind":"permission.denied","tool":"Write"}
+{"v":1,"t":1757671232000,"sessionId":"fix-1","paneKey":"a1b2c3d4e5f60718","kind":"stop","backgroundTasks":0}
