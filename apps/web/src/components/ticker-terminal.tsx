@@ -71,7 +71,8 @@ export default function TickerTerminal({ alias, subscribe, backfill }: Props) {
       if (ready) write(e);
       else queue.push(e);
     });
-    void backfill(alias).then((lines) => {
+    // A feed that cannot backfill still streams: treat a rejection as an empty history.
+    void backfill(alias).catch((): TickerEvent[] => []).then((lines) => {
       if (cancelled) return;
       for (const line of lines) write(line);
       for (const line of queue) write(line);

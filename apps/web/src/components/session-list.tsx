@@ -16,7 +16,6 @@ export function SessionList({ sessions, onSelect }: Props) {
     >
       <ul className="flex flex-col gap-1 text-sm">
         {sessions
-          .filter((s) => s.state !== "done")
           .map((s) => (
             <li key={s.alias}>
               <button type="button" className="text-left hover:text-clawd focus-visible:text-clawd" onClick={() => onSelect(s.alias)}>
