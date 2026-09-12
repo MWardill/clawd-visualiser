@@ -1,7 +1,10 @@
+import { fileURLToPath } from "node:url";
 import { startAgent } from "./agent";
 import { runCli } from "./cli";
-import { ConfigError, defaultHome } from "./config";
+import { ConfigError, defaultHome, defaultSettingsPath } from "./config";
 import { isErrno } from "./json-file";
+
+const HOOKS_DIR = fileURLToPath(new URL("../hooks/", import.meta.url));
 
 async function serve(): Promise<number> {
   let agent;
@@ -27,7 +30,18 @@ async function serve(): Promise<number> {
   return 0;
 }
 
-runCli(process.argv.slice(2), { serve, printError: (line) => process.stderr.write(`${line}\n`) }).then(
+runCli(process.argv.slice(2), {
+  serve,
+  home: defaultHome(),
+  settingsPath: defaultSettingsPath(),
+  // pnpm runs package scripts inside apps/agent; INIT_CWD is where the command was typed.
+  cwd: process.env.INIT_CWD ?? process.cwd(),
+  node: process.execPath,
+  hooksDir: HOOKS_DIR,
+  now: Date.now,
+  print: (line) => process.stdout.write(`${line}\n`),
+  printError: (line) => process.stderr.write(`${line}\n`),
+}).then(
   (code) => process.exit(code),
   (err: unknown) => {
     process.stderr.write(`${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
