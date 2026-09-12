@@ -1,0 +1,24 @@
+{
+  "name": "@clawd/agent",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The local agent: receives Claude Code hooks, redacts at ingest, keeps the fleet and serves snapshots on 127.0.0.1.",
+  "type": "module",
+  "scripts": {
+    "start": "tsx src/main.ts serve",
+    "agent": "tsx src/main.ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@clawd/core": "workspace:*",
+    "tsx": "^4.23.13",
+    "zod": "^4.6.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.2",
+    "typescript": "^5",
+    "vitest": "^5"
+  }
+}
