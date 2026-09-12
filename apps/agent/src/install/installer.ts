@@ -124,9 +124,10 @@ export async function install(req: InstallRequest): Promise<number> {
 
   await mkdir(paths.bin, { recursive: true });
   for (const script of HOOK_SCRIPTS) await copyFile(join(req.hooksDir, script), join(paths.bin, script));
-  const wrapped = result.newlyWrapped ?? base.wrappedStatusLine;
+  const wrapped = result.statusLine === "wrapped" ? result.newlyWrapped : result.statusLine === "kept" ? base.wrappedStatusLine : undefined;
+  const { wrappedStatusLine: _wrapped, ...baseWithoutWrapped } = base;
   // The config goes first, so the token the new hooks carry is on disk before the hooks exist.
-  await saveConfig(paths, { ...base, port, allowlist: allow.allowlist, ...(wrapped ? { wrappedStatusLine: wrapped } : {}) });
+  await saveConfig(paths, { ...baseWithoutWrapped, port, allowlist: allow.allowlist, ...(wrapped ? { wrappedStatusLine: wrapped } : {}) });
   const saved = read.kind === "ok" ? await backup(req.settingsPath, req.now()) : null;
   await writeJsonAtomic(req.settingsPath, result.settings);
 

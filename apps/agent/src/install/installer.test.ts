@@ -126,6 +126,21 @@ describe("install and uninstall", () => {
     ]);
   });
 
+  it("forgets a wrapped status line the settings no longer have, and keeps one they still point at", async () => {
+    const t = await setup(JSON.stringify({ statusLine: { type: "command", command: "mine.sh" } }));
+    expect(await install({ ...t.base, allow: ["work"], dryRun: false })).toBe(0);
+    let config = await readConfig(agentPaths(t.home));
+    expect(config?.wrappedStatusLine).toEqual({ type: "command", command: "mine.sh" });
+
+    expect(await install({ ...t.base, allow: [], dryRun: false })).toBe(0);
+    config = await readConfig(agentPaths(t.home));
+    expect(config?.wrappedStatusLine).toEqual({ type: "command", command: "mine.sh" });
+
+    await writeFile(t.settingsPath, "{}");
+    expect(await install({ ...t.base, allow: [], dryRun: false })).toBe(0);
+    expect((await readConfig(agentPaths(t.home)))?.wrappedStatusLine).toBeUndefined();
+  });
+
   it("tells the user to restart an agent that is already running", async () => {
     const t = await setup();
     expect(await install({ ...t.base, allow: ["work"], dryRun: false, probe: async () => true })).toBe(0);

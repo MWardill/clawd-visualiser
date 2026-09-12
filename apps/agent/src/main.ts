@@ -1,8 +1,7 @@
 import { fileURLToPath } from "node:url";
-import { startAgent } from "./agent";
+import { PortInUseError, startAgent } from "./agent";
 import { runCli } from "./cli";
 import { ConfigError, defaultHome, defaultSettingsPath } from "./config";
-import { isErrno } from "./json-file";
 
 const HOOKS_DIR = fileURLToPath(new URL("../hooks/", import.meta.url));
 
@@ -15,8 +14,8 @@ async function serve(): Promise<number> {
       process.stderr.write(`${err.message}\n`);
       return 1;
     }
-    if (isErrno(err, "EADDRINUSE")) {
-      process.stderr.write("the agent's port is already in use; is another agent running?\n");
+    if (err instanceof PortInUseError) {
+      process.stderr.write(`the agent's port ${err.port} is already in use; is another agent running?\n`);
       return 1;
     }
     throw err;
@@ -28,6 +27,12 @@ async function serve(): Promise<number> {
   });
   await agent.stop();
   return 0;
+}
+
+/** Exit once everything written to stdout and stderr has been flushed. */
+function exitAfterFlush(code: number): void {
+  process.exitCode = code;
+  process.stdout.write("", () => process.stderr.write("", () => process.exit(code)));
 }
 
 runCli(process.argv.slice(2), {
@@ -42,9 +47,9 @@ runCli(process.argv.slice(2), {
   print: (line) => process.stdout.write(`${line}\n`),
   printError: (line) => process.stderr.write(`${line}\n`),
 }).then(
-  (code) => process.exit(code),
+  (code) => exitAfterFlush(code),
   (err: unknown) => {
     process.stderr.write(`${err instanceof Error ? (err.stack ?? err.message) : String(err)}\n`);
-    process.exit(1);
+    exitAfterFlush(1);
   },
 );

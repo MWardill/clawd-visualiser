@@ -27,6 +27,13 @@ export type AgentOptions = {
 
 export type RunningAgent = { port: number; stop(): Promise<void> };
 
+export class PortInUseError extends Error {
+  override readonly name = "PortInUseError";
+  constructor(readonly port: number) {
+    super(`port ${port} is already in use`);
+  }
+}
+
 export const TICK_MS = 500;
 const SWEEP_MS = 3_600_000;
 const COUNTS_MS = 60_000;
@@ -95,11 +102,15 @@ export async function startAgent(opts: AgentOptions): Promise<RunningAgent> {
     sensitive,
   });
 
+  const requestedPort = opts.port ?? config.port;
   let port: number;
   try {
-    port = await listen(server, opts.port ?? config.port);
+    port = await listen(server, requestedPort);
   } catch (err) {
-    if (isErrno(err, "EADDRINUSE")) log("server.portInUse");
+    if (isErrno(err, "EADDRINUSE")) {
+      log("server.portInUse", { port: requestedPort });
+      throw new PortInUseError(requestedPort);
+    }
     throw err;
   }
 
