@@ -20,6 +20,8 @@ const raw = {
   helperStop: { ...common, hook_event_name: "SubagentStop", agent_id: "h1", agent_type: "", last_assistant_message: "Run whoami bash command" },
   end: { ...common, hook_event_name: "SessionEnd", reason: "prompt_input_exit" },
   mcpTool: { ...common, hook_event_name: "PreToolUse", tool_name: "mcp__atlassian__getJiraIssue", tool_input: { key: "FP-1" }, tool_use_id: "toolu_03" },
+  preToolNoId: { ...common, hook_event_name: "PreToolUse", tool_name: "Bash", tool_input: { command: "whoami" } },
+  postToolNoId: { ...common, hook_event_name: "PostToolUse", tool_name: "Bash", tool_input: { command: "whoami" }, tool_response: { stdout: "MWardill" }, duration_ms: 1 },
   statusLine: { session_id: "e82c9e2a", transcript_path: "C:\\x\\e82c9e2a.jsonl", cwd, session_name: "Run whoami bash command", model: { id: "claude-fable-5", display_name: "Fable 5" }, workspace: { current_dir: cwd, project_dir: cwd }, cost: { total_cost_usd: 1.342142 }, context_window: { used_percentage: 5, remaining_percentage: 95, context_window_size: 1000000 }, rate_limits: { five_hour: { used_percentage: 7 }, seven_day: { used_percentage: 22 } } },
   messageDisplay: { ...common, hook_event_name: "MessageDisplay", delta: "done", final: true },
   notification: { ...common, hook_event_name: "Notification", message: "Claude needs your permission", notification_type: "permission_prompt" },
@@ -47,6 +49,8 @@ describe("redact", () => {
     expect(redact(raw.helperStop, ctx)).toBeNull();
     expect(redact(raw.messageDisplay, ctx)).toBeNull();
     expect(redact(raw.notification, ctx)).toBeNull();
+    expect(redact(raw.preToolNoId, ctx)).toBeNull();
+    expect(redact(raw.postToolNoId, ctx)).toBeNull();
     expect(redact(raw.prompt, { ...ctx, allowlist: ["C:\\git"] })).toBeNull();
     expect(redact(raw.statusLine, { ...ctx, allowlist: ["C:\\git"] })).toBeNull();
     expect(redact("nonsense", ctx)).toBeNull();
