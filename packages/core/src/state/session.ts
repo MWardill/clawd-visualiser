@@ -75,7 +75,7 @@ export function reduceSession(prev: SessionState, e: RedactedEvent, now: number,
     case "tool.end": {
       if (!e.agentId) s = { ...s, inFlight: s.inFlight.filter((t) => t.toolUseId !== e.toolUseId) };
       // A wait with no resolved id is ended by any parent tool finishing: the id was never known.
-      if (s.state === "waiting" && (s.waitingOn === null || s.waitingOn === e.toolUseId)) {
+      if (s.state === "waiting" && ((!e.agentId && s.waitingOn === null) || s.waitingOn === e.toolUseId)) {
         s = transition({ ...s, waitingOn: null }, "working", now, cfg);
       }
       return s.state === "working" ? { ...s, activity: e.agentId || busy(s) ? "spawn" : "think" } : s;
@@ -93,10 +93,10 @@ export function reduceSession(prev: SessionState, e: RedactedEvent, now: number,
     case "stop": {
       // Claude Code's own background_tasks is authoritative: zero means no subagent is live,
       // whatever we tracked (a lost SubagentStop must not wedge the parent on spawn).
-      s = { ...s, backgroundTasks: e.backgroundTasks, subagents: e.backgroundTasks === 0 ? [] : s.subagents };
+      s = { ...s, backgroundTasks: e.backgroundTasks, subagents: e.backgroundTasks === 0 ? [] : s.subagents, inFlight: [] };
       if (s.state !== "working" && s.state !== "waiting") return s;
       if (busy(s)) return transition({ ...s, waitingOn: null, activity: "spawn" }, "working", now, cfg);
-      return transition({ ...s, activity: null, waitingOn: null, inFlight: [] }, "idle", now, cfg);
+      return transition({ ...s, activity: null, waitingOn: null }, "idle", now, cfg);
     }
     case "subagent.start": {
       const subagents = s.subagents.includes(e.agentId) ? s.subagents : [...s.subagents, e.agentId];

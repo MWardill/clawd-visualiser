@@ -161,6 +161,16 @@ describe("reduceSession", () => {
     expect(s.state).toBe("working");
   });
 
+  it("ends an id-less wait only when a parent tool finishes, not a subagent's", () => {
+    let s = run([ev("permission.request", T0, { tool: "Bash", category: "run" })]);
+    expect(s.state).toBe("waiting");
+    expect(s.waitingOn).toBeNull();
+    s = run([ev("tool.end", T0 + 1, { agentId: "a1", tool: "Bash", category: "run", toolUseId: "u1", durationMs: 1 })], s);
+    expect(s.state).toBe("waiting");
+    s = run([ev("tool.end", T0 + 2, { tool: "Bash", category: "run", toolUseId: "u2", durationMs: 1 })], s);
+    expect(s.state).toBe("working");
+  });
+
   it("trusts the stop's own background count over a lost SubagentStop", () => {
     const cleared = run([ev("prompt", T0), ev("subagent.start", T0 + 1, { agentId: "a1", agentType: "x" }), ev("stop", T0 + 2, { backgroundTasks: 0 })]);
     expect(cleared.state).toBe("idle");
@@ -175,6 +185,12 @@ describe("reduceSession", () => {
     expect(s.state).toBe("working");
     expect(s.activity).toBe("spawn");
     expect(s.waitingOn).toBeNull();
+  });
+
+  it("clears inFlight on a stop even while a subagent keeps it working", () => {
+    const s = run([ev("prompt", T0), ev("tool.start", T0 + 1, { tool: "Read", category: "read", toolUseId: "u1" }), ev("subagent.start", T0 + 2, { agentId: "a1", agentType: "x" }), ev("stop", T0 + 3, { backgroundTasks: 1 })]);
+    expect(s.state).toBe("working");
+    expect(s.inFlight).toEqual([]);
   });
 
   it("wakes an asleep session into waiting on a permission request", () => {
