@@ -1,5 +1,8 @@
 // Which feed to run, as a pure reducer with effects, so the fallback rules are testable without
-// timers. The hook runs the effects: probes, feed starts, and the two timers.
+// timers. The hook runs the effects: probes, feed starts, and the two timers. The grace timer
+// starts once, when the stream first drops -- either it never opens after a successful probe, or
+// it goes from connected to disconnected -- and is not restarted by the reconnect errors a
+// browser keeps firing every few seconds while it stays down.
 //
 //   probing --probe ok--> live --stream down for GRACE_MS--> simulated (lost-agent)
 //      +--probe fails--> simulated (no-agent) --re-probe every REPROBE_MS, ok--> live
@@ -58,7 +61,7 @@ export function reducePolicy(s: PolicyState, e: PolicyEvent): { state: PolicySta
     case "connection":
       if (s.phase !== "live") return { state: s, effects: none };
       if (e.connected) return { state: { ...s, connected: true, rejected: e.rejected }, effects: ["cancel-grace"] };
-      return { state: { ...s, connected: false, rejected: e.rejected }, effects: s.mode === "auto" ? ["schedule-grace"] : none };
+      return { state: { ...s, connected: false, rejected: e.rejected }, effects: s.mode === "auto" && s.connected ? ["schedule-grace"] : none };
     case "grace-elapsed":
       if (s.mode !== "auto" || s.phase !== "live" || s.connected) return { state: s, effects: none };
       return { state: { ...s, phase: "simulated", reason: "lost-agent", connected: false }, effects: ["start-simulated", "schedule-reprobe"] };

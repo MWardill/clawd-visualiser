@@ -57,6 +57,20 @@ describe("connection policy", () => {
     expect(r.state).toMatchObject({ phase: "simulated", reason: "lost-agent" });
   });
 
+  it("falls back after repeated reconnect errors, without restarting the grace timer each time", () => {
+    const r = run("auto", [
+      { type: "start" },
+      { type: "probe", ok: true },
+      { type: "connection", connected: true, rejected: 0 },
+      { type: "connection", connected: false, rejected: 0 },
+      { type: "connection", connected: false, rejected: 0 },
+      { type: "connection", connected: false, rejected: 0 },
+      { type: "grace-elapsed" },
+    ]);
+    expect(r.effects.slice(3)).toEqual([["schedule-grace"], [], [], ["start-simulated", "schedule-reprobe"]]);
+    expect(r.state).toMatchObject({ phase: "simulated", reason: "lost-agent" });
+  });
+
   it("ignores a grace timer that fires after the stream came back", () => {
     const r = run("auto", [
       { type: "start" },
