@@ -1,5 +1,6 @@
 import { CORE_VERSION } from "@clawd/core";
 import { SCENE_VERSION } from "@clawd/scene";
+import { ClawdIdle } from "@/components/clawd-idle";
 
 /**
  * Placeholder shell. The panes scene arrives in milestone A2; until then this page proves the
@@ -14,16 +15,7 @@ export default function Home() {
       </header>
 
       <main className="flex flex-1 flex-col items-center justify-center gap-6 px-5 py-16">
-        <pre className="text-clawd leading-tight" aria-label="Clawd">
-{` ▄▄▄▄▄▄▄▄
- ████████
-█████████
-█████████
- ████████
- ████████
- █ █  █ █
- █ █  █ █`}
-        </pre>
+        <ClawdIdle />
         <p className="max-w-[60ch] text-center text-muted-foreground">
           The city is under construction. Sessions will appear here as Clawds in a pane for each
           repository, working, waiting, idle or asleep.

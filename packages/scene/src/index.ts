@@ -1,6 +1,8 @@
 // @clawd/scene
-// The canvas renderer. The engine block from the clawd-animation skill (palette, pixel grid,
-// CLAWD_BODY, eye variants, particles, easing) will live here as a module, with the panes scene
-// written around it. Framework-free: given a snapshot and a canvas, it draws a frame.
+// The canvas renderer. The engine (engine.ts) is the clawd-animation skill's pixel engine as a
+// module; scenes are written around it. Framework-free: given a canvas, a scene draws frames.
 
-export const SCENE_VERSION = "0.0.0";
+export * from "./engine";
+export { mountIdleClawd, type IdleClawdOptions } from "./idle";
+
+export const SCENE_VERSION = "0.1.0";
