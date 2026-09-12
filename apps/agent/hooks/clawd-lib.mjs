@@ -29,6 +29,10 @@ export function readStdin(stream = process.stdin) {
 /** POST a body to the agent. Resolves on response, error or timeout; never rejects. */
 export function post(config, path, body, timeoutMs = POST_TIMEOUT_MS) {
   return new Promise((resolve) => {
+    if (!Number.isInteger(config.port) || config.port < 1 || config.port > 65535) {
+      resolve();
+      return;
+    }
     let done = false;
     let timer = null;
     const finish = () => {
@@ -37,20 +41,24 @@ export function post(config, path, body, timeoutMs = POST_TIMEOUT_MS) {
       if (timer) clearTimeout(timer);
       resolve();
     };
-    const req = request(
-      { host: "127.0.0.1", port: config.port, path, method: "POST", headers: { "content-type": "application/json", "content-length": body.length, "x-clawd-token": config.token } },
-      (res) => {
-        res.resume();
-        res.on("end", finish);
-        res.on("error", finish);
-      },
-    );
-    timer = setTimeout(() => {
-      req.destroy();
+    try {
+      const req = request(
+        { host: "127.0.0.1", port: config.port, path, method: "POST", headers: { "content-type": "application/json", "content-length": body.length, "x-clawd-token": config.token } },
+        (res) => {
+          res.resume();
+          res.on("end", finish);
+          res.on("error", finish);
+        },
+      );
+      timer = setTimeout(() => {
+        req.destroy();
+        finish();
+      }, timeoutMs);
+      req.on("error", finish);
+      req.end(body);
+    } catch {
       finish();
-    }, timeoutMs);
-    req.on("error", finish);
-    req.end(body);
+    }
   });
 }
 
@@ -103,7 +111,7 @@ function runOnce(file, args, shell, input, timeoutMs) {
     child.stdout.on("data", (chunk) => {
       out += chunk;
     });
-    child.on("close", (code) => finish(code === 0 ? out : null));
+    child.on("close", (code) => finish(code === 0 && out.trim().length > 0 ? out : null));
     child.stdin.on("error", () => {});
     child.stdin.end(input);
   });

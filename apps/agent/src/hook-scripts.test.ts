@@ -139,4 +139,29 @@ describe("hook scripts", () => {
     await writeFile(join(home, "config.json"), JSON.stringify({ port: await closedPort(), token: TOKEN, wrappedStatusLine: { command } }));
     expect((await run(bin(home, "clawd-statusline.mjs"), JSON.stringify(rawStatus("s1")))).stdout).toBe("clawd · Opus 5 · ctx 42%\n");
   });
+
+  it("status line: prints the default line when the wrapped command succeeds but prints nothing", async () => {
+    const home = await install(null);
+    const command = `"${forward(process.execPath)}" -e "process.exit(0)"`;
+    await writeFile(join(home, "config.json"), JSON.stringify({ port: await closedPort(), token: TOKEN, wrappedStatusLine: { command } }));
+    expect((await run(bin(home, "clawd-statusline.mjs"), JSON.stringify(rawStatus("s1")))).stdout).toBe("clawd · Opus 5 · ctx 42%\n");
+  });
+
+  it("status line: keeps the wrapped output when the configured port is out of range", async () => {
+    const home = await install(null);
+    const echo = join(home, "echo.mjs");
+    await writeFile(echo, 'process.stdin.resume();process.stdin.on("end",()=>process.stdout.write("wrapped ok\\n"));');
+    const command = `"${forward(process.execPath)}" "${forward(echo)}"`;
+    await writeFile(join(home, "config.json"), JSON.stringify({ port: 70_000, token: TOKEN, wrappedStatusLine: { command } }));
+    const result = await run(bin(home, "clawd-statusline.mjs"), JSON.stringify(rawStatus("s1")));
+    expect(result).toMatchObject({ code: 0, stdout: "wrapped ok\n" });
+  });
+
+  it("SessionStart hook: forwards a payload with multi-byte characters intact", async () => {
+    const agent = await agentStub();
+    const home = await install({ port: agent.port, token: TOKEN });
+    const payload = JSON.stringify(rawHook("SessionStart", "s1", { source: "startup", note: "héllo — 世界 🦀" }));
+    expect((await run(bin(home, "clawd-hook.mjs"), payload)).code).toBe(0);
+    expect(agent.received).toEqual([{ path: "/ingest/hook", token: TOKEN, body: payload }]);
+  });
 });
