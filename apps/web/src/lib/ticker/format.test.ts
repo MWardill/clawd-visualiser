@@ -41,6 +41,13 @@ describe("formatTicker", () => {
     expect(stripAnsi(raw)).not.toContain("\u001b");
   });
 
+  it("strips control characters from a free-text field before it reaches the terminal", () => {
+    const reason = "a" + String.fromCharCode(27) + "[2Jb";
+    const line = stripAnsi(formatTicker({ t: T, kind: "session.end", reason }));
+    expect(line).toContain("a[2Jb");
+    for (const ch of line) expect(ch.charCodeAt(0)).toBeGreaterThanOrEqual(32);
+  });
+
   it("only ever prints values the TickerEvent schema carries", () => {
     const full = TickerEventSchema.parse({ t: T, kind: "tool.end", activity: "run", tool: "Bash", durationMs: 1234, agentType: "x", state: "working", contextPct: 12, reason: "r" });
     const tokens = stripAnsi(formatTicker(full)).replace(TIME, "").split(/\s+/).filter(Boolean);

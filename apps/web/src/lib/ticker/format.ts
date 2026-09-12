@@ -14,6 +14,16 @@ const STATE_CODES: Record<SessionPhase, string> = { working: "32", waiting: "33"
 
 const KIND_WIDTH = 14;
 
+/** Drops control characters from a free-text field before it reaches the terminal; tool names and reasons never contain any, so this is belt and braces. */
+function plain(s: string): string {
+  let out = "";
+  for (const ch of s) {
+    const c = ch.charCodeAt(0);
+    if (c >= 32 && c !== 127 && (c < 128 || c > 159)) out += ch;
+  }
+  return out;
+}
+
 export function formatTicker(e: TickerEvent): string {
   const time = dim(hhmmss(e.t));
   const kind = e.kind.padEnd(KIND_WIDTH);
@@ -23,7 +33,7 @@ export function formatTicker(e: TickerEvent): string {
     case "permission": {
       const parts = [time, e.kind === "permission" ? paint("33", kind) : kind];
       if (e.activity) parts.push(paint(ACTIVITY_CODES[e.activity], e.activity.padEnd(5)));
-      if (e.tool) parts.push(e.tool.padEnd(12));
+      if (e.tool) parts.push(plain(e.tool).padEnd(12));
       if (e.durationMs !== undefined) parts.push(dim(`${Math.round(e.durationMs)}ms`));
       return parts.join(" ").trimEnd();
     }
@@ -31,11 +41,11 @@ export function formatTicker(e: TickerEvent): string {
       return `${time} ${kind} ${e.state ? paint(STATE_CODES[e.state], e.state) : ""}`.trimEnd();
     case "subagent.start":
     case "subagent.stop":
-      return `${time} ${kind} ${e.agentType ?? ""}`.trimEnd();
+      return `${time} ${kind} ${e.agentType ? plain(e.agentType) : ""}`.trimEnd();
     case "context":
       return `${time} ${kind} ${e.contextPct !== undefined ? `${e.contextPct}%` : ""}`.trimEnd();
     case "session.end":
-      return `${time} ${kind} ${e.reason ?? ""}`.trimEnd();
+      return `${time} ${kind} ${e.reason ? plain(e.reason) : ""}`.trimEnd();
     case "session.start":
     case "prompt":
     case "stop":
