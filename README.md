@@ -17,15 +17,31 @@ measured facts about Claude Code's hooks that the design rests on are in
 
 ## Layout
 
+A pnpm workspace. Packages export TypeScript source directly; the web app compiles them.
+
 | Path | What it is |
 | --- | --- |
+| `apps/web` | Next.js app (App Router, Tailwind, shadcn/ui). Renders snapshots; runs on the simulated source when no agent is present. |
+| `packages/core` | Contracts, event types, redaction, state machine, simulated source. Pure TypeScript, tested with Vitest. |
+| `packages/scene` | The canvas renderer: the Clawd pixel engine and the panes scene. Framework-free. |
 | `docs/PRD.md` | Requirements, contracts, state machine, milestones, decision log. |
 | `docs/spike-hooks.md` | What the hooks, agents list and status line actually provide, measured on real runs. |
 | `tools/hook-spike/` | The listener and settings used for those measurements; reusable for further checks. |
 
-The application itself lands as a monorepo: a shared core package holding the contracts and the
-state machine, a canvas scene package for the Clawds, a Next.js web app, and a local agent. See the
-PRD for the plan and the order of work.
+The local agent (`apps/agent`) arrives with milestone B1.
+
+## Develop
+
+```
+pnpm install
+pnpm dev          # web app on http://localhost:3000
+pnpm test         # every package
+pnpm typecheck
+pnpm lint
+pnpm build
+```
+
+Requires Node 22 or later and pnpm 12, pinned in `package.json`.
 
 ## Credits
 

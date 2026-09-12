@@ -1,0 +1,95 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+/*
+  One theme, always dark: the terminal. The variable names follow shadcn's convention so its
+  components pick them up unchanged; the values are the visualiser's palette. Square corners
+  everywhere (radius 0) and a single monospace face are what make it read as a terminal.
+*/
+:root {
+  --radius: 0rem;
+
+  --background: #0a0b10;
+  --foreground: #c9ccd6;
+  --card: #101219;
+  --card-foreground: #c9ccd6;
+  --popover: #101219;
+  --popover-foreground: #c9ccd6;
+  --primary: #cd6e58;
+  --primary-foreground: #0a0b10;
+  --secondary: #1e2130;
+  --secondary-foreground: #c9ccd6;
+  --muted: #101219;
+  --muted-foreground: #5d6274;
+  --accent: #1e2130;
+  --accent-foreground: #c9ccd6;
+  --destructive: #e0736c;
+  --border: #1e2130;
+  --input: #1e2130;
+  --ring: #cd6e58;
+
+  /* the visualiser's own tokens */
+  --clawd: #cd6e58;
+  --amber: #f2c35b;
+  --green: #8fd18a;
+  --blue: #7fa6f0;
+  --pink: #f06090;
+  --star-dim: #2c3040;
+  --star-mid: #5a6076;
+  --star-bright: #d9dbe6;
+  --cloud: #141721;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+
+  --color-clawd: var(--clawd);
+  --color-amber: var(--amber);
+  --color-green: var(--green);
+  --color-blue: var(--blue);
+  --color-pink: var(--pink);
+  --color-star-dim: var(--star-dim);
+  --color-star-mid: var(--star-mid);
+  --color-star-bright: var(--star-bright);
+  --color-cloud: var(--cloud);
+
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
+  --radius-lg: var(--radius);
+  --radius-xl: var(--radius);
+
+  /* the whole app is monospace; sans is an alias so shadcn components stay on the same face */
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, "Cascadia Mono", Consolas, monospace;
+  --font-sans: var(--font-mono);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  html {
+    color-scheme: dark;
+  }
+  body {
+    @apply bg-background text-foreground font-mono antialiased;
+  }
+}

@@ -8,5 +8,8 @@ clawd-animation/
 # toolchain and deployment
 node_modules/
 .next/
+dist/
+coverage/
+*.tsbuildinfo
 .env*
 .vercel
