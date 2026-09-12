@@ -19,19 +19,22 @@ export function SceneCanvas({ snapshot, generation, counts, onSelect }: Props) {
   const sceneRef = useRef<PanesScene | null>(null);
   const snapshotRef = useRef<Snapshot | null>(null);
   const onSelectRef = useRef(onSelect);
+  const appliedGenerationRef = useRef(generation);
 
   useEffect(() => {
     onSelectRef.current = onSelect;
   }, [onSelect]);
 
+  // A feed switch must clear the scene before its first snapshot is applied: both land in the
+  // same effect run so the clear can never be scheduled after the snapshot it is meant to precede.
   useEffect(() => {
+    if (generation !== appliedGenerationRef.current) {
+      sceneRef.current?.clear();
+      appliedGenerationRef.current = generation;
+    }
     snapshotRef.current = snapshot;
     if (snapshot) sceneRef.current?.setSnapshot(snapshot);
-  }, [snapshot]);
-
-  useEffect(() => {
-    sceneRef.current?.clear();
-  }, [generation]);
+  }, [snapshot, generation]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
