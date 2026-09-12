@@ -155,7 +155,8 @@ type Actor = {
 type ScenePane = { alias: string; label: string; collision: boolean; seats: (string | null)[]; origin: XY; target: XY; closing: boolean };
 ```
 
-`reconcile(panes, actors, snapshot, now)` is pure and returns new lists:
+`reconcile(world, snapshot, now)` and `tick(world, now)` are deterministic for a given clock; they
+mutate the world they are given and return it, so the 30 fps loop allocates nothing per frame:
 
 - A pane in the snapshot and not in the scene is appended. A scene pane absent from the snapshot
   is marked `closing`; it is removed once every actor in it is `gone`.
@@ -262,8 +263,8 @@ apps/web/src/
       policy.ts              pure connection policy
       agent.ts               probeHealth(), fetchBackfill(), sendCommand(); the agent URL
     ticker/format.ts         TickerEvent -> one coloured terminal line
-    title.ts                 tab title from the snapshot
-    time.ts                  mm:ss since a timestamp
+    labels.ts                counts from a snapshot, the tab title, the canvas label, the source badge
+    time.ts                  wall-clock HH:MM:SS; mm:ss comes from the scene package
   hooks/
     use-feed.ts              runs the policy; exposes snapshot, status, ticker subscription, backfill, focus
 ```
@@ -280,11 +281,14 @@ type FeedStatus =
   | { mode: "simulated"; reason: "no-agent" | "lost-agent" | "forced" };
 
 type Feed = {
-  start(listener: { onSnapshot(s: Snapshot): void; onTicker(alias: string, e: TickerEvent): void; onStatus(s: FeedStatus): void }): () => void;
+  start(listener: { onSnapshot(s: Snapshot): void; onTicker(alias: string, e: TickerEvent): void; onConnection?(connected: boolean, rejected: number): void }): () => void;
   backfill(alias: string): Promise<TickerEvent[]>;
   focus(alias: string): Promise<boolean>;      // false when the feed cannot focus (simulated)
 };
 ```
+
+A feed reports connection facts only; the policy turns them into the `FeedStatus` the status bar
+shows.
 
 **Live** (`live.ts`): opens an `EventSource` on `ENDPOINTS.stream`. A `snapshot` event is parsed
 with `SnapshotSchema.safeParse`; a `ticker` event with `StreamTickerMessageSchema`. Anything that
