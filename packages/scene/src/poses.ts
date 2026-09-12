@@ -38,6 +38,9 @@ const HOP_PERIOD_MS = 1500;
 const HOP_PART = 0.35;
 const SWEAT_AFTER_MS = 10_000;
 
+/** A one-cell lift for the rising part of a slow sine, so the body visibly breathes on a pixel grid. */
+const breathe = (frame: number, speed: number): number => (Math.sin(frame * speed) > 0.3 ? -1 : 0);
+
 function restingPose(): Pose {
   return { eyes: "forward", bounce: 0, step: false, alpha: 1, moving: false, exclaim: false, sweat: false, zzz: false, sparkle: false, wave: null, particle: null, heart: false };
 }
@@ -55,6 +58,7 @@ export function poseFor(a: Actor, now: number, frame: number): Pose {
   }
   if (a.phase === "waving") {
     pose.wave = Math.floor(frame / 8) % 2 === 0 ? "right" : "left";
+    // a heart-coloured keystroke every 5 frames: denser than the working trickle, so the farewell reads as celebration
     if (frame % 5 === 0) pose.particle = { dx: 4 + (frame % 7), dy: -1, col: PALETTE.state.pink };
     pose.heart = frame % 20 === 0;
     return pose;
@@ -63,7 +67,7 @@ export function poseFor(a: Actor, now: number, frame: number): Pose {
   switch (a.state) {
     case "working":
       pose.eyes = blinking ? "blink" : "look_down";
-      pose.bounce = Math.round(Math.sin(frame * 0.12) * 0.5);
+      pose.bounce = breathe(frame, 0.12);
       if (frame % 9 === 0) pose.particle = { dx: frame % 18 === 0 ? 1 : 12, dy: 2, col: a.activity ? ACTIVITY_COLOURS[a.activity] : PALETTE.night.starMid };
       break;
     case "waiting": {
@@ -76,15 +80,16 @@ export function poseFor(a: Actor, now: number, frame: number): Pose {
     }
     case "idle":
       pose.eyes = blinking ? "blink" : "forward";
-      pose.bounce = Math.round(Math.sin(frame * 0.09) * 0.5);
+      pose.bounce = breathe(frame, 0.09);
       break;
     case "asleep":
       pose.eyes = "blink";
       pose.alpha = 0.82;
-      pose.bounce = Math.round(Math.sin(frame * 0.05) * 0.5);
+      pose.bounce = breathe(frame, 0.05);
       pose.zzz = true;
       break;
     case "done":
+      // unreachable today: reconcile() moves a done actor to "waving" in the same call; kept so the switch stays exhaustive
       break;
     default:
       a.state satisfies never;

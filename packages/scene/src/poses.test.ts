@@ -84,4 +84,17 @@ describe("poseFor", () => {
     expect(later.eyes).toBe("look_right");
     expect(poseFor(a, T0 + 2000, 1).eyes).toBe("look_down");
   });
+
+  it("breathes: the body lifts one cell for part of a slow cycle while working, idle and asleep", () => {
+    for (const state of ["working", "idle", "asleep"] as const) {
+      const a = actor({ state, activity: state === "working" ? "edit" : null, blinkAt: T0 + 60_000 });
+      const bounces = new Set<number>();
+      for (let f = 0; f < 200; f++) bounces.add(poseFor(a, T0, f).bounce);
+      expect([...bounces].sort(), state).toEqual([-1, 0]);
+    }
+  });
+
+  it("colours keystrokes star-mid while working with no activity", () => {
+    expect(poseFor(actor({ activity: null }), T0, 9).particle).toMatchObject({ col: PALETTE.night.starMid });
+  });
 });
