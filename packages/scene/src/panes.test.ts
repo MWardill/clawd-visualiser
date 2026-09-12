@@ -92,11 +92,12 @@ describe("mountPanesScene", () => {
     // PX = round(6 * 1.25) = 8 device px per cell, so a cell is 8 / 1.25 = 6.4 CSS px
     const cssPerCell = 8 / 1.25;
     const seat = seatOrigin(0);
-    const x = (MARGIN + seat.x + SEAT_W / 2) * cssPerCell;
+    // near the seat's right edge: in true cells this is 28.5 (inside); measured in nominal 6 px cells it would be 30.4 (outside)
+    const x = (MARGIN + seat.x + SEAT_W - 0.5) * cssPerCell;
     const y = (MARGIN + seat.y + SEAT_H / 2) * cssPerCell;
     expect(h.scene.hitTest(x, y)).toBe("agent-1");
     // the same point measured in nominal 6 px cells lands in the wrong place
-    expect(h.scene.hitTest((MARGIN + seat.x + SEAT_W - 1) * cssPerCell + 2 * CELL, y)).toBeNull();
+    expect(h.scene.hitTest((MARGIN + seat.x + SEAT_W + 0.5) * cssPerCell, y)).toBeNull();
   });
 
   it("clears every actor at once and stops scheduling frames after destroy", () => {
