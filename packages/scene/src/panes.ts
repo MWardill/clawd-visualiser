@@ -155,20 +155,24 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
     const stepping = Math.floor(frame / 4) % 2 === 0;
     for (const m of a.subs) drawMini(engine, Math.round(r.x + a.pos.x + m.pos.x), Math.round(r.y + a.pos.y + m.pos.y), m.move !== null && stepping);
 
-    const np = nameplate(a, t);
-    const cx = sx + SPRITE_DX + CLAWD_BODY.width / 2;
-    if (np.subs) {
-      drawText(ctx, PX, np.name, cx, sy + NAME_ROW, PALETTE.night.textBright, { size: textPx, font, bold: true, align: "right" });
-      drawText(ctx, PX, np.subs, cx, sy + NAME_ROW, PALETTE.clawd.body, { size: textPx, font, bold: true, align: "left" });
-    } else {
-      drawText(ctx, PX, np.name, cx, sy + NAME_ROW, PALETTE.night.textBright, { size: textPx, font, bold: true, align: "center" });
-    }
-    drawText(ctx, PX, np.status, cx, sy + STATUS_ROW, np.colour, { size: textPx, font, align: "center" });
-    if (a.contextPct !== null) {
-      const filled = Math.round((CONTEXT_W * a.contextPct) / 100);
-      const bx = sx + SPRITE_DX + Math.floor((CLAWD_BODY.width - CONTEXT_W) / 2);
-      const col = a.contextPct >= 80 ? PALETTE.state.amber : PALETTE.night.starMid;
-      for (let i = 0; i < CONTEXT_W; i++) engine.px(bx + i, sy + CONTEXT_ROW, i < filled ? col : PALETTE.night.path);
+    // A walking Clawd starts below the pane; its nameplate would print over the next band, so
+    // only a seated (non-moving) Clawd gets one.
+    if (!pose.moving) {
+      const np = nameplate(a, t);
+      const cx = sx + SPRITE_DX + CLAWD_BODY.width / 2;
+      if (np.subs) {
+        drawText(ctx, PX, np.name, cx, sy + NAME_ROW, PALETTE.night.textBright, { size: textPx, font, bold: true, align: "right" });
+        drawText(ctx, PX, np.subs, cx, sy + NAME_ROW, PALETTE.clawd.body, { size: textPx, font, bold: true, align: "left" });
+      } else {
+        drawText(ctx, PX, np.name, cx, sy + NAME_ROW, PALETTE.night.textBright, { size: textPx, font, bold: true, align: "center" });
+      }
+      drawText(ctx, PX, np.status, cx, sy + STATUS_ROW, np.colour, { size: textPx, font, align: "center" });
+      if (a.contextPct !== null) {
+        const filled = Math.round((CONTEXT_W * a.contextPct) / 100);
+        const bx = sx + SPRITE_DX + Math.floor((CLAWD_BODY.width - CONTEXT_W) / 2);
+        const col = a.contextPct >= 80 ? PALETTE.state.amber : PALETTE.night.starMid;
+        for (let i = 0; i < CONTEXT_W; i++) engine.px(bx + i, sy + CONTEXT_ROW, i < filled ? col : PALETTE.night.path);
+      }
     }
     ctx.globalAlpha = 1;
   }

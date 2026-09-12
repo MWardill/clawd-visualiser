@@ -56,6 +56,7 @@ describe("mountPanesScene", () => {
     expect(h.texts.some((t) => t.text === "no sessions")).toBe(true);
     h.reset();
     h.scene.setSnapshot(SNAPSHOT);
+    h.setNow(T0 + 5000); // seated, not walking in: a walking Clawd carries no nameplate
     h.frame(0);
     h.frame(100);
     const cells = h.cellsOf(CELL);
