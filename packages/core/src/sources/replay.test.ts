@@ -1,11 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import type { RedactedEvent } from "../schema/events";
+import { T0, event } from "../testing/events";
 import { createReplaySource } from "./replay";
 
-const T0 = 1_757_671_200_000;
-const ev = (t: number, kind: "prompt" | "stop"): RedactedEvent =>
-  kind === "prompt" ? { v: 1, t, sessionId: "s1", paneKey: "k1", kind } : { v: 1, t, sessionId: "s1", paneKey: "k1", kind, backgroundTasks: 0 };
-const fixture = { name: "x", events: [ev(T0, "prompt"), ev(T0 + 1000, "stop"), ev(T0 + 4000, "prompt")] };
+const fixture = { name: "x", events: [event("prompt", T0), event("stop", T0 + 1000, { backgroundTasks: 0 }), event("prompt", T0 + 4000)] };
 
 describe("createReplaySource", () => {
   it("emits everything at once when speed is Infinity", () => {
@@ -35,7 +33,7 @@ describe("createReplaySource", () => {
     vi.useFakeTimers();
     try {
       const got: number[] = [];
-      createReplaySource({ name: "y", events: [ev(T0 + 5, "prompt"), ev(T0, "stop")] }).start((e) => got.push(e.t));
+      createReplaySource({ name: "y", events: [event("prompt", T0 + 5), event("stop", T0, { backgroundTasks: 0 })] }).start((e) => got.push(e.t));
       expect(got).toEqual([T0 + 5]);
       vi.advanceTimersByTime(0);
       expect(got).toEqual([T0 + 5, T0]);

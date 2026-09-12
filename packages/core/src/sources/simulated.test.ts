@@ -1,9 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 import { RedactedEventSchema, type RedactedEvent } from "../schema/events";
 import { DEFAULT_CONFIG, emptyFleet, reduceFleet, tickFleet } from "../state";
+import { T0 } from "../testing/events";
 import { SIMULATED_CONFIG, createSimulatedFleet, createSimulatedSource } from "./simulated";
 
-const T0 = 1_757_671_200_000;
 
 function drive(seed: number, steps: number, stepMs = 500): RedactedEvent[] {
   const sim = createSimulatedFleet({ seed, sessions: 6 });

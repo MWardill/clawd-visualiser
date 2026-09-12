@@ -1,16 +1,13 @@
 import { describe, expect, it } from "vitest";
-import type { RedactedEvent } from "../schema/events";
+import { T0, event } from "../testing/events";
 import { applyEvent } from "./apply";
 import { DEFAULT_CONFIG } from "./config";
 import { emptyFleet } from "./fleet";
 
-const T0 = 1_757_671_200_000;
-const ev = (sessionId: string, kind: string, t: number, extra: Record<string, unknown> = {}) =>
-  ({ v: 1, sessionId, paneKey: "k1", t, kind, ...extra }) as RedactedEvent;
 
 describe("applyEvent", () => {
   it("reduces a first event and returns the before/after pair with its ticker lines", () => {
-    const r = applyEvent(emptyFleet(), ev("s1", "prompt", T0), T0, DEFAULT_CONFIG);
+    const r = applyEvent(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1" }), T0, DEFAULT_CONFIG);
     expect(r.before).toBeNull();
     expect(r.after?.state).toBe("working");
     expect(r.fleet.sessions["s1"]).toBe(r.after);
@@ -19,8 +16,8 @@ describe("applyEvent", () => {
   });
 
   it("carries the previous session as before on a later event", () => {
-    const first = applyEvent(emptyFleet(), ev("s1", "prompt", T0), T0, DEFAULT_CONFIG);
-    const second = applyEvent(first.fleet, ev("s1", "stop", T0 + 10, { backgroundTasks: 0 }), T0 + 10, DEFAULT_CONFIG);
+    const first = applyEvent(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1" }), T0, DEFAULT_CONFIG);
+    const second = applyEvent(first.fleet, event("stop", T0 + 10, { backgroundTasks: 0 }, { sessionId: "s1" }), T0 + 10, DEFAULT_CONFIG);
     expect(second.before).toBe(first.after);
     expect(second.after?.state).toBe("idle");
     expect(second.ticker.map((l) => l.kind)).toEqual(["stop", "state"]);
@@ -28,7 +25,7 @@ describe("applyEvent", () => {
 
   it("ignores a dead presence for a session it has never seen", () => {
     const f = emptyFleet();
-    const r = applyEvent(f, ev("ghost", "presence", T0, { alive: false }), T0, DEFAULT_CONFIG);
+    const r = applyEvent(f, event("presence", T0, { alive: false }, { sessionId: "ghost" }), T0, DEFAULT_CONFIG);
     expect(r.fleet).toBe(f);
     expect(r.before).toBeNull();
     expect(r.after).toBeNull();
@@ -36,16 +33,16 @@ describe("applyEvent", () => {
   });
 
   it("emits no ticker lines for an event a done session ignores", () => {
-    let r = applyEvent(emptyFleet(), ev("s1", "prompt", T0), T0, DEFAULT_CONFIG);
-    r = applyEvent(r.fleet, ev("s1", "session.end", T0 + 10, { reason: "other" }), T0 + 10, DEFAULT_CONFIG);
+    let r = applyEvent(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1" }), T0, DEFAULT_CONFIG);
+    r = applyEvent(r.fleet, event("session.end", T0 + 10, { reason: "other" }, { sessionId: "s1" }), T0 + 10, DEFAULT_CONFIG);
     expect(r.ticker.map((l) => l.kind)).toEqual(["session.end", "state"]);
-    r = applyEvent(r.fleet, ev("s1", "prompt", T0 + 20), T0 + 20, DEFAULT_CONFIG);
+    r = applyEvent(r.fleet, event("prompt", T0 + 20, {}, { sessionId: "s1" }), T0 + 20, DEFAULT_CONFIG);
     expect(r.after).toBe(r.before);
     expect(r.ticker).toEqual([]);
   });
 
   it("stamps ticker lines with the host's clock, the same one the reducer used", () => {
-    const r = applyEvent(emptyFleet(), ev("s1", "prompt", T0), T0 + 500, DEFAULT_CONFIG);
+    const r = applyEvent(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1" }), T0 + 500, DEFAULT_CONFIG);
     expect(r.after?.since).toBe(T0 + 500);
     expect(r.ticker[0]?.t).toBe(new Date(T0 + 500).toISOString());
   });

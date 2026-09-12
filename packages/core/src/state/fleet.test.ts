@@ -1,41 +1,38 @@
 import { describe, expect, it } from "vitest";
-import type { RedactedEvent } from "../schema/events";
+import { T0, event } from "../testing/events";
 import { DEFAULT_CONFIG } from "./config";
 import { emptyAliasMap } from "../alias/names";
 import { emptyFleet, reduceFleet, tickFleet } from "./fleet";
 import { deriveSnapshot } from "./snapshot";
 
-const T0 = 1_757_671_200_000;
-const ev = (sessionId: string, paneKey: string, kind: string, t: number, extra: Record<string, unknown> = {}) =>
-  ({ v: 1, sessionId, paneKey, t, kind, ...extra }) as RedactedEvent;
 
 describe("reduceFleet", () => {
   it("creates a session and its pane on the first event, and groups by pane", () => {
-    let f = reduceFleet(emptyFleet(), ev("s1", "k1", "prompt", T0), T0, DEFAULT_CONFIG);
-    f = reduceFleet(f, ev("s2", "k1", "prompt", T0 + 1), T0 + 1, DEFAULT_CONFIG);
-    f = reduceFleet(f, ev("s3", "k2", "prompt", T0 + 2), T0 + 2, DEFAULT_CONFIG);
+    let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1", paneKey: "k1" }), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("prompt", T0 + 1, {}, { sessionId: "s2", paneKey: "k1" }), T0 + 1, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("prompt", T0 + 2, {}, { sessionId: "s3", paneKey: "k2" }), T0 + 2, DEFAULT_CONFIG);
     expect(Object.keys(f.sessions)).toEqual(["s1", "s2", "s3"]);
     expect(f.panes["k1"]?.sessionIds).toEqual(["s1", "s2"]);
     expect(f.panes["k2"]?.firstSeenAt).toBe(T0 + 2);
   });
 
   it("keeps one entry per session in its pane however many events that session sends", () => {
-    let f = reduceFleet(emptyFleet(), ev("s1", "k1", "prompt", T0), T0, DEFAULT_CONFIG);
-    f = reduceFleet(f, ev("s1", "k1", "tool.start", T0 + 1, { tool: "Read", category: "read", toolUseId: "u1" }), T0 + 1, DEFAULT_CONFIG);
-    f = reduceFleet(f, ev("s1", "k1", "stop", T0 + 2, { backgroundTasks: 0 }), T0 + 2, DEFAULT_CONFIG);
+    let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1", paneKey: "k1" }), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("tool.start", T0 + 1, { tool: "Read", category: "read", toolUseId: "u1" }, { sessionId: "s1", paneKey: "k1" }), T0 + 1, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("stop", T0 + 2, { backgroundTasks: 0 }, { sessionId: "s1", paneKey: "k1" }), T0 + 2, DEFAULT_CONFIG);
     expect(f.panes["k1"]?.sessionIds).toEqual(["s1"]);
   });
 
   it("seeds a session from a live presence but ignores presence for unknown dead sessions", () => {
-    let f = reduceFleet(emptyFleet(), ev("s1", "k1", "presence", T0, { alive: true }), T0, DEFAULT_CONFIG);
+    let f = reduceFleet(emptyFleet(), event("presence", T0, { alive: true }, { sessionId: "s1", paneKey: "k1" }), T0, DEFAULT_CONFIG);
     expect(f.sessions["s1"]?.state).toBe("idle");
-    f = reduceFleet(f, ev("ghost", "k1", "presence", T0, { alive: false }), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("presence", T0, { alive: false }, { sessionId: "ghost", paneKey: "k1" }), T0, DEFAULT_CONFIG);
     expect(f.sessions["ghost"]).toBeUndefined();
   });
 
   it("removes done sessions and empty panes after the linger period", () => {
-    let f = reduceFleet(emptyFleet(), ev("s1", "k1", "prompt", T0), T0, DEFAULT_CONFIG);
-    f = reduceFleet(f, ev("s1", "k1", "session.end", T0 + 10, { reason: "other" }), T0 + 10, DEFAULT_CONFIG);
+    let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1", paneKey: "k1" }), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("session.end", T0 + 10, { reason: "other" }, { sessionId: "s1", paneKey: "k1" }), T0 + 10, DEFAULT_CONFIG);
     f = tickFleet(f, T0 + 10 + DEFAULT_CONFIG.doneLingerMs - 1, DEFAULT_CONFIG);
     expect(f.sessions["s1"]?.state).toBe("done");
     f = tickFleet(f, T0 + 10 + DEFAULT_CONFIG.doneLingerMs, DEFAULT_CONFIG);
@@ -44,35 +41,35 @@ describe("reduceFleet", () => {
   });
 
   it("keeps a pane while any of its sessions remains", () => {
-    let f = reduceFleet(emptyFleet(), ev("s1", "k1", "prompt", T0), T0, DEFAULT_CONFIG);
-    f = reduceFleet(f, ev("s2", "k1", "prompt", T0), T0, DEFAULT_CONFIG);
-    f = reduceFleet(f, ev("s1", "k1", "session.end", T0 + 10, { reason: "other" }), T0 + 10, DEFAULT_CONFIG);
+    let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1", paneKey: "k1" }), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("prompt", T0, {}, { sessionId: "s2", paneKey: "k1" }), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("session.end", T0 + 10, { reason: "other" }, { sessionId: "s1", paneKey: "k1" }), T0 + 10, DEFAULT_CONFIG);
     f = tickFleet(f, T0 + 10 + DEFAULT_CONFIG.doneLingerMs, DEFAULT_CONFIG);
     expect(f.panes["k1"]?.sessionIds).toEqual(["s2"]);
   });
 
   it("ticks every session so idle ones fall asleep", () => {
-    let f = reduceFleet(emptyFleet(), ev("s1", "k1", "prompt", T0), T0, DEFAULT_CONFIG);
-    f = reduceFleet(f, ev("s1", "k1", "stop", T0 + 1, { backgroundTasks: 0 }), T0 + 1, DEFAULT_CONFIG);
+    let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1", paneKey: "k1" }), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("stop", T0 + 1, { backgroundTasks: 0 }, { sessionId: "s1", paneKey: "k1" }), T0 + 1, DEFAULT_CONFIG);
     f = tickFleet(f, T0 + 1 + DEFAULT_CONFIG.asleepAfterMs, DEFAULT_CONFIG);
     expect(f.sessions["s1"]?.state).toBe("asleep");
   });
 
   it("does not mutate its input", () => {
     const before = emptyFleet();
-    reduceFleet(before, ev("s1", "k1", "prompt", T0), T0, DEFAULT_CONFIG);
+    reduceFleet(before, event("prompt", T0, {}, { sessionId: "s1", paneKey: "k1" }), T0, DEFAULT_CONFIG);
     expect(before).toEqual(emptyFleet());
   });
 
   it("ignores a session.end for a session it has never seen", () => {
-    const f = reduceFleet(emptyFleet(), ev("ghost", "k1", "session.end", T0, { reason: "other" }), T0, DEFAULT_CONFIG);
+    const f = reduceFleet(emptyFleet(), event("session.end", T0, { reason: "other" }, { sessionId: "ghost", paneKey: "k1" }), T0, DEFAULT_CONFIG);
     expect(f.sessions["ghost"]).toBeUndefined();
     expect(f.panes["k1"]).toBeUndefined();
   });
 
   it("treats ids that name inherited object properties as ordinary ids", () => {
-    let f = reduceFleet(emptyFleet(), ev("constructor", "toString", "prompt", T0), T0, DEFAULT_CONFIG);
-    f = reduceFleet(f, ev("constructor", "toString", "tool.start", T0 + 1, { tool: "Read", category: "read", toolUseId: "u1" }), T0 + 1, DEFAULT_CONFIG);
+    let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "constructor", paneKey: "toString" }), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("tool.start", T0 + 1, { tool: "Read", category: "read", toolUseId: "u1" }, { sessionId: "constructor", paneKey: "toString" }), T0 + 1, DEFAULT_CONFIG);
     expect(f.sessions["constructor"]?.state).toBe("working");
     expect(f.panes["toString"]?.sessionIds).toEqual(["constructor"]);
     expect(deriveSnapshot(f, emptyAliasMap(), T0 + 2).snapshot.sessions).toHaveLength(1);

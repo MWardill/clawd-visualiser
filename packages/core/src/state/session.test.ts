@@ -1,11 +1,9 @@
 import { describe, expect, it } from "vitest";
 import type { RedactedEvent } from "../schema/events";
+import { T0, event as ev } from "../testing/events";
 import { DEFAULT_CONFIG } from "./config";
 import { newSession, reduceSession, tickSession, type SessionState } from "./session";
 
-const T0 = 1_757_671_200_000;
-const base = { v: 1 as const, sessionId: "s1", paneKey: "k1" };
-const ev = (kind: string, t: number, extra: Record<string, unknown> = {}) => ({ ...base, t, kind, ...extra }) as RedactedEvent;
 
 function run(events: RedactedEvent[], start: SessionState = newSession("s1", "k1", T0)): SessionState {
   return events.reduce((s, e) => reduceSession(s, e, e.t, DEFAULT_CONFIG), start);
