@@ -16,5 +16,5 @@ export const DEFAULT_CONFIG: StateConfig = {
   asleepAfterMs: 10 * 60_000,
   minDisplayMs: 1_500,
   doneLingerMs: 4_000,
-  staleWorkingMs: 15 * 60_000,
+  staleWorkingMs: 30 * 60_000,
 };

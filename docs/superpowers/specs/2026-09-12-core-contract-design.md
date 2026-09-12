@@ -208,7 +208,7 @@ Two tool calls can be in flight at once, so `inFlight` is a list and not a singl
 | working or waiting | `stop` with no subagent tasks and no live subagents | idle; any wait ends |
 | working or waiting | `stop` with subagent tasks | working, activity `spawn`; any wait ends |
 | idle | `tick` past `asleepAfterMs` | asleep |
-| working | `tick` past `staleWorkingMs` since the last event | idle. The Stop never came: a user interrupt, a lost hook. Generous (15 minutes), since one tool call can run for minutes |
+| working | `tick` past `staleWorkingMs` since the last event | idle. The Stop never came: a user interrupt, a lost hook. Generous (30 minutes), since one tool call can run for minutes |
 | idle / asleep | `prompt` | working |
 | any | `session.end`, or `presence.alive === false` | done |
 
