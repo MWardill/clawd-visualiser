@@ -22,7 +22,7 @@ A pnpm workspace. Packages export TypeScript source directly; the web app compil
 | Path | What it is |
 | --- | --- |
 | `apps/web` | Next.js app (App Router, Tailwind, shadcn/ui). Renders snapshots; runs on the simulated source when no agent is present. |
-| `packages/core` | Contracts, event types, redaction, state machine, simulated source. Pure TypeScript, tested with Vitest. |
+| `packages/core` | Contracts, redaction, state machine, aliases, simulated and replay sources, fixtures. Pure TypeScript, tested with Vitest. See its README. |
 | `packages/scene` | The canvas renderer: the Clawd pixel engine and the panes scene. Framework-free. |
 | `docs/PRD.md` | Requirements, contracts, state machine, milestones, decision log. |
 | `docs/spike-hooks.md` | What the hooks, agents list and status line actually provide, measured on real runs. |
