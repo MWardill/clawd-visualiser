@@ -1,0 +1,26 @@
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [
+      { "type": "http", "url": "http://127.0.0.1:4747/SessionStart" },
+      { "type": "command", "command": "node \"$CLAUDE_PROJECT_DIR/tools/hook-spike/report-ppid.js\" SessionStart" }
+    ] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4747/UserPromptSubmit" }] }],
+    "PreToolUse": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4747/PreToolUse" }] }],
+    "PostToolUse": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4747/PostToolUse" }] }],
+    "PostToolUseFailure": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4747/PostToolUseFailure" }] }],
+    "PermissionRequest": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4747/PermissionRequest" }] }],
+    "PermissionDenied": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4747/PermissionDenied" }] }],
+    "Notification": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4747/Notification" }] }],
+    "SubagentStart": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4747/SubagentStart" }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4747/SubagentStop" }] }],
+    "Stop": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4747/Stop" }] }],
+    "StopFailure": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4747/StopFailure" }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4747/SessionEnd" }] }],
+    "PreCompact": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4747/PreCompact" }] }],
+    "MessageDisplay": [{ "hooks": [{ "type": "http", "url": "http://127.0.0.1:4747/MessageDisplay" }] }]
+  },
+  "statusLine": {
+    "type": "command",
+    "command": "node \"$CLAUDE_PROJECT_DIR/tools/hook-spike/report-ppid.js\" statusline"
+  }
+}
