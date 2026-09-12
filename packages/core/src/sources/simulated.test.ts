@@ -66,4 +66,46 @@ describe("simulated fleet", () => {
       vi.useRealTimers();
     }
   });
+
+  it("stamps integer times at a fractional speed on a jittery clock", () => {
+    vi.useFakeTimers();
+    try {
+      let now = T0;
+      const got: RedactedEvent[] = [];
+      const stop = createSimulatedSource({ seed: 5, sessions: 3, speed: 0.7, now: () => now }).start((e) => got.push(e));
+      for (let i = 0; i < 80; i++) {
+        now += 250 + (i % 3);
+        vi.advanceTimersByTime(250);
+      }
+      stop();
+      expect(got.length).toBeGreaterThan(0);
+      for (const e of got) expect(() => RedactedEventSchema.parse(e)).not.toThrow();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("delivers nothing more once the sink stops it, even within a batch", () => {
+    vi.useFakeTimers();
+    try {
+      let now = T0;
+      const got: RedactedEvent[] = [];
+      let stop: () => void = () => {};
+      // A birth is a two-event batch from a timer tick: stopping on the second session's first
+      // event must drop its second, and everything after.
+      stop = createSimulatedSource({ seed: 1, sessions: 3, now: () => now }).start((e) => {
+        got.push(e);
+        if (e.kind === "session.start" && e.sessionId !== got[0]?.sessionId) stop();
+      });
+      for (let i = 0; i < 80; i++) {
+        now += 250;
+        vi.advanceTimersByTime(250);
+      }
+      const last = got.at(-1)!;
+      expect(last.kind).toBe("session.start");
+      expect(got.filter((e) => e.sessionId === last.sessionId)).toHaveLength(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });

@@ -43,4 +43,31 @@ describe("createReplaySource", () => {
       vi.useRealTimers();
     }
   });
+
+  it("schedules nothing further when the sink stops it mid-run", () => {
+    vi.useFakeTimers();
+    try {
+      const got: number[] = [];
+      let stop: () => void = () => {};
+      stop = createReplaySource(fixture).start((e) => {
+        got.push(e.t);
+        if (got.length === 2) stop();
+      });
+      vi.advanceTimersByTime(1000);
+      expect(got).toEqual([T0, T0 + 1000]);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("rejects a speed that is zero, negative or not a number", () => {
+    for (const speed of [0, -1, Number.NaN]) expect(() => createReplaySource(fixture, { speed })).toThrow(RangeError);
+  });
+
+  it("clamps a scaled gap to the longest delay a timer can hold", () => {
+    const delays: number[] = [];
+    createReplaySource(fixture, { speed: 1e-9, setTimeout: (_fn, ms) => delays.push(ms), clearTimeout: () => {} }).start(() => {});
+    expect(delays).toEqual([2_147_483_647]);
+  });
 });

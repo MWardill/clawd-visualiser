@@ -187,12 +187,21 @@ export function createSimulatedSource(opts: SimulatedSourceOptions = {}): Source
     start(sink: Sink) {
       const fleet = createSimulatedFleet(opts);
       const origin = now();
-      const clock = (): number => origin + (now() - origin) * speed;
-      for (const e of fleet.next(clock())) sink(e);
-      const handle = setI(() => {
-        for (const e of fleet.next(clock())) sink(e);
-      }, tickMs);
-      return () => clearI(handle);
+      // Rounded: a fractional speed or a sub-millisecond clock must not put fractions in `t`.
+      const clock = (): number => Math.round(origin + (now() - origin) * speed);
+      let stopped = false;
+      const pump = (): void => {
+        for (const e of fleet.next(clock())) {
+          if (stopped) return;
+          sink(e);
+        }
+      };
+      pump();
+      const handle = setI(pump, tickMs);
+      return () => {
+        stopped = true;
+        clearI(handle);
+      };
     },
   };
 }
