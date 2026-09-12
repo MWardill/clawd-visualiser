@@ -1,20 +1,21 @@
 {"fixture":1,"name":"spike-interactive"}
-{"v":1,"t":1757671228099,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"session.start","source":"startup"}
-{"v":1,"t":1757671236745,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"prompt"}
-{"v":1,"t":1757671239868,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"tool.start","tool":"Bash","category":"run","toolUseId":"toolu_01F47X6LKsu3Wf4j5yJh5T7W"}
-{"v":1,"t":1757671241690,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"status","contextPct":5,"costUsd":0.7666780000000001,"rateLimit5h":7.000000000000001,"rateLimit7d":22,"model":"Fable 5"}
-{"v":1,"t":1757671254336,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"tool.end","tool":"Bash","category":"run","toolUseId":"toolu_01F47X6LKsu3Wf4j5yJh5T7W","durationMs":14437}
-{"v":1,"t":1757671256878,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"stop","backgroundTasks":0}
-{"v":1,"t":1757671257314,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"status","contextPct":5,"costUsd":1.18155,"rateLimit5h":7.000000000000001,"rateLimit7d":22,"model":"Fable 5"}
-{"v":1,"t":1757671268175,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"prompt"}
-{"v":1,"t":1757671271192,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"tool.start","tool":"AskUserQuestion","category":"other","toolUseId":"toolu_01A6Mc6A2PTf7GHTJwd3T8GL"}
-{"v":1,"t":1757671271211,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"permission.request","tool":"AskUserQuestion","category":"other"}
-{"v":1,"t":1757671289139,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"tool.end","tool":"AskUserQuestion","category":"other","toolUseId":"toolu_01A6Mc6A2PTf7GHTJwd3T8GL","durationMs":0}
-{"v":1,"t":1757671289255,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"status","contextPct":5,"costUsd":1.238858,"rateLimit5h":7.000000000000001,"rateLimit7d":22,"model":"Fable 5"}
-{"v":1,"t":1757671289585,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"status","contextPct":5,"costUsd":1.238858,"rateLimit5h":7.000000000000001,"rateLimit7d":22,"model":"Fable 5"}
-{"v":1,"t":1757671291254,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"stop","backgroundTasks":0}
-{"v":1,"t":1757671291643,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"status","contextPct":5,"costUsd":1.291737,"rateLimit5h":7.000000000000001,"rateLimit7d":22,"model":"Fable 5"}
-{"v":1,"t":1757671296617,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"prompt"}
-{"v":1,"t":1757671300012,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"stop","backgroundTasks":0}
-{"v":1,"t":1757671300421,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"status","contextPct":5,"costUsd":1.342142,"rateLimit5h":7.000000000000001,"rateLimit7d":22,"model":"Fable 5"}
-{"v":1,"t":1757671328488,"sessionId":"e82c9e2a-59db-4bc8-9d96-48380639b932","paneKey":"ea9582cb4dd40169","kind":"session.end","reason":"prompt_input_exit"}
+{"v":1,"t":1757671220107,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"status","model":"Fable 5"}
+{"v":1,"t":1757671228099,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"session.start","source":"startup"}
+{"v":1,"t":1757671236745,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"prompt"}
+{"v":1,"t":1757671239868,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"tool.start","tool":"Bash","category":"run","toolUseId":"use-1"}
+{"v":1,"t":1757671241690,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"status","contextPct":5,"model":"Fable 5"}
+{"v":1,"t":1757671254336,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"tool.end","tool":"Bash","category":"run","toolUseId":"use-1","durationMs":14437}
+{"v":1,"t":1757671256878,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"stop","backgroundTasks":0}
+{"v":1,"t":1757671257314,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"status","contextPct":5,"model":"Fable 5"}
+{"v":1,"t":1757671268175,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"prompt"}
+{"v":1,"t":1757671271192,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"tool.start","tool":"AskUserQuestion","category":"other","toolUseId":"use-2"}
+{"v":1,"t":1757671271211,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"permission.request","tool":"AskUserQuestion","category":"other"}
+{"v":1,"t":1757671289139,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"tool.end","tool":"AskUserQuestion","category":"other","toolUseId":"use-2","durationMs":0}
+{"v":1,"t":1757671289255,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"status","contextPct":5,"model":"Fable 5"}
+{"v":1,"t":1757671289585,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"status","contextPct":5,"model":"Fable 5"}
+{"v":1,"t":1757671291254,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"stop","backgroundTasks":0}
+{"v":1,"t":1757671291643,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"status","contextPct":5,"model":"Fable 5"}
+{"v":1,"t":1757671296617,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"prompt"}
+{"v":1,"t":1757671300012,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"stop","backgroundTasks":0}
+{"v":1,"t":1757671300421,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"status","contextPct":5,"model":"Fable 5"}
+{"v":1,"t":1757671328488,"sessionId":"rec-1","paneKey":"ea9582cb4dd40169","kind":"session.end","reason":"prompt_input_exit"}

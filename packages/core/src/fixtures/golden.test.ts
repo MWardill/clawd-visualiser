@@ -23,5 +23,8 @@ describe("golden snapshots", () => {
     const lines = text.trim().split(/\r?\n/).map((l) => JSON.parse(l) as unknown);
     expect(containsForbidden(lines)).toBeNull();
     expect(text).not.toMatch(/\.jsonl"|[A-Za-z]:\\\\|\/Users\/|\/home\//);
+    // Committed fixtures carry remapped ids and no account figures: nothing of the real session.
+    expect(text).not.toMatch(/costUsd|rateLimit/);
+    expect(text).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
   });
 });

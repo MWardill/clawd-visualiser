@@ -588,11 +588,11 @@
     "alias": "agent-4",
     "label": "Lynx",
     "pane": "pane-1",
-    "state": "working",
-    "activity": "spawn",
+    "state": "idle",
+    "activity": null,
     "subagents": 0,
     "contextPct": null,
-    "since": "2025-09-12T10:03:56.001Z",
+    "since": "2025-09-12T10:04:13.797Z",
     "updatedAt": "2025-09-12T10:04:13.797Z"
    }
   ]
@@ -611,11 +611,11 @@
     "alias": "agent-4",
     "label": "Lynx",
     "pane": "pane-1",
-    "state": "working",
-    "activity": "spawn",
+    "state": "idle",
+    "activity": null,
     "subagents": 0,
     "contextPct": null,
-    "since": "2025-09-12T10:03:56.001Z",
+    "since": "2025-09-12T10:04:13.797Z",
     "updatedAt": "2025-09-12T10:04:20.727Z"
    },
    {
@@ -645,11 +645,11 @@
     "alias": "agent-4",
     "label": "Lynx",
     "pane": "pane-1",
-    "state": "working",
-    "activity": "spawn",
+    "state": "idle",
+    "activity": null,
     "subagents": 0,
     "contextPct": null,
-    "since": "2025-09-12T10:03:56.001Z",
+    "since": "2025-09-12T10:04:13.797Z",
     "updatedAt": "2025-09-12T10:04:20.727Z"
    },
    {
@@ -679,11 +679,11 @@
     "alias": "agent-4",
     "label": "Lynx",
     "pane": "pane-1",
-    "state": "working",
-    "activity": "spawn",
+    "state": "idle",
+    "activity": null,
     "subagents": 0,
     "contextPct": null,
-    "since": "2025-09-12T10:03:56.001Z",
+    "since": "2025-09-12T10:04:13.797Z",
     "updatedAt": "2025-09-12T10:04:20.727Z"
    },
    {
@@ -713,11 +713,11 @@
     "alias": "agent-4",
     "label": "Lynx",
     "pane": "pane-1",
-    "state": "working",
-    "activity": "spawn",
+    "state": "idle",
+    "activity": null,
     "subagents": 0,
     "contextPct": null,
-    "since": "2025-09-12T10:03:56.001Z",
+    "since": "2025-09-12T10:04:13.797Z",
     "updatedAt": "2025-09-12T10:04:20.727Z"
    },
    {
@@ -747,11 +747,11 @@
     "alias": "agent-4",
     "label": "Lynx",
     "pane": "pane-1",
-    "state": "working",
-    "activity": "spawn",
+    "state": "idle",
+    "activity": null,
     "subagents": 0,
     "contextPct": null,
-    "since": "2025-09-12T10:03:56.001Z",
+    "since": "2025-09-12T10:04:13.797Z",
     "updatedAt": "2025-09-12T10:04:20.727Z"
    },
    {
@@ -781,11 +781,11 @@
     "alias": "agent-4",
     "label": "Lynx",
     "pane": "pane-1",
-    "state": "working",
-    "activity": "spawn",
+    "state": "idle",
+    "activity": null,
     "subagents": 0,
     "contextPct": null,
-    "since": "2025-09-12T10:03:56.001Z",
+    "since": "2025-09-12T10:04:13.797Z",
     "updatedAt": "2025-09-12T10:04:20.727Z"
    },
    {
@@ -815,11 +815,11 @@
     "alias": "agent-4",
     "label": "Lynx",
     "pane": "pane-1",
-    "state": "working",
-    "activity": "spawn",
+    "state": "idle",
+    "activity": null,
     "subagents": 0,
     "contextPct": null,
-    "since": "2025-09-12T10:03:56.001Z",
+    "since": "2025-09-12T10:04:13.797Z",
     "updatedAt": "2025-09-12T10:04:20.727Z"
    },
    {
@@ -849,11 +849,11 @@
     "alias": "agent-4",
     "label": "Lynx",
     "pane": "pane-1",
-    "state": "working",
-    "activity": "spawn",
+    "state": "idle",
+    "activity": null,
     "subagents": 0,
     "contextPct": null,
-    "since": "2025-09-12T10:03:56.001Z",
+    "since": "2025-09-12T10:04:13.797Z",
     "updatedAt": "2025-09-12T10:04:20.727Z"
    },
    {
@@ -883,11 +883,11 @@
     "alias": "agent-4",
     "label": "Lynx",
     "pane": "pane-1",
-    "state": "working",
-    "activity": "spawn",
+    "state": "idle",
+    "activity": null,
     "subagents": 0,
     "contextPct": null,
-    "since": "2025-09-12T10:03:56.001Z",
+    "since": "2025-09-12T10:04:13.797Z",
     "updatedAt": "2025-09-12T10:04:20.727Z"
    },
    {
