@@ -1,0 +1,120 @@
+import { paneKey } from "../alias/pane";
+import { RedactedEventSchema, type RedactedEvent } from "../schema/events";
+import { RawHookSchema, RawStatusLineSchema, type RawHook, type RawStatusLine } from "../schema/raw";
+import { isAllowed } from "./allowlist";
+import { categoryFor, normaliseTool } from "./categories";
+
+export type IngestContext = { now: number; allowlist: readonly string[] };
+
+/** Payload fields that must never survive ingest. Tested against every fixture. */
+export const FORBIDDEN_KEYS = [
+  "prompt",
+  "tool_input",
+  "tool_response",
+  "last_assistant_message",
+  "transcript_path",
+  "agent_transcript_path",
+  "session_name",
+  "cwd",
+  "workspace",
+] as const;
+
+/**
+ * Turn a raw hook or status line payload into a redacted event, or null when the payload is not
+ * ours to keep: outside the allowlist, an internal helper subagent, an unmodelled event, or junk.
+ */
+export function redact(raw: unknown, ctx: IngestContext): RedactedEvent | null {
+  if (typeof raw !== "object" || raw === null) return null;
+  const hook = RawHookSchema.safeParse(raw);
+  if (hook.success) return redactHook(hook.data, ctx);
+  const status = RawStatusLineSchema.safeParse(raw);
+  if (status.success) return redactStatus(status.data, ctx);
+  return null;
+}
+
+function validate(event: unknown): RedactedEvent | null {
+  const parsed = RedactedEventSchema.safeParse(event);
+  return parsed.success ? parsed.data : null;
+}
+
+function redactHook(p: RawHook, ctx: IngestContext): RedactedEvent | null {
+  if (!isAllowed(p.cwd, ctx.allowlist)) return null;
+  const base = { v: 1 as const, t: ctx.now, sessionId: p.session_id, paneKey: paneKey(p.cwd), ...(p.agent_id ? { agentId: p.agent_id } : {}) };
+  const rawTool = p.tool_name ?? "unknown";
+  const toolFields = { tool: normaliseTool(rawTool), category: categoryFor(rawTool) };
+  switch (p.hook_event_name) {
+    case "SessionStart":
+      return validate({ ...base, kind: "session.start", ...(p.source ? { source: p.source } : {}) });
+    case "SessionEnd":
+      return validate({ ...base, kind: "session.end", reason: p.reason ?? "unknown" });
+    case "UserPromptSubmit":
+      return validate({ ...base, kind: "prompt" });
+    case "PreToolUse":
+      if (!p.tool_use_id) return null;
+      return validate({ ...base, kind: "tool.start", ...toolFields, toolUseId: p.tool_use_id });
+    case "PostToolUse":
+      if (!p.tool_use_id) return null;
+      return validate({ ...base, kind: "tool.end", ...toolFields, toolUseId: p.tool_use_id, durationMs: Math.max(0, p.duration_ms ?? 0) });
+    case "PermissionRequest":
+      return validate({ ...base, kind: "permission.request", ...toolFields, ...(p.tool_use_id ? { toolUseId: p.tool_use_id } : {}) });
+    case "PermissionDenied":
+      return validate({ ...base, kind: "permission.denied", ...(p.tool_name ? { tool: normaliseTool(p.tool_name) } : {}) });
+    case "Stop":
+      return validate({ ...base, kind: "stop", backgroundTasks: p.background_tasks?.length ?? 0 });
+    case "SubagentStart":
+    case "SubagentStop":
+      // Internal helpers (the session-naming helper) have an empty agent_type. Drop them.
+      if (!p.agent_id || !p.agent_type) return null;
+      return validate({ ...base, agentId: p.agent_id, kind: p.hook_event_name === "SubagentStart" ? "subagent.start" : "subagent.stop", agentType: p.agent_type });
+    default:
+      return null;
+  }
+}
+
+function redactStatus(p: RawStatusLine, ctx: IngestContext): RedactedEvent | null {
+  if (!isAllowed(p.cwd, ctx.allowlist)) return null;
+  const pct = (v: number | undefined): number | undefined => (typeof v === "number" ? Math.min(100, Math.max(0, v)) : undefined);
+  const contextPct = pct(p.context_window.used_percentage);
+  const costUsd = p.cost?.total_cost_usd;
+  const rateLimit5h = pct(p.rate_limits?.five_hour?.used_percentage);
+  const rateLimit7d = pct(p.rate_limits?.seven_day?.used_percentage);
+  const model = p.model?.display_name;
+  return validate({
+    v: 1 as const,
+    t: ctx.now,
+    sessionId: p.session_id,
+    paneKey: paneKey(p.cwd),
+    kind: "status",
+    ...(contextPct !== undefined ? { contextPct } : {}),
+    ...(typeof costUsd === "number" ? { costUsd: Math.max(0, costUsd) } : {}),
+    ...(rateLimit5h !== undefined ? { rateLimit5h } : {}),
+    ...(rateLimit7d !== undefined ? { rateLimit7d } : {}),
+    ...(model ? { model } : {}),
+  });
+}
+
+/**
+ * Walk any value; return the first forbidden key name found, or the first extra string found
+ * inside any string value, or null. Used by the redaction tests and by the agent's self-check.
+ */
+export function containsForbidden(value: unknown, extraStrings: readonly string[] = []): string | null {
+  if (typeof value === "string") {
+    for (const s of extraStrings) if (s && value.includes(s)) return s;
+    return null;
+  }
+  if (Array.isArray(value)) {
+    for (const v of value) {
+      const hit = containsForbidden(v, extraStrings);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  if (typeof value === "object" && value !== null) {
+    for (const [k, v] of Object.entries(value)) {
+      if ((FORBIDDEN_KEYS as readonly string[]).includes(k)) return k;
+      const hit = containsForbidden(v, extraStrings);
+      if (hit) return hit;
+    }
+  }
+  return null;
+}
