@@ -11,9 +11,10 @@ ingest; what remains is state, activity category and timing.
 
 ## Status
 
-Design complete, build starting. The product requirements are in [docs/PRD.md](docs/PRD.md), and the
-measured facts about Claude Code's hooks that the design rests on are in
-[docs/spike-hooks.md](docs/spike-hooks.md).
+The contract (`packages/core`) and the web app (Track A: the panes scene, the simulated and live
+feeds, the detail ticker) are built. The local agent (Track B) is in progress on its own branch.
+The product requirements are in [docs/PRD.md](docs/PRD.md), and the measured facts about Claude
+Code's hooks that the design rests on are in [docs/spike-hooks.md](docs/spike-hooks.md).
 
 ## Layout
 
@@ -21,9 +22,9 @@ A pnpm workspace. Packages export TypeScript source directly; the web app compil
 
 | Path | What it is |
 | --- | --- |
-| `apps/web` | Next.js app (App Router, Tailwind, shadcn/ui). Renders snapshots; runs on the simulated source when no agent is present. |
+| `apps/web` | Next.js app (App Router, Tailwind, shadcn/ui). The panes scene on one canvas, fed by the agent's SSE stream when one answers and by the simulated source otherwise; a detail sheet with the redacted ticker in xterm.js. See `docs/superpowers/specs/2026-09-12-web-app-design.md`. |
 | `packages/core` | Contracts, redaction, state machine, aliases, simulated and replay sources, fixtures. Pure TypeScript, tested with Vitest. See its README. |
-| `packages/scene` | The canvas renderer: the Clawd pixel engine and the panes scene. Framework-free. |
+| `packages/scene` | The canvas renderer: the Clawd pixel engine and the panes scene. Framework-free; takes a snapshot, draws a frame. See its README. |
 | `docs/PRD.md` | Requirements, contracts, state machine, milestones, decision log. |
 | `docs/spike-hooks.md` | What the hooks, agents list and status line actually provide, measured on real runs. |
 | `tools/hook-spike/` | The listener and settings used for those measurements; reusable for further checks. |
@@ -42,6 +43,10 @@ pnpm build
 ```
 
 Requires Node 22 or later and pnpm 12, pinned in `package.json`.
+
+The web app looks for the agent at `http://127.0.0.1:4750` (override with `NEXT_PUBLIC_AGENT_URL`
+at build time) and falls back to the simulated fleet when nothing answers. `?source=simulated`
+forces the simulation; `?source=live` disables the fallback. Click a Clawd for its ticker.
 
 ## Credits
 
