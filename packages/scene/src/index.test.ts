@@ -1,20 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { CLAWD_BODY, EYES, PALETTE, createEngine, type PixelContext, SCENE_VERSION } from "./index";
-
-/** A fake 2D context that records every filled cell by colour. */
-function fakeContext() {
-  const cells: { x: number; y: number; col: string }[] = [];
-  const ctx = {
-    fillStyle: "" as string,
-    font: "",
-    textAlign: "left" as CanvasTextAlign,
-    textBaseline: "top" as CanvasTextBaseline,
-    globalAlpha: 1,
-    fillRect(x: number, y: number) { cells.push({ x, y, col: String(this.fillStyle) }); },
-    fillText() {},
-  } satisfies PixelContext;
-  return { ctx, cells };
-}
+import { CLAWD_BODY, EYES, PALETTE, createEngine, SCENE_VERSION } from "./index";
+import { fakeContext } from "./testing/fake-context";
 
 describe("@clawd/scene", () => {
   it("exports a version", () => {
@@ -32,23 +18,25 @@ describe("@clawd/scene", () => {
   });
 
   it("draws every body pixel in Clawd orange and two black eyes", () => {
-    const { ctx, cells } = fakeContext();
+    const { ctx, cellsOf } = fakeContext();
     const engine = createEngine(ctx, 10);
     engine.drawClawd(0, 0, { eyes: "forward" });
+    const cells = cellsOf(10);
     const bodyPixels = CLAWD_BODY.data.flat().filter((v) => v === 1).length;
     expect(cells.filter((c) => c.col === PALETTE.clawd.body)).toHaveLength(bodyPixels);
     const eyes = cells.filter((c) => c.col === PALETTE.clawd.eye);
     expect(eyes).toHaveLength(2);
-    expect(eyes.map((e) => [e.x / 10, e.y / 10])).toEqual([[4, 1], [9, 1]]);
+    expect(eyes.map((e) => [e.x, e.y])).toEqual([[4, 1], [9, 1]]);
   });
 
   it("hides the eyes on a blink and shifts them for a glance", () => {
     expect(EYES.blink).toEqual({ type: "hidden" });
-    const { ctx, cells } = fakeContext();
+    const { ctx, cellsOf, reset } = fakeContext();
     const engine = createEngine(ctx, 1);
     engine.drawClawd(0, 0, { eyes: "blink" });
-    expect(cells.filter((c) => c.col === PALETTE.clawd.eye)).toHaveLength(0);
+    expect(cellsOf(1).filter((c) => c.col === PALETTE.clawd.eye)).toHaveLength(0);
+    reset();
     engine.drawClawd(0, 0, { eyes: "look_right" });
-    expect(cells.filter((c) => c.col === PALETTE.clawd.eye).map((e) => e.x)).toEqual([5, 10]);
+    expect(cellsOf(1).filter((c) => c.col === PALETTE.clawd.eye).map((e) => e.x)).toEqual([5, 10]);
   });
 });
