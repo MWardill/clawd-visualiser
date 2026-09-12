@@ -20,7 +20,7 @@ describe("deriveSnapshot", () => {
     expect(JSON.stringify(snapshot)).not.toContain("deadbeef");
     expect(snapshot.sessions[0]).toMatchObject({ alias: "agent-1", pane: "pane-1", state: "working", activity: "read", subagents: 0, contextPct: null });
     expect(snapshot.sessions[0]?.since).toBe(new Date(T0).toISOString());
-    expect(snapshot.panes[0]).toMatchObject({ pane: "pane-1", collision: false });
+    expect(snapshot.panes[0]).toEqual({ pane: "pane-1", label: "Oak" });
   });
 
   it("shows the held previous state until the hold expires, with the real since", () => {

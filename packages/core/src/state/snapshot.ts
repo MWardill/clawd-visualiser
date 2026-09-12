@@ -25,7 +25,7 @@ export function deriveSnapshot(f: Fleet, aliases: AliasMap, now: number): { snap
     .map((p) => {
       const r = ensurePaneAlias(map, p.paneKey);
       map = r.map;
-      return { pane: r.alias, label: r.label, collision: false };
+      return { pane: r.alias, label: r.label };
     });
   // First sight, not `since`: sorting by `since` would reshuffle the fleet on every state change.
   const sessions: SessionSnapshot[] = Object.values(f.sessions)

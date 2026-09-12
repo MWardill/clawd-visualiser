@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { RedactedEventSchema } from "./events";
+import { RedactedEventSchema, ToolCategorySchema } from "./events";
+import { ActivitySchema } from "./snapshot";
 
 const base = { v: 1, t: 1_757_671_200_000, sessionId: "s1", paneKey: "0123456789abcdef" };
 
@@ -29,5 +30,9 @@ describe("RedactedEventSchema", () => {
 
   it("requires an agentId on subagent events", () => {
     expect(() => RedactedEventSchema.parse({ ...base, kind: "subagent.start", agentType: "x" })).toThrow();
+  });
+
+  it("derives the activity enum from the tool categories plus think", () => {
+    expect(ActivitySchema.options).toEqual([...ToolCategorySchema.options, "think"]);
   });
 });

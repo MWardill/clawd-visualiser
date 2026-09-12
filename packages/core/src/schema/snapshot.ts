@@ -1,11 +1,12 @@
 import { z } from "zod";
+import { ToolCategorySchema } from "./events";
 
 /** The five states a session can be in. */
 export const SessionPhaseSchema = z.enum(["working", "waiting", "idle", "asleep", "done"]);
 export type SessionPhase = z.infer<typeof SessionPhaseSchema>;
 
-/** What a working session is doing. `think` is the gap between tool calls. */
-export const ActivitySchema = z.enum(["read", "edit", "run", "web", "spawn", "think", "other"]);
+/** What a working session is doing: a tool category, or `think`, the gap between tool calls. */
+export const ActivitySchema = z.enum([...ToolCategorySchema.options, "think"]);
 export type Activity = z.infer<typeof ActivitySchema>;
 
 const Ext = z.record(z.string(), z.unknown()).optional();
@@ -14,7 +15,8 @@ export const PaneSnapshotSchema = z
   .object({
     pane: z.string().min(1),
     label: z.string().min(1),
-    collision: z.boolean(),
+    /** Absent until collision detection (M7) computes it; additive, per the versioning rule. */
+    collision: z.boolean().optional(),
   })
   .strict();
 export type PaneSnapshot = z.infer<typeof PaneSnapshotSchema>;

@@ -1,6 +1,6 @@
 {
   "name": "@clawd/scene",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "The canvas renderer: the Clawd pixel engine and the panes scene. Framework-free; takes a snapshot, draws a frame.",
   "type": "module",

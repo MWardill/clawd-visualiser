@@ -53,4 +53,9 @@ describe("wire schemas", () => {
     expect(STREAM_EVENTS).toEqual({ snapshot: "snapshot", ticker: "ticker" });
     expect(StreamTickerMessageSchema.parse({ alias: "agent-1", event: { t: "2026-09-12T10:00:00.000Z", kind: "prompt" } }).alias).toBe("agent-1");
   });
+
+  it("accepts a pane that does not report collision yet", () => {
+    const parsed = SnapshotSchema.parse({ ...validSnapshot, panes: [{ pane: "pane-1", label: "Oak" }] });
+    expect(parsed.panes[0]).toEqual({ pane: "pane-1", label: "Oak" });
+  });
 });

@@ -1,6 +1,6 @@
 {
   "name": "@clawd/core",
-  "version": "0.0.0",
+  "version": "0.1.0",
   "private": true,
   "description": "Contracts, event types, redaction, state machine and the simulated source. Pure TypeScript with no browser or Node APIs.",
   "type": "module",
