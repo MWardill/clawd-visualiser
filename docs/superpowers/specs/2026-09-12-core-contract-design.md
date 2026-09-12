@@ -85,11 +85,11 @@ Variants, with their extra fields:
 | `tool.end` | `tool`, `category`, `toolUseId`, `durationMs: number` | PostToolUse |
 | `permission.request` | `tool`, `category` | PermissionRequest |
 | `permission.denied` | `tool?` | PermissionDenied |
-| `stop` | `backgroundTasks: number` | Stop, counting entries in `background_tasks` |
+| `stop` | `backgroundTasks: number` | Stop, counting only the `background_tasks` entries of type `subagent`; a background shell is not work the session waits on |
 | `subagent.start` | `agentId`, `agentType: string` | SubagentStart |
 | `subagent.stop` | `agentId`, `agentType` | SubagentStop |
 | `status` | `contextPct?: number`, `costUsd?: number`, `rateLimit5h?: number`, `rateLimit7d?: number`, `model?: string` | status line command |
-| `presence` | `alive: boolean` | agents-list poll, one per known session |
+| `presence` | `alive: boolean` | `redactPresence()` over one agents-list entry, one per known session |
 
 `tool` is the built-in tool name, or `"mcp"` for any MCP tool (open question 5 in the PRD).
 `category` is derived by `categories.ts`: `read`, `edit`, `run`, `web`, `spawn`, `other`.
@@ -117,9 +117,12 @@ publishing in cloud mode.
 ### 3.3 Raw payloads
 
 `raw.ts` describes the hook payloads as measured in `docs/spike-hooks.md`, but loosely:
-`z.object({...}).passthrough()` on the handful of fields we read, so a new Claude Code version
-adding fields never breaks ingest. Fields we never read are never typed, which keeps them out of
-the code by construction.
+`z.object({...})` on the handful of fields we read, so a new Claude Code version adding fields
+never breaks ingest. The schemas parse in zod's default strip mode rather than passthrough, so
+parsing is itself the first redaction step: every field we never named is gone before ingest reads
+the payload. Fields we never read are never typed, which keeps them out of the code by
+construction. The status line is the loosest of them: every section and every figure is optional
+and nullable, since a session reports nulls before its first turn.
 
 ## 4. Ingest redaction
 
@@ -135,6 +138,11 @@ function redact(raw: unknown, ctx: IngestContext): RedactedEvent | null;
 - Never copies `prompt`, `tool_input`, `tool_response`, `last_assistant_message`,
   `transcript_path`, `agent_transcript_path`, `session_name`, `cwd` (it becomes `paneKey`), or the
   status line's `workspace`. These names form the **forbidden list** exported for tests.
+
+`redactPresence(entry, alive, ctx)` is the same function for the presence poll: it parses one
+agents-list entry, keeps only `sessionId` and the pane key its `cwd` hashes to, and returns a
+`presence` event or null. The entry's `name` is session-name content and is never named in the
+schema.
 
 `paneKey(cwd)` is a 64-bit FNV-1a hash of the normalised path, rendered as hex. It is an internal
 key, never published; the snapshot carries the pane alias. Hashing is not for secrecy, it is so the
@@ -157,13 +165,17 @@ type SessionState = {
   since: number;              // when `state` began
   lastEventAt: number;
   waitingOn: string | null;   // toolUseId of the pending permission
+  inFlight: { toolUseId: string; tool: string }[];  // parent tool calls started, not yet ended
   backgroundTasks: number;
   subagents: Set<string>;     // live agent ids
   contextPct: number | null;
-  errorFlag: boolean;
+  firstSeenAt: number;        // set once, never changed; the snapshot's sort key
   displayHold: { state: SessionState["state"]; until: number } | null;  // min display duration
 };
 ```
+
+Two tool calls can be in flight at once, so `inFlight` is a list and not a single id; it is what a
+`PermissionRequest`, which carries no `tool_use_id` of its own, is matched against.
 
 ### 5.2 Transitions
 
@@ -173,13 +185,18 @@ type SessionState = {
 | --- | --- | --- |
 | any but done | `prompt` | working |
 | working | `tool.start` / `tool.end` | working, activity updated (`think` between tool.end and the next event) |
-| working or idle | `permission.request` | waiting, `waitingOn` = toolUseId (idle covers a request that arrives before its prompt event) |
-| waiting | `tool.end` with that toolUseId, or `permission.denied` | working |
-| working | `stop` with `backgroundTasks === 0` and no live subagents | idle |
-| working | `stop` otherwise | working |
+| any but done, not already waiting | `permission.request` | waiting. `waitingOn` is the request's own `tool_use_id` when it has one, else the newest call in flight with the same tool name, else the newest call in flight, else null (asleep and idle cover a request that arrives before, or long after, its prompt event) |
+| waiting | `tool.end` with that toolUseId, or any `tool.end` when no id was resolved, or `permission.denied` | working |
+| working or waiting | `stop` with no subagent tasks and no live subagents | idle; any wait ends |
+| working or waiting | `stop` with subagent tasks | working, activity `spawn`; any wait ends |
 | idle | `tick` past `asleepAfterMs` | asleep |
 | idle / asleep | `prompt` | working |
 | any | `session.end`, or `presence.alive === false` | done |
+
+A `stop` carries Claude Code's own `background_tasks`, and on that question it is authoritative:
+a count of zero clears the locally tracked subagent set, so a `SubagentStop` we never received
+cannot wedge the parent on `spawn` for the rest of its life. A `stop` also ends a wait whose
+`PostToolUse` never arrived.
 
 `subagent.start` and `subagent.stop` update the set and never change `state`. `status` updates
 `contextPct`. `tool.start` inside a subagent (`agentId` set) updates `activity` to `spawn` on the
@@ -209,8 +226,10 @@ play the exit, then are removed.
 function deriveSnapshot(f: Fleet, aliases: AliasMap, now: number): Snapshot;
 ```
 
-Applies display holds, maps session ids and pane keys to aliases and labels, sorts panes by first
-appearance and sessions by `since`, and validates the result against the schema before returning it.
+Applies display holds, maps session ids and pane keys to aliases and labels, sorts panes and
+sessions by first appearance (sessions tie-breaking on session id, so the order is deterministic
+and a state change never reshuffles the fleet), and validates the result against the schema before
+returning it.
 `deriveSnapshot` is where the local-only identifiers are left behind.
 
 ### 5.5 Ticker
@@ -218,6 +237,10 @@ appearance and sessions by `since`, and validates the result against the schema 
 `toTickerEvent(e, prevState, nextState)` maps a redacted event to zero or one `TickerEvent`, adding
 a synthetic `state` line whenever the reducer changed the session's state. This is the only source
 of ticker lines, so the ticker can never carry more than the redacted event does.
+
+`applyEvent(fleet, e, now, cfg)` is the one call a host makes per event. It reduces the fleet and
+returns `{ fleet, before, after, ticker }`: the session as it was, the session as it is, and the
+ticker lines derived from that same pair, so no host has to keep the two halves in step itself.
 
 ## 6. Aliases
 
@@ -269,6 +292,10 @@ reduced to categories; it never publishes ticker events.
 - Source recordings are the spike's `spike-events.jsonl` files (headless and interactive). A
   one-off script in `tools/` runs them through `redact()` with a test allowlist and writes
   `packages/core/src/fixtures/spike-headless.jsonl` and `spike-interactive.jsonl`.
+- Before writing, the script scrubs what redaction legitimately keeps but a committed file must
+  not carry: session, tool-use and agent ids are renumbered in order of first appearance as
+  `rec-n`, `use-n` and `sub-n`, and `status` events lose `costUsd`, `rateLimit5h` and `rateLimit7d`.
+  The golden test asserts that none of those survive.
 - Fixture format is one `RedactedEvent` per line, plus a first line `{"fixture": 1, "name": ...}`.
 - The raw recordings never enter the repo; `.gitignore` already excludes them.
 - Two hand-written fixtures cover what the spike did not: a permission denial and a kill without
@@ -302,3 +329,7 @@ All Vitest, all pure:
 - Collision detection (M7) adds a `file.touch` redacted event carrying a short-lived hash; not in M1.
 - Cost and rate-limit display; the `status` event already carries the numbers.
 - Redis publishing helpers for cloud mode.
+- `StopFailure` and an error flag. Nothing in M1 sets one, so `SessionState` does not carry it and
+  an errored session reads as whatever its last hook said.
+- Presence for sessions the poller has never seen. Track B should emit `presence` only for sessions
+  it has already seen, or accept that a late poll can re-create a just-removed session as idle.
