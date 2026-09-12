@@ -22,9 +22,10 @@ describe("reduceSession", () => {
   it("tracks tool activity and returns to think after a tool ends", () => {
     let s = run([ev("prompt", T0), ev("tool.start", T0 + 1, { tool: "Edit", category: "edit", toolUseId: "u1" })]);
     expect(s.activity).toBe("edit");
-    expect(s.currentToolUseId).toBe("u1");
+    expect(s.inFlight).toEqual([{ toolUseId: "u1", tool: "Edit" }]);
     s = run([ev("tool.end", T0 + 2, { tool: "Edit", category: "edit", toolUseId: "u1", durationMs: 1 })], s);
     expect(s.activity).toBe("think");
+    expect(s.inFlight).toEqual([]);
   });
 
   it("joins a session mid-flight: a tool.start while idle means working", () => {
@@ -126,5 +127,74 @@ describe("reduceSession", () => {
   it("stores context from status events", () => {
     expect(run([ev("status", T0, { contextPct: 42 })]).contextPct).toBe(42);
     expect(run([ev("status", T0, { costUsd: 1 })]).contextPct).toBeNull();
+  });
+
+  it("resolves a permission request to the in-flight call with the same tool name", () => {
+    let s = run([ev("prompt", T0), ev("tool.start", T0 + 1, { tool: "Bash", category: "run", toolUseId: "u1" }), ev("tool.start", T0 + 2, { tool: "Read", category: "read", toolUseId: "u2" }), ev("permission.request", T0 + 3, { tool: "Bash", category: "run" })]);
+    expect(s.state).toBe("waiting");
+    expect(s.waitingOn).toBe("u1");
+    s = run([ev("tool.end", T0 + 4, { tool: "Read", category: "read", toolUseId: "u2", durationMs: 1 })], s);
+    expect(s.state).toBe("waiting");
+    expect(s.inFlight).toEqual([{ toolUseId: "u1", tool: "Bash" }]);
+    s = run([ev("tool.end", T0 + 5, { tool: "Bash", category: "run", toolUseId: "u1", durationMs: 1 })], s);
+    expect(s.state).toBe("working");
+    expect(s.inFlight).toEqual([]);
+  });
+
+  it("falls back to the latest call in flight when no in-flight tool matches the request", () => {
+    const s = run([ev("prompt", T0), ev("tool.start", T0 + 1, { tool: "Read", category: "read", toolUseId: "u2" }), ev("permission.request", T0 + 2, { tool: "Write", category: "edit" })]);
+    expect(s.waitingOn).toBe("u2");
+  });
+
+  it("a stop ends a wait whose tool.end never arrived", () => {
+    const s = run([ev("prompt", T0), ev("tool.start", T0 + 1, { tool: "Write", category: "edit", toolUseId: "u1" }), ev("permission.request", T0 + 2, { tool: "Write", category: "edit" }), ev("stop", T0 + 3, { backgroundTasks: 0 })]);
+    expect(s.state).toBe("idle");
+    expect(s.waitingOn).toBeNull();
+    expect(s.inFlight).toEqual([]);
+  });
+
+  it("waits with no id when nothing is in flight, and any tool.end resumes it", () => {
+    let s = run([ev("permission.request", T0, { tool: "Bash", category: "run" })]);
+    expect(s.state).toBe("waiting");
+    expect(s.waitingOn).toBeNull();
+    s = run([ev("tool.end", T0 + 1, { tool: "Bash", category: "run", toolUseId: "whatever", durationMs: 1 })], s);
+    expect(s.state).toBe("working");
+  });
+
+  it("trusts the stop's own background count over a lost SubagentStop", () => {
+    const cleared = run([ev("prompt", T0), ev("subagent.start", T0 + 1, { agentId: "a1", agentType: "x" }), ev("stop", T0 + 2, { backgroundTasks: 0 })]);
+    expect(cleared.state).toBe("idle");
+    expect(cleared.subagents).toEqual([]);
+    const live = run([ev("prompt", T0), ev("subagent.start", T0 + 1, { agentId: "a1", agentType: "x" }), ev("stop", T0 + 2, { backgroundTasks: 1 })]);
+    expect(live.state).toBe("working");
+    expect(live.subagents).toEqual(["a1"]);
+  });
+
+  it("a stop while waiting with background work resumes on spawn", () => {
+    const s = run([ev("prompt", T0), ev("subagent.start", T0 + 1, { agentId: "a1", agentType: "x" }), ev("tool.start", T0 + 2, { tool: "Write", category: "edit", toolUseId: "u1" }), ev("permission.request", T0 + 3, { tool: "Write", category: "edit" }), ev("stop", T0 + 4, { backgroundTasks: 1 })]);
+    expect(s.state).toBe("working");
+    expect(s.activity).toBe("spawn");
+    expect(s.waitingOn).toBeNull();
+  });
+
+  it("wakes an asleep session into waiting on a permission request", () => {
+    let s = run([ev("prompt", T0), ev("stop", T0 + 1, { backgroundTasks: 0 })]);
+    s = tickSession(s, T0 + 1 + DEFAULT_CONFIG.asleepAfterMs, DEFAULT_CONFIG);
+    expect(s.state).toBe("asleep");
+    s = run([ev("permission.request", T0 + 2 + DEFAULT_CONFIG.asleepAfterMs, { tool: "Bash", category: "run" })], s);
+    expect(s.state).toBe("waiting");
+  });
+
+  it("leaves an idle session idle and activity null on a stray tool.end", () => {
+    const s = run([ev("prompt", T0), ev("stop", T0 + 1, { backgroundTasks: 0 }), ev("tool.end", T0 + 2, { tool: "Read", category: "read", toolUseId: "u1", durationMs: 1 })]);
+    expect(s.state).toBe("idle");
+    expect(s.activity).toBeNull();
+  });
+
+  it("keeps firstSeenAt at the session's creation time across transitions", () => {
+    const start = newSession("s1", "k1", T0);
+    expect(start.firstSeenAt).toBe(T0);
+    const s = run([ev("prompt", T0 + 10), ev("tool.start", T0 + 11, { tool: "Read", category: "read", toolUseId: "u1" }), ev("stop", T0 + 12, { backgroundTasks: 0 }), ev("session.end", T0 + 13, { reason: "other" })], start);
+    expect(s.firstSeenAt).toBe(T0);
   });
 });
