@@ -1,5 +1,5 @@
 import { paneKey } from "../alias/pane";
-import { RedactedEventSchema, type RedactedEvent } from "../schema/events";
+import { EVENT_SCHEMA_VERSION, RedactedEventSchema, type RedactedEvent } from "../schema/events";
 import { RawAgentEntrySchema, RawHookSchema, RawStatusLineSchema, type RawHook, type RawStatusLine } from "../schema/raw";
 import { isAllowed } from "./allowlist";
 import { categoryFor, normaliseTool } from "./categories";
@@ -46,8 +46,15 @@ function isStatusLine(p: RawStatusLine): boolean {
  */
 export function redactPresence(entry: unknown, alive: boolean, ctx: IngestContext): RedactedEvent | null {
   const parsed = RawAgentEntrySchema.safeParse(entry);
-  if (!parsed.success || !isAllowed(parsed.data.cwd, ctx.allowlist)) return null;
-  return validate({ v: 1 as const, t: ctx.now, sessionId: parsed.data.sessionId, paneKey: paneKey(parsed.data.cwd), kind: "presence", alive });
+  if (!parsed.success) return null;
+  const base = envelope(parsed.data.sessionId, parsed.data.cwd, ctx);
+  return base && validate({ ...base, kind: "presence", alive });
+}
+
+/** The fields every redacted event carries, or null when the directory is outside the allowlist. */
+function envelope(sessionId: string, cwd: string, ctx: IngestContext): { v: typeof EVENT_SCHEMA_VERSION; t: number; sessionId: string; paneKey: string } | null {
+  if (!isAllowed(cwd, ctx.allowlist)) return null;
+  return { v: EVENT_SCHEMA_VERSION, t: ctx.now, sessionId, paneKey: paneKey(cwd) };
 }
 
 function validate(event: unknown): RedactedEvent | null {
@@ -56,8 +63,11 @@ function validate(event: unknown): RedactedEvent | null {
 }
 
 function redactHook(p: RawHook, ctx: IngestContext): RedactedEvent | null {
-  if (!isAllowed(p.cwd, ctx.allowlist)) return null;
-  const base = { v: 1 as const, t: ctx.now, sessionId: p.session_id, paneKey: paneKey(p.cwd), ...(p.agent_id ? { agentId: p.agent_id } : {}) };
+  // Internal helpers (the session-naming helper) have an empty agent_type. Nothing of theirs is ours.
+  if (p.agent_id && !p.agent_type) return null;
+  const env = envelope(p.session_id, p.cwd, ctx);
+  if (!env) return null;
+  const base = { ...env, ...(p.agent_id ? { agentId: p.agent_id } : {}) };
   const rawTool = p.tool_name ?? "unknown";
   const toolFields = { tool: normaliseTool(rawTool), category: categoryFor(rawTool) };
   switch (p.hook_event_name) {
@@ -83,8 +93,7 @@ function redactHook(p: RawHook, ctx: IngestContext): RedactedEvent | null {
       return validate({ ...base, kind: "stop", backgroundTasks: (p.background_tasks ?? []).filter((t) => t.type === "subagent").length });
     case "SubagentStart":
     case "SubagentStop":
-      // Internal helpers (the session-naming helper) have an empty agent_type. Drop them.
-      if (!p.agent_id || !p.agent_type) return null;
+      if (!p.agent_id) return null;
       return validate({ ...base, agentId: p.agent_id, kind: p.hook_event_name === "SubagentStart" ? "subagent.start" : "subagent.stop", agentType: p.agent_type });
     default:
       return null;
@@ -92,7 +101,8 @@ function redactHook(p: RawHook, ctx: IngestContext): RedactedEvent | null {
 }
 
 function redactStatus(p: RawStatusLine, ctx: IngestContext): RedactedEvent | null {
-  if (!isAllowed(p.cwd, ctx.allowlist)) return null;
+  const base = envelope(p.session_id, p.cwd, ctx);
+  if (!base) return null;
   const pct = (v: number | null | undefined): number | undefined => (typeof v === "number" ? Math.min(100, Math.max(0, v)) : undefined);
   const contextPct = pct(p.context_window?.used_percentage);
   const costUsd = p.cost?.total_cost_usd;
@@ -100,10 +110,7 @@ function redactStatus(p: RawStatusLine, ctx: IngestContext): RedactedEvent | nul
   const rateLimit7d = pct(p.rate_limits?.seven_day?.used_percentage);
   const model = p.model?.display_name;
   return validate({
-    v: 1 as const,
-    t: ctx.now,
-    sessionId: p.session_id,
-    paneKey: paneKey(p.cwd),
+    ...base,
     kind: "status",
     ...(contextPct !== undefined ? { contextPct } : {}),
     ...(typeof costUsd === "number" ? { costUsd: Math.max(0, costUsd) } : {}),

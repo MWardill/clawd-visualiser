@@ -1,4 +1,4 @@
-import type { RedactedEvent, ToolCategory } from "../schema/events";
+import { EVENT_SCHEMA_VERSION, type RedactedEvent, type ToolCategory } from "../schema/events";
 import { DEFAULT_CONFIG, type StateConfig } from "../state/config";
 import type { Sink, Source } from "./source";
 
@@ -67,7 +67,7 @@ export function createSimulatedFleet(opts: SimulatedFleetOptions = {}): { next(n
   let started = false;
 
   function emit(s: Sim, now: number, body: EventBody): RedactedEvent {
-    return { v: 1, t: now, sessionId: s.id, paneKey: s.paneKey, ...body } as RedactedEvent;
+    return { v: EVENT_SCHEMA_VERSION, t: now, sessionId: s.id, paneKey: s.paneKey, ...body } as RedactedEvent;
   }
 
   function step(s: Sim, now: number, out: RedactedEvent[]): void {

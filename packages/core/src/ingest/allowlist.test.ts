@@ -15,4 +15,16 @@ describe("isAllowed", () => {
     expect(isAllowed("C:\\mwx\\repo", list)).toBe(false);
     expect(isAllowed("C:\\mw\\visualiser", [])).toBe(false);
   });
+
+  it("ignores empty or blank entries instead of admitting every path", () => {
+    expect(isAllowed("/home/me/x", [""])).toBe(false);
+    expect(isAllowed("/home/me/x", ["  "])).toBe(false);
+    expect(isAllowed("C:\\mw\\x", ["", " C:\\mw "])).toBe(true);
+  });
+
+  it("admits everything beneath a root entry", () => {
+    expect(isAllowed("/home/me/x", ["/"])).toBe(true);
+    expect(isAllowed("/", ["/"])).toBe(true);
+    expect(isAllowed("C:\\mw\\x", ["C:\\"])).toBe(true);
+  });
 });

@@ -104,6 +104,18 @@ describe("redact", () => {
     expect(redact({ session_id: "x", cwd }, ctx)).toBeNull();
     expect(redact({ session_id: "x", cwd, workspace: { current_dir: cwd } }, ctx)).toBeNull();
   });
+  it("keeps a Stop whose background_tasks carry entries it cannot read", () => {
+    const odd = { ...common, hook_event_name: "Stop", background_tasks: [{ type: null }, "junk", { type: "subagent" }] };
+    expect(redact(odd, ctx)).toMatchObject({ kind: "stop", backgroundTasks: 1 });
+    expect(redact({ ...common, hook_event_name: "Stop", background_tasks: null }, ctx)).toMatchObject({ kind: "stop", backgroundTasks: 0 });
+  });
+
+  it("drops every event from an internal helper subagent, not only its start and stop", () => {
+    const helper = { ...common, agent_id: "h1", agent_type: "", tool_name: "Bash", tool_use_id: "toolu_09" };
+    expect(redact({ ...helper, hook_event_name: "PreToolUse", tool_input: {} }, ctx)).toBeNull();
+    expect(redact({ ...helper, hook_event_name: "PostToolUse", duration_ms: 1 }, ctx)).toBeNull();
+    expect(redact({ ...helper, hook_event_name: "PermissionRequest" }, ctx)).toBeNull();
+  });
 });
 
 describe("redactPresence", () => {

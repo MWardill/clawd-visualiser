@@ -18,8 +18,9 @@ export const RawHookSchema = z.object({
   agent_id: z.string().optional(),
   agent_type: z.string().optional(),
   // Only the discriminator is named: a background shell's `command` and `description` are tool
-  // input and must never be copied, so they are stripped here.
-  background_tasks: z.array(z.object({ type: z.string().optional() })).optional(),
+  // input and must never be copied, so they are stripped here. An entry that cannot be read counts
+  // for nothing rather than costing the whole Stop, which a session cannot afford to lose.
+  background_tasks: z.array(z.object({ type: z.string().optional() }).catch({})).catch([]).optional(),
   reason: z.string().optional(),
   source: z.string().optional(),
 });
