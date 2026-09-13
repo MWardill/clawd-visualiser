@@ -16,6 +16,8 @@ export type StateConfig = {
   fewPromptsHideMs: number;
   /** A session with more prompts than this stays in view however quiet it is. */
   fewPrompts: number;
+  /** Label a pane with its directory's last segment when its events carry one; otherwise its generated tree name. */
+  folderPaneLabels: boolean;
 };
 
 export const DEFAULT_CONFIG: StateConfig = {
@@ -26,4 +28,5 @@ export const DEFAULT_CONFIG: StateConfig = {
   oneShotHideMs: 3 * 3_600_000,
   fewPromptsHideMs: 24 * 3_600_000,
   fewPrompts: 8,
+  folderPaneLabels: true,
 };

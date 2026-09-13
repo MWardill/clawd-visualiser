@@ -52,6 +52,7 @@ describe("@clawd/core public API", () => {
       "normalisePath",
       "normaliseTool",
       "paneKey",
+      "paneName",
       "parseFixture",
       "redact",
       "redactPresence",

@@ -3,7 +3,8 @@ import type { RedactedEvent } from "../schema/events";
 import type { StateConfig } from "./config";
 import { newSession, reduceSession, tickSession, type SessionState } from "./session";
 
-export type PaneState = { paneKey: string; firstSeenAt: number; sessionIds: string[] };
+/** `name` is the working directory's last segment from the latest event that carried one, or null. */
+export type PaneState = { paneKey: string; firstSeenAt: number; sessionIds: string[]; name: string | null };
 
 /** Plain records rather than Maps so a fleet is JSON-serialisable and trivially comparable in tests. */
 export type Fleet = { sessions: Record<string, SessionState>; panes: Record<string, PaneState> };
@@ -12,11 +13,14 @@ export function emptyFleet(): Fleet {
   return { sessions: {}, panes: {} };
 }
 
-function withSession(f: Fleet, s: SessionState): Fleet {
-  const pane = own(f.panes, s.paneKey) ?? { paneKey: s.paneKey, firstSeenAt: s.firstSeenAt, sessionIds: [] };
-  const panes = pane.sessionIds.includes(s.sessionId)
-    ? f.panes
-    : { ...f.panes, [s.paneKey]: { ...pane, sessionIds: [...pane.sessionIds, s.sessionId] } };
+function withSession(f: Fleet, s: SessionState, name: string | undefined): Fleet {
+  const pane = own(f.panes, s.paneKey) ?? { paneKey: s.paneKey, firstSeenAt: s.firstSeenAt, sessionIds: [], name: null };
+  const joined = pane.sessionIds.includes(s.sessionId);
+  const renamed = name !== undefined && name !== pane.name;
+  const panes =
+    joined && !renamed
+      ? f.panes
+      : { ...f.panes, [s.paneKey]: { ...pane, sessionIds: joined ? pane.sessionIds : [...pane.sessionIds, s.sessionId], ...(renamed ? { name } : {}) } };
   return { sessions: { ...f.sessions, [s.sessionId]: s }, panes };
 }
 
@@ -31,7 +35,7 @@ export function reduceFleet(f: Fleet, e: RedactedEvent, now: number, cfg: StateC
   const existing = own(f.sessions, e.sessionId);
   if (!existing && createsNothing(e)) return f;
   const s = existing ?? newSession(e.sessionId, e.paneKey, now, idleSince(e, now));
-  return withSession(f, reduceSession(s, e, now, cfg));
+  return withSession(f, reduceSession(s, e, now, cfg), e.paneName);
 }
 
 /** Pure: applies timers to every session and drops what has lingered long enough. */

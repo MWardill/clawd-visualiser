@@ -25,6 +25,13 @@ describe("RedactedEventSchema", () => {
     for (const e of events) expect(RedactedEventSchema.parse(e).kind).toBe(e.kind);
   });
 
+  it("carries a pane name only as a single directory name", () => {
+    expect(RedactedEventSchema.parse({ ...base, kind: "prompt", paneName: "visualiser" })).toMatchObject({ paneName: "visualiser" });
+    for (const paneName of ["", "mw/visualiser", "mw\\visualiser", "x".repeat(256)]) {
+      expect(() => RedactedEventSchema.parse({ ...base, kind: "prompt", paneName })).toThrow();
+    }
+  });
+
   it("takes a presence's last activity only as a whole, non-negative time", () => {
     expect(() => RedactedEventSchema.parse({ ...base, kind: "presence", alive: true, lastActiveAt: -1 })).toThrow();
     expect(() => RedactedEventSchema.parse({ ...base, kind: "presence", alive: true, lastActiveAt: 1.5 })).toThrow();

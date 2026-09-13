@@ -82,6 +82,7 @@ type Base = {
   sessionId: string;    // Claude Code's session id; local only, never in a snapshot
   paneKey: string;      // hash of the working directory; local only
   agentId?: string;     // present when the event came from a subagent
+  paneName?: string;    // the working directory's last segment, when the agent keeps it; no separators
 };
 ```
 
@@ -143,7 +144,7 @@ set to null; if one turns up, the sections become nullable too.)
 ## 4. Ingest redaction
 
 ```ts
-type IngestContext = { now: number; allowlist: string[] };
+type IngestContext = { now: number; allowlist: string[]; paneNames?: boolean };
 function redact(raw: unknown, ctx: IngestContext): RedactedEvent | null;
 ```
 
@@ -164,6 +165,12 @@ live entry, `lastActiveAt`, and returns a `presence` event or null. `lastActiveA
 `startedAt`, which is read as epoch milliseconds or an ISO time; a `startedAt` that cannot be read
 is ignored rather than costing the entry. The entry's `name` is session-name content and is never
 named in the schema.
+
+With `ctx.paneNames` set, both functions also keep `paneName`, the last segment of `cwd` as written
+(`paneName(cwd)` in `pane.ts`), on every event they produce. It is the one piece of a path any event
+carries: the schema allows 1 to 255 characters with no separator, and a bare root yields no name.
+The agent sets it unless its `paneLabels` config is `"generated"`; the fixture script never does,
+so fixtures and golden sequences carry no names.
 
 `paneKey(cwd)` is a 64-bit FNV-1a hash of the normalised path, rendered as hex. It is an internal
 key, never published; the snapshot carries the pane alias. Hashing is not for secrecy, it is so the
@@ -259,7 +266,8 @@ the first event for a paneKey and dropped when their last session has been `done
 exit, then are removed. An event that only ends or describes a session (`session.end`, a dead `presence`,
 `history`) creates nothing on first sight: it concerns a session we never knew. A session created by a live
 `presence` that carries `lastActiveAt` is idle since that time, never later than now, rather than
-since the event, so its asleep timer counts from when it last did anything.
+since the event, so its asleep timer counts from when it last did anything. A pane's `name` is the
+`paneName` of the latest event that carried one, or null; an event without one leaves it alone.
 
 ### 5.4 Snapshot derivation
 
@@ -275,6 +283,12 @@ more than `fewPrompts` (8) prompts is always shown, and one with fewer is shown 
 `now − lastActiveAt` is under `oneShotHideMs` (3 hours) for a single prompt or `fewPromptsHideMs`
 (24 hours) for more. A done session is judged like a quiet one, so a session that ends while hidden
 plays no exit. Design: `docs/superpowers/specs/2026-09-13-session-visibility-design.md`.
+
+With `cfg.folderPaneLabels` (default true), a pane with a `name` is labelled with it, numbered among
+all named panes in the fleet in order of first sight when names match without case (`visualiser`,
+`visualiser 2`). Other panes, and every pane when the flag is off, take the alias map's tree label,
+so names replayed from an older log are ignored too. Design:
+`docs/superpowers/specs/2026-09-13-folder-pane-labels-design.md`.
 
 Applies display holds (state and activity), maps session ids and pane keys to aliases and labels, sorts panes and
 sessions by first appearance (sessions tie-breaking on session id, so the order is deterministic
@@ -300,7 +314,7 @@ An event the reducer left untouched (the session is done) yields no lines.
 ## 6. Aliases
 
 - `names.ts`: a fixed list of about sixty animal names (session labels) and a separate list of
-  tree names (pane labels). `ensureSessionAlias(map, sessionId)` and `ensurePaneAlias(map, paneKey)`
+  tree names (pane labels, used when a pane has no directory name, §5.4). `ensureSessionAlias(map, sessionId)` and `ensurePaneAlias(map, paneKey)`
   each return the existing `{ alias, label }` for a known id, or mint the next one; both return
   `{ map, alias, label }` so the caller gets the (possibly unchanged) map back alongside the result
   it asked for. The map is a plain object so the agent can persist it as JSON.

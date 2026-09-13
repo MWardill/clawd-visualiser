@@ -118,9 +118,28 @@ describe("redact", () => {
   });
 });
 
+describe("pane names", () => {
+  const named = { ...ctx, paneNames: true };
+
+  it("keeps the directory's last segment on every event when asked, and nothing else of the path", () => {
+    for (const payload of Object.values(raw)) {
+      const event = redact(payload, named);
+      if (!event) continue;
+      expect(event.paneName).toBe("visualiser");
+      expect(containsForbidden(event, [cwd, "C:\\mw", "mw\\visualiser"])).toBeNull();
+    }
+    expect(redact(raw.prompt, ctx)).not.toHaveProperty("paneName");
+  });
+});
+
 describe("redactPresence", () => {
   /** One entry of `claude agents --json`, shaped as the spike recorded it. */
   const entry = { pid: 1234, cwd, kind: "interactive", startedAt: "2026-09-12T16:20:00.000Z", sessionId: "e82c9e2a", name: "Run whoami bash command" };
+
+  it("keeps the directory's last segment on a presence only when asked", () => {
+    expect(redactPresence(entry, true, { ...ctx, paneNames: true })).toMatchObject({ paneName: "visualiser" });
+    expect(redactPresence(entry, true, ctx)).not.toHaveProperty("paneName");
+  });
 
   it("turns an agents-list entry into a presence event on the same pane, keeping no name or path", () => {
     for (const alive of [true, false]) {

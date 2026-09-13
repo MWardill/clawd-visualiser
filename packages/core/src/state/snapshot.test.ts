@@ -8,6 +8,20 @@ import { deriveSnapshot } from "./snapshot";
 
 
 describe("deriveSnapshot", () => {
+  it("labels a pane with its directory name, numbering a later pane of the same name, and falls back to trees", () => {
+    let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1", paneKey: "k1", paneName: "visualiser" }), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("prompt", T0 + 1, {}, { sessionId: "s2", paneKey: "k2", paneName: "Visualiser" }), T0 + 1, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("prompt", T0 + 2, {}, { sessionId: "s3", paneKey: "k3" }), T0 + 2, DEFAULT_CONFIG);
+    expect(deriveSnapshot(f, emptyAliasMap(), T0 + 10).snapshot.panes.map((p) => p.label)).toEqual(["visualiser", "Visualiser 2", "Ash"]);
+  });
+
+  it("shows only generated pane labels when the config turns directory names off", () => {
+    const f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1", paneKey: "k1", paneName: "visualiser" }), T0, DEFAULT_CONFIG);
+    const { snapshot } = deriveSnapshot(f, emptyAliasMap(), T0 + 10, { ...DEFAULT_CONFIG, folderPaneLabels: false });
+    expect(snapshot.panes.map((p) => p.label)).toEqual(["Oak"]);
+    expect(JSON.stringify(snapshot)).not.toContain("visualiser");
+  });
+
   it("produces a valid snapshot with aliases and no local identifiers", () => {
     let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "session-uuid", paneKey: "deadbeefdeadbeef" }), T0, DEFAULT_CONFIG);
     f = reduceFleet(f, event("tool.start", T0 + 1, { tool: "Read", category: "read", toolUseId: "u1" }, { sessionId: "session-uuid", paneKey: "deadbeefdeadbeef" }), T0 + 1, DEFAULT_CONFIG);
