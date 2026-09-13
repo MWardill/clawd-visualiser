@@ -1,7 +1,7 @@
 import { DEFAULT_CONFIG, type StateConfig } from "@clawd/core";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { agentPaths, defaultTranscriptsDir, loadOrCreateConfig } from "./config";
+import { agentPaths, defaultTranscriptsDir, loadOrCreateConfig, usesFolderPaneLabels } from "./config";
 import { createFocus, powershellFocus, type RunFocusScript } from "./focus/focus";
 import { FleetHost } from "./host/host";
 import { createAgentServer, newIngestCounts, type IngestCounts } from "./http/server";
@@ -79,7 +79,8 @@ export async function startAgent(opts: AgentOptions): Promise<RunningAgent> {
   if (config.allowlist.length === 0) log("config.emptyAllowlist");
 
   const aliasStore = createAliasStore(paths.aliases, { log, now });
-  const host = new FleetHost({ now, config: opts.stateConfig ?? DEFAULT_CONFIG, aliases: await aliasStore.load(), log });
+  const folderLabels = usesFolderPaneLabels(config);
+  const host = new FleetHost({ now, config: { ...(opts.stateConfig ?? DEFAULT_CONFIG), folderPaneLabels: folderLabels }, aliases: await aliasStore.load(), log });
   const poller = createPresencePoller({
     host,
     exec: opts.exec ?? nodeExec,
@@ -89,6 +90,7 @@ export async function startAgent(opts: AgentOptions): Promise<RunningAgent> {
     now,
     log,
     readTranscript: createTranscriptReader(opts.transcriptsDir ?? defaultTranscriptsDir()),
+    paneNames: folderLabels,
   });
   const sensitive = (): readonly string[] => poller.liveDirectories();
   const eventLog = createEventLog(paths.logs, { now, retentionDays: config.logRetentionDays, log, sensitive });

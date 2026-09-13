@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG, emptyAliasMap } from "@clawd/core";
+import { DEFAULT_CONFIG, emptyAliasMap, paneKey } from "@clawd/core";
 import { describe, expect, it, vi } from "vitest";
 import { FleetHost } from "../host/host";
 import { silentLogger } from "../log";
@@ -7,13 +7,13 @@ import { ALLOWED_ROOT, CANARY_CWD, OUTSIDE_CWD, rawAgentEntry } from "../testing
 import { createPresencePoller, type Exec, type ExecResult } from "./poller";
 import type { TranscriptStats } from "./transcripts";
 
-function setup(readTranscript?: (sessionId: string) => Promise<TranscriptStats | null>) {
+function setup(readTranscript?: (sessionId: string) => Promise<TranscriptStats | null>, paneNames = false) {
   const clock = { now: T0 };
   const host = new FleetHost({ now: () => clock.now, config: DEFAULT_CONFIG, aliases: emptyAliasMap(), log: silentLogger });
   let reply: ExecResult = { ok: true, stdout: "[]" };
   const exec = vi.fn<Exec>(async () => reply);
   const log = vi.fn();
-  const poller = createPresencePoller({ host, exec, command: "claude", allowlist: [ALLOWED_ROOT], intervalMs: 10_000, now: () => clock.now, log, ...(readTranscript ? { readTranscript } : {}) });
+  const poller = createPresencePoller({ host, exec, command: "claude", allowlist: [ALLOWED_ROOT], intervalMs: 10_000, now: () => clock.now, log, ...(readTranscript ? { readTranscript } : {}), ...(paneNames ? { paneNames } : {}) });
   return {
     host,
     clock,
@@ -164,6 +164,14 @@ describe("presence poller", () => {
     await t.poller.pollOnce();
     expect(t.host.sessions().has("s1")).toBe(true);
     expect(t.host.snapshot().sessions).toHaveLength(0);
+  });
+
+  it("names a restored pane on the history it sends, when pane names are on", async () => {
+    const t = setup(async () => ({ lastWriteAt: T0, prompts: 12 }), true);
+    t.host.restore([ev("prompt", T0 - 1_000, {}, "s1", paneKey(CANARY_CWD))]);
+    t.list(rawAgentEntry("s1"));
+    await t.poller.pollOnce();
+    expect(t.host.snapshot().panes.map((p) => p.label)).toEqual(["repo"]);
   });
 
   it("quietly drops restored sessions the first successful poll does not list among allowlisted sessions", async () => {

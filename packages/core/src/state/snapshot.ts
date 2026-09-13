@@ -1,7 +1,7 @@
 import { ensurePaneAlias, ensureSessionAlias, type AliasMap } from "../alias/names";
 import { SnapshotSchema, type Activity, type SessionPhase, type SessionSnapshot, type Snapshot } from "../schema/snapshot";
 import { DEFAULT_CONFIG, type StateConfig } from "./config";
-import type { Fleet } from "./fleet";
+import type { Fleet, PaneState } from "./fleet";
 import type { SessionState } from "./session";
 import { isShown } from "./visibility";
 
@@ -17,6 +17,26 @@ export function displayedState(s: SessionState, now: number): SessionPhase {
 }
 
 /**
+ * Labels for the panes that have a directory name: the name, numbered in order of first sight when
+ * panes share it, compared without case (`visualiser`, `visualiser 2`). Every named pane in the fleet
+ * takes its number, shown or not, so a label does not change when another pane is hidden.
+ */
+function folderLabels(f: Fleet): Map<string, string> {
+  const labels = new Map<string, string>();
+  const taken = new Map<string, number>();
+  const named = Object.values(f.panes)
+    .filter((p): p is PaneState & { name: string } => p.name !== null)
+    .sort((a, b) => a.firstSeenAt - b.firstSeenAt || (a.paneKey < b.paneKey ? -1 : a.paneKey > b.paneKey ? 1 : 0));
+  for (const p of named) {
+    const key = p.name.toLowerCase();
+    const n = (taken.get(key) ?? 0) + 1;
+    taken.set(key, n);
+    labels.set(p.paneKey, n === 1 ? p.name : `${p.name} ${n}`);
+  }
+  return labels;
+}
+
+/**
  * The only place a wire Snapshot is made, and the only place local identifiers are left behind.
  * Sessions `isShown` rejects are left out, and so are panes with nothing shown; both stay in the
  * fleet. Returns the alias map too, since new sessions or panes may have been given aliases.
@@ -25,13 +45,14 @@ export function deriveSnapshot(f: Fleet, aliases: AliasMap, now: number, cfg: St
   let map = aliases;
   const shown = Object.values(f.sessions).filter((s) => isShown(s, now, cfg));
   const shownPanes = new Set(shown.map((s) => s.paneKey));
+  const folders = cfg.folderPaneLabels ? folderLabels(f) : new Map<string, string>();
   const panes = Object.values(f.panes)
     .filter((p) => shownPanes.has(p.paneKey))
     .sort((a, b) => a.firstSeenAt - b.firstSeenAt)
     .map((p) => {
       const r = ensurePaneAlias(map, p.paneKey);
       map = r.map;
-      return { pane: r.alias, label: r.label };
+      return { pane: r.alias, label: folders.get(p.paneKey) ?? r.label };
     });
   // First sight, not `since`: sorting by `since` would reshuffle the fleet on every state change.
   const sessions: SessionSnapshot[] = shown

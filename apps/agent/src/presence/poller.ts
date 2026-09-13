@@ -1,4 +1,4 @@
-import { RedactedEventSchema, isAllowed } from "@clawd/core";
+import { RedactedEventSchema, isAllowed, paneName } from "@clawd/core";
 import { exec } from "node:child_process";
 import { z } from "zod";
 import type { FleetHost } from "../host/host";
@@ -60,6 +60,8 @@ export function createPresencePoller(deps: {
   graceMs?: number;
   /** A session's transcript figures: its last write and its typed prompt count. Read once per session per run. */
   readTranscript?: (sessionId: string) => Promise<TranscriptStats | null>;
+  /** Put each listed session's directory name on the presence and history events it builds. */
+  paneNames?: boolean;
 }): PresencePoller {
   const graceMs = deps.graceMs ?? PRESENCE_GRACE_MS;
   let targets = new Map<string, FocusTarget>();
@@ -109,9 +111,12 @@ export function createPresencePoller(deps: {
     }
     targets = next;
     const allowed = new Set<string>();
+    const cwdOf = new Map<string, string>();
     for (const entry of entries) {
       const listedEntry = ListedSchema.safeParse(entry);
-      if (listedEntry.success && isAllowed(listedEntry.data.cwd, deps.allowlist)) allowed.add(listedEntry.data.sessionId);
+      if (!listedEntry.success || !isAllowed(listedEntry.data.cwd, deps.allowlist)) continue;
+      allowed.add(listedEntry.data.sessionId);
+      cwdOf.set(listedEntry.data.sessionId, listedEntry.data.cwd);
     }
     deps.host.settleRestored(allowed);
     const read = await readUncounted(allowed);
@@ -119,7 +124,7 @@ export function createPresencePoller(deps: {
     const lastWriteAt = new Map<string, number>();
     for (const [id, stats] of read) if (stats) lastWriteAt.set(id, stats.lastWriteAt);
     const sessions = deps.host.sessions();
-    for (const e of reconcile({ entries, sessions, lastListedAt, ended: deps.host.endedIds(), now, allowlist: deps.allowlist, graceMs, lastWriteAt })) {
+    for (const e of reconcile({ entries, sessions, lastListedAt, ended: deps.host.endedIds(), now, allowlist: deps.allowlist, graceMs, lastWriteAt, paneNames: deps.paneNames === true })) {
       deps.host.ingest(e);
     }
     // Counts go to sessions now in the fleet, including those reconcile just brought in.
@@ -129,7 +134,9 @@ export function createPresencePoller(deps: {
       if (!view) continue;
       counted.add(id);
       if (!stats || stats.prompts === 0) continue;
-      const history = RedactedEventSchema.safeParse({ v: 1, t: now, sessionId: id, paneKey: view.paneKey, kind: "history", prompts: stats.prompts, lastActiveAt: Math.floor(stats.lastWriteAt) });
+      // The name also labels a restored pane whose log predates pane names.
+      const name = deps.paneNames === true ? paneName(cwdOf.get(id) ?? "") : null;
+      const history = RedactedEventSchema.safeParse({ v: 1, t: now, sessionId: id, paneKey: view.paneKey, ...(name === null ? {} : { paneName: name }), kind: "history", prompts: stats.prompts, lastActiveAt: Math.floor(stats.lastWriteAt) });
       if (history.success) deps.host.ingest(history.data);
     }
     deps.host.forgetEnded(listed);

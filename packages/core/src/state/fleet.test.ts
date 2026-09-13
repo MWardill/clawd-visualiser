@@ -23,6 +23,14 @@ describe("reduceFleet", () => {
     expect(f.panes["k1"]?.sessionIds).toEqual(["s1"]);
   });
 
+  it("names a pane from the latest event that carries a pane name, and keeps it through events that carry none", () => {
+    let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1", paneKey: "k1" }), T0, DEFAULT_CONFIG);
+    expect(f.panes["k1"]?.name).toBeNull();
+    f = reduceFleet(f, event("stop", T0 + 1, { backgroundTasks: 0 }, { sessionId: "s1", paneKey: "k1", paneName: "visualiser" }), T0 + 1, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("prompt", T0 + 2, {}, { sessionId: "s2", paneKey: "k1" }), T0 + 2, DEFAULT_CONFIG);
+    expect(f.panes["k1"]).toMatchObject({ name: "visualiser", sessionIds: ["s1", "s2"] });
+  });
+
   it("seeds a session from a live presence but ignores presence for unknown dead sessions", () => {
     let f = reduceFleet(emptyFleet(), event("presence", T0, { alive: true }, { sessionId: "s1", paneKey: "k1" }), T0, DEFAULT_CONFIG);
     expect(f.sessions["s1"]?.state).toBe("idle");

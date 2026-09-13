@@ -10,7 +10,7 @@ type Body<K extends RedactedEventKind> = Omit<Extract<RedactedEvent, { kind: K }
 /** The body may be left out only for kinds that have nothing required beyond the envelope. */
 type Args<K extends RedactedEventKind> = {} extends Body<K> ? [body?: Body<K>, ids?: EventIds] : [body: Body<K>, ids?: EventIds];
 
-export type EventIds = { sessionId?: string; paneKey?: string };
+export type EventIds = { sessionId?: string; paneKey?: string; paneName?: string };
 
 /**
  * A redacted event for tests, typed per kind so a malformed body fails to compile rather than slip
@@ -18,5 +18,6 @@ export type EventIds = { sessionId?: string; paneKey?: string };
  */
 export function event<K extends RedactedEventKind>(kind: K, t: number, ...args: Args<K>): RedactedEvent {
   const [body, ids] = args as [Body<K> | undefined, EventIds | undefined];
-  return { v: EVENT_SCHEMA_VERSION, t, sessionId: ids?.sessionId ?? "s1", paneKey: ids?.paneKey ?? "k1", kind, ...body } as RedactedEvent;
+  const named = ids?.paneName === undefined ? {} : { paneName: ids.paneName };
+  return { v: EVENT_SCHEMA_VERSION, t, sessionId: ids?.sessionId ?? "s1", paneKey: ids?.paneKey ?? "k1", ...named, kind, ...body } as RedactedEvent;
 }

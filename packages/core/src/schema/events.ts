@@ -12,6 +12,9 @@ const base = {
   sessionId: z.string().min(1),
   paneKey: z.string().min(1),
   agentId: z.string().min(1).optional(),
+  // The working directory's last segment, for the pane's label, when the agent keeps it. Never a
+  // path: the schema refuses separators.
+  paneName: z.string().min(1).max(255).regex(/^[^\\/]+$/).optional(),
 };
 
 const tool = { tool: z.string().min(1), category: ToolCategorySchema };

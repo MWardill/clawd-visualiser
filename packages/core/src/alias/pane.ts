@@ -24,3 +24,13 @@ export function paneKey(cwd: string): string {
   }
   return h.toString(16).padStart(16, "0");
 }
+
+/**
+ * The last segment of a working directory as written, for a pane's label: `visualiser` for
+ * `C:\mw\visualiser`. Null when the path names no directory, such as a bare drive root, or when the
+ * segment is longer than a directory name can be. The result never holds a separator.
+ */
+export function paneName(cwd: string): string | null {
+  const last = cwd.split(/[\\/]+/).filter((segment) => segment.length > 0).at(-1);
+  return last === undefined || last.endsWith(":") || last.length > 255 ? null : last;
+}

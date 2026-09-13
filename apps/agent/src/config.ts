@@ -49,9 +49,15 @@ export const AgentConfigSchema = z
     claudeCommand: z.string().min(1),
     logRetentionDays: z.number().int().min(1),
     wrappedStatusLine: WrappedStatusLineSchema.optional(),
+    paneLabels: z.enum(["folder", "generated"]).optional(),
   })
   .strict();
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
+
+/** Whether panes are named after their directory's last segment: yes, unless `paneLabels` is "generated". */
+export function usesFolderPaneLabels(config: Pick<AgentConfig, "paneLabels">): boolean {
+  return config.paneLabels !== "generated";
+}
 
 export function defaultConfig(token: string = randomBytes(32).toString("hex")): AgentConfig {
   return {
@@ -63,6 +69,7 @@ export function defaultConfig(token: string = randomBytes(32).toString("hex")): 
     pollIntervalMs: 10_000,
     claudeCommand: "claude",
     logRetentionDays: 7,
+    paneLabels: "folder",
   };
 }
 

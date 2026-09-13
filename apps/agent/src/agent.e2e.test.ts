@@ -57,6 +57,7 @@ describe("agent end to end", () => {
     const bodies: string[] = [];
     const snapshot = await send(port, { path: "/api/snapshot" });
     expect(SnapshotSchema.parse(JSON.parse(snapshot.body)).sessions.map((s) => s.alias)).toEqual(["agent-1", "agent-2"]);
+    expect(SnapshotSchema.parse(JSON.parse(snapshot.body)).panes.map((p) => p.label)).toEqual(["repo"]);
     bodies.push(snapshot.body, (await send(port, { path: "/api/health" })).body);
     for (const alias of ["agent-1", "agent-2"]) {
       const reply = await send(port, { path: `/api/ticker/${alias}` });

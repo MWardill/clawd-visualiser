@@ -1,10 +1,15 @@
-import { paneKey } from "../alias/pane";
+import { paneKey, paneName } from "../alias/pane";
 import { EVENT_SCHEMA_VERSION, RedactedEventSchema, type RedactedEvent } from "../schema/events";
 import { RawAgentEntrySchema, RawHookSchema, RawStatusLineSchema, type RawHook, type RawStatusLine } from "../schema/raw";
 import { isAllowed } from "./allowlist";
 import { categoryFor, normaliseTool } from "./categories";
 
-export type IngestContext = { now: number; allowlist: readonly string[] };
+export type IngestContext = {
+  now: number;
+  allowlist: readonly string[];
+  /** Keep the working directory's last segment on every event as `paneName`, for pane labels. Off unless set. */
+  paneNames?: boolean;
+};
 
 /** Payload fields that must never survive ingest. Tested against every fixture. */
 export const FORBIDDEN_KEYS = [
@@ -57,9 +62,10 @@ export function redactPresence(entry: unknown, alive: boolean, ctx: IngestContex
 }
 
 /** The fields every redacted event carries, or null when the directory is outside the allowlist. */
-function envelope(sessionId: string, cwd: string, ctx: IngestContext): { v: typeof EVENT_SCHEMA_VERSION; t: number; sessionId: string; paneKey: string } | null {
+function envelope(sessionId: string, cwd: string, ctx: IngestContext): { v: typeof EVENT_SCHEMA_VERSION; t: number; sessionId: string; paneKey: string; paneName?: string } | null {
   if (!isAllowed(cwd, ctx.allowlist)) return null;
-  return { v: EVENT_SCHEMA_VERSION, t: ctx.now, sessionId, paneKey: paneKey(cwd) };
+  const name = ctx.paneNames === true ? paneName(cwd) : null;
+  return { v: EVENT_SCHEMA_VERSION, t: ctx.now, sessionId, paneKey: paneKey(cwd), ...(name === null ? {} : { paneName: name }) };
 }
 
 function validate(event: unknown): RedactedEvent | null {
