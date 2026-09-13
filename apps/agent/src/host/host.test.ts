@@ -53,6 +53,46 @@ describe("FleetHost against core's fixtures", () => {
   });
 });
 
+describe("FleetHost restore", () => {
+  it("replays logged events at their recorded times, with their ticker lines, without writing them back", () => {
+    const { host, seen } = makeHost(T0 + 5 * 60_000);
+    host.restore([ev("prompt", T0, {}), ev("tool.start", T0 + 1_000, { tool: "Bash", category: "run", toolUseId: "u1" })]);
+    expect(seen.events).toEqual([]);
+    expect(host.sessions().get("s1")).toEqual({ paneKey: "pane-key-1", state: "working", firstSeenAt: T0, lastEventAt: T0 + 1_000 });
+    expect(host.snapshot().sessions[0]).toMatchObject({ state: "working", activity: "run", since: iso(T0) });
+    expect(host.tickerFor("agent-1")?.map((line) => line.t)).toEqual([iso(T0), iso(T0 + 1_000)]);
+  });
+
+  it("brings a session idle in the log back asleep once it has been quiet long enough", () => {
+    const { host, clock } = makeHost(T0 + DEFAULT_CONFIG.asleepAfterMs + 2_000);
+    host.restore([ev("prompt", T0, {}), ev("stop", T0 + 1_000, { backgroundTasks: 0 })]);
+    clock.now += DEFAULT_CONFIG.minDisplayMs;
+    expect(host.snapshot().sessions[0]?.state).toBe("asleep");
+  });
+
+  it("keeps a session the log shows ended out of the fleet, even when a poll still lists it", () => {
+    const { host } = makeHost(T0 + 60_000);
+    host.restore([ev("prompt", T0, {}), ev("session.end", T0 + 1, { reason: "other" })]);
+    expect(host.sessionCount()).toBe(0);
+    host.ingest(ev("presence", T0 + 60_000, { alive: true }));
+    expect(host.sessionCount()).toBe(0);
+  });
+
+  it("drops restored sessions the first poll does not list, keeps those heard from since, and decides only once", () => {
+    const { host, clock, seen } = makeHost(T0 + 60_000);
+    host.restore([ev("prompt", T0, {}, "s1"), ev("prompt", T0, {}, "s2"), ev("prompt", T0, {}, "s3")]);
+    host.ingest(ev("tool.start", clock.now, { tool: "Read", category: "read", toolUseId: "u1" }, "s3"));
+    const tickers = seen.tickers.length;
+    host.settleRestored(new Set(["s1"]));
+    expect([...host.sessions().keys()]).toEqual(["s1", "s3"]);
+    expect(host.snapshot().sessions).toHaveLength(2);
+    expect(host.endedIds().size).toBe(0);
+    expect(seen.tickers).toHaveLength(tickers);
+    host.settleRestored(new Set());
+    expect([...host.sessions().keys()]).toEqual(["s1", "s3"]);
+  });
+});
+
 describe("FleetHost", () => {
   it("reduces an event and emits the event, its ticker lines under the session alias, and a snapshot", () => {
     const { host, clock, seen } = makeHost();

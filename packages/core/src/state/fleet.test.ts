@@ -30,6 +30,21 @@ describe("reduceFleet", () => {
     expect(f.sessions["ghost"]).toBeUndefined();
   });
 
+  it("seeds a session from presence as idle since it was last active, so a long-quiet one sleeps on the next tick", () => {
+    const quietSince = T0 - DEFAULT_CONFIG.asleepAfterMs - 1;
+    let f = reduceFleet(emptyFleet(), event("presence", T0, { alive: true, lastActiveAt: quietSince }), T0, DEFAULT_CONFIG);
+    expect(f.sessions["s1"]).toMatchObject({ state: "idle", since: quietSince, firstSeenAt: T0, lastEventAt: T0 });
+    f = tickFleet(f, T0, DEFAULT_CONFIG);
+    expect(f.sessions["s1"]?.state).toBe("asleep");
+  });
+
+  it("never dates a seeded session in the future, and ignores last activity for a session it knows", () => {
+    let f = reduceFleet(emptyFleet(), event("presence", T0, { alive: true, lastActiveAt: T0 + 60_000 }), T0, DEFAULT_CONFIG);
+    expect(f.sessions["s1"]?.since).toBe(T0);
+    f = reduceFleet(f, event("presence", T0 + 10, { alive: true, lastActiveAt: T0 - 3_600_000 }), T0 + 10, DEFAULT_CONFIG);
+    expect(f.sessions["s1"]?.since).toBe(T0);
+  });
+
   it("removes done sessions and empty panes after the linger period", () => {
     let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1", paneKey: "k1" }), T0, DEFAULT_CONFIG);
     f = reduceFleet(f, event("session.end", T0 + 10, { reason: "other" }, { sessionId: "s1", paneKey: "k1" }), T0 + 10, DEFAULT_CONFIG);

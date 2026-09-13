@@ -100,7 +100,7 @@ Variants, with their extra fields:
 | `subagent.start` | `agentId`, `agentType: string` | SubagentStart |
 | `subagent.stop` | `agentId`, `agentType` | SubagentStop |
 | `status` | `contextPct?: number`, `costUsd?: number`, `rateLimit5h?: number`, `rateLimit7d?: number`, `model?: string` | status line command |
-| `presence` | `alive: boolean` | `redactPresence()` over one agents-list entry, one per known session |
+| `presence` | `alive: boolean`, `lastActiveAt?: number` | `redactPresence()` over one agents-list entry, one per known session. `lastActiveAt`, on a live presence only, is when the session last did anything |
 
 `tool` is the built-in tool name, or `"mcp"` for any MCP tool (open question 5 in the PRD).
 `category` is derived by `categories.ts`: `read`, `edit`, `run`, `web`, `spawn`, `other`.
@@ -156,10 +156,13 @@ function redact(raw: unknown, ctx: IngestContext): RedactedEvent | null;
   `transcript_path`, `agent_transcript_path`, `session_name`, `cwd` (it becomes `paneKey`), or the
   status line's `workspace`. These names form the **forbidden list** exported for tests.
 
-`redactPresence(entry, alive, ctx)` is the same function for the presence poll: it parses one
-agents-list entry, keeps only `sessionId` and the pane key its `cwd` hashes to, and returns a
-`presence` event or null. The entry's `name` is session-name content and is never named in the
-schema.
+`redactPresence(entry, alive, ctx, lastWriteAt?)` is the same function for the presence poll: it
+parses one agents-list entry, keeps only `sessionId`, the pane key its `cwd` hashes to and, for a
+live entry, `lastActiveAt`, and returns a `presence` event or null. `lastActiveAt` is the later of
+`lastWriteAt` (the session's transcript's last write, when the caller found one) and the entry's
+`startedAt`, which is read as epoch milliseconds or an ISO time; a `startedAt` that cannot be read
+is ignored rather than costing the entry. The entry's `name` is session-name content and is never
+named in the schema.
 
 `paneKey(cwd)` is a 64-bit FNV-1a hash of the normalised path, rendered as hex. It is an internal
 key, never published; the snapshot carries the pane alias. Hashing is not for secrecy, it is so the
@@ -251,7 +254,9 @@ go through `own()`, so an id such as `constructor` is never an inherited hit. Pa
 the first event for a paneKey and dropped when their last session has been `done` for
 `doneLingerMs`. `done` sessions themselves linger for the same period so the view can play the
 exit, then are removed. An event that only ever ends a session (`session.end`, a dead `presence`)
-creates nothing on first sight: it describes a session we never knew.
+creates nothing on first sight: it describes a session we never knew. A session created by a live
+`presence` that carries `lastActiveAt` is idle since that time, never later than now, rather than
+since the event, so its asleep timer counts from when it last did anything.
 
 ### 5.4 Snapshot derivation
 

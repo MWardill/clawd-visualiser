@@ -48,6 +48,8 @@ export class FleetHost {
   private readonly buffers = new Map<string, TickerEvent[]>();
   private readonly lastAccepted = new Map<string, { kind: RedactedEvent["kind"]; at: number }>();
   private readonly ended = new Set<string>();
+  /** Sessions brought back by restore() that no poll has confirmed and no live event has touched. */
+  private readonly restored = new Set<string>();
   private readonly listeners = new Set<HostListener>();
   private lastSnapshotKey: string | null = null;
   private readonly deps: HostDeps;
@@ -66,15 +68,45 @@ export class FleetHost {
 
   ingest(e: RedactedEvent): void {
     const now = this.deps.now();
-    if (this.isNoise(e, now)) return;
-    if (e.kind === "session.start") this.ended.delete(e.sessionId);
-    const applied = applyEvent(this.fleet, e, now, this.deps.config);
-    this.fleet = applied.fleet;
-    if (endsSession(e)) this.ended.add(e.sessionId);
-    this.lastAccepted.set(e.sessionId, { kind: e.kind, at: now });
-    this.emit((l) => l.event?.(e));
-    for (const line of applied.ticker) this.pushTicker(e.sessionId, line);
-    this.refresh(now);
+    if (this.accept(e, now, true)) this.refresh(now);
+  }
+
+  /**
+   * Replays the event log at startup, each event at its recorded time, so sessions come back in the
+   * state they were in when the agent stopped. Nothing is written back to the log. The log cannot
+   * say which sessions closed while the agent was down, so what it brings back waits on the first
+   * successful poll (settleRestored).
+   */
+  restore(events: readonly RedactedEvent[]): void {
+    const now = this.deps.now();
+    for (const e of events) this.accept(e, Math.min(e.t, now), false);
+    this.tick();
+    for (const id of Object.keys(this.fleet.sessions)) this.restored.add(id);
+  }
+
+  /**
+   * Given the allowlisted ids of the first successful poll after a restore, removes the restored
+   * sessions it does not list: they closed while the agent was down, so there is no exit to play and
+   * no done state. A session heard from since the restore has proved itself and is kept. Only the
+   * first call decides; later ones do nothing.
+   */
+  settleRestored(listed: ReadonlySet<string>): void {
+    if (this.restored.size === 0) return;
+    const drop = new Set([...this.restored].filter((id) => !listed.has(id)));
+    this.restored.clear();
+    if (![...drop].some((id) => this.session(id))) return;
+    const sessions = Object.fromEntries(Object.entries(this.fleet.sessions).filter(([id]) => !drop.has(id)));
+    const panes: Fleet["panes"] = {};
+    for (const p of Object.values(this.fleet.panes)) {
+      const sessionIds = p.sessionIds.filter((id) => !drop.has(id));
+      if (sessionIds.length > 0) panes[p.paneKey] = { ...p, sessionIds };
+    }
+    this.fleet = { sessions, panes };
+    for (const id of drop) {
+      this.buffers.delete(id);
+      this.lastAccepted.delete(id);
+    }
+    this.refresh(this.deps.now());
   }
 
   tick(): void {
@@ -133,6 +165,25 @@ export class FleetHost {
 
   aliases(): AliasMap {
     return this.aliasMap;
+  }
+
+  /**
+   * One event through §5.1, reduced at `now`. False when it was dropped as noise. A recorded event
+   * is live: it goes to the log and proves its session alive. A restored one is neither.
+   */
+  private accept(e: RedactedEvent, now: number, record: boolean): boolean {
+    if (this.isNoise(e, now)) return false;
+    if (e.kind === "session.start") this.ended.delete(e.sessionId);
+    const applied = applyEvent(this.fleet, e, now, this.deps.config);
+    this.fleet = applied.fleet;
+    if (endsSession(e)) this.ended.add(e.sessionId);
+    this.lastAccepted.set(e.sessionId, { kind: e.kind, at: now });
+    if (record) {
+      this.restored.delete(e.sessionId);
+      this.emit((l) => l.event?.(e));
+    }
+    for (const line of applied.ticker) this.pushTicker(e.sessionId, line);
+    return true;
   }
 
   private session(id: string): SessionState | undefined {

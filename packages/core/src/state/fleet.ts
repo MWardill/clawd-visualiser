@@ -23,11 +23,14 @@ function withSession(f: Fleet, s: SessionState): Fleet {
 /** An event that only ever ends a session says nothing about one we have never seen. */
 const endsSession = (e: RedactedEvent): boolean => e.kind === "session.end" || (e.kind === "presence" && !e.alive);
 
+/** A session first seen through presence has been idle since it was last active, not since now. */
+const idleSince = (e: RedactedEvent, now: number): number => (e.kind === "presence" && e.lastActiveAt !== undefined ? e.lastActiveAt : now);
+
 /** Pure: routes an event to its session, creating the session and pane on first sight. */
 export function reduceFleet(f: Fleet, e: RedactedEvent, now: number, cfg: StateConfig): Fleet {
   const existing = own(f.sessions, e.sessionId);
   if (!existing && endsSession(e)) return f;
-  const s = existing ?? newSession(e.sessionId, e.paneKey, now);
+  const s = existing ?? newSession(e.sessionId, e.paneKey, now, idleSince(e, now));
   return withSession(f, reduceSession(s, e, now, cfg));
 }
 

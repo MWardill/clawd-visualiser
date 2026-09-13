@@ -6,6 +6,7 @@
 export type LogCode =
   | "agent.started"
   | "agent.stopped"
+  | "agent.restored"
   | "config.emptyAllowlist"
   | "ingest.counts"
   | "ingest.failed"
@@ -14,6 +15,7 @@ export type LogCode =
   | "store.aliasesRecovered"
   | "store.aliasesSaveFailed"
   | "store.logWriteFailed"
+  | "store.logReadFailed"
   | "store.retentionFailed"
   | "server.error"
   | "server.portInUse"

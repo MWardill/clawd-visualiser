@@ -1,5 +1,5 @@
 import { parseFixture, type RedactedEvent } from "@clawd/core";
-import { readFile, readdir, writeFile } from "node:fs/promises";
+import { appendFile, readFile, readdir, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { useTempDirs } from "../testing/tmp";
@@ -77,5 +77,22 @@ describe("event log", () => {
 
   it("sweeps a missing directory without failing", async () => {
     await createEventLog(join(await tempDir(), "absent"), { now: () => DAY1, retentionDays: 7, log: vi.fn() }).sweep();
+  });
+
+  it("reads back yesterday's and today's events in order, skipping older days and damaged lines", async () => {
+    const dir = await tempDir();
+    const writer = createEventLog(dir, { now: () => DAY1, retentionDays: 7, log: vi.fn() });
+    writer.append(prompt(DAY1 - 2 * 86_400_000, "older"));
+    writer.append(prompt(DAY1, "s1"));
+    writer.append(prompt(DAY2, "s2"));
+    await writer.flush();
+    // A line cut short by a crash, and one that is JSON but not an event.
+    await appendFile(join(dir, logFileName(DAY2)), '{"v":1,"t":5,"kind":"pro\n{"v":1,"kind":"prompt"}\n');
+    const reader = createEventLog(dir, { now: () => DAY2 + 3_600_000, retentionDays: 7, log: vi.fn() });
+    expect(await reader.readRecent()).toEqual([prompt(DAY1, "s1"), prompt(DAY2, "s2")]);
+  });
+
+  it("reads nothing back from a missing directory", async () => {
+    expect(await createEventLog(join(await tempDir(), "absent"), { now: () => DAY1, retentionDays: 7, log: vi.fn() }).readRecent()).toEqual([]);
   });
 });

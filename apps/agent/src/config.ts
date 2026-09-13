@@ -18,10 +18,20 @@ export function defaultHome(env: NodeJS.ProcessEnv = process.env): string {
   return fromEnv ? fromEnv : join(homedir(), ".clawd");
 }
 
-/** Claude Code's user settings file: under `CLAUDE_CONFIG_DIR` when set, else `~/.claude`. */
-export function defaultSettingsPath(env: NodeJS.ProcessEnv = process.env): string {
+/** Claude Code's user directory: `CLAUDE_CONFIG_DIR` when set, else `~/.claude`. */
+function claudeDir(env: NodeJS.ProcessEnv): string {
   const dir = env.CLAUDE_CONFIG_DIR?.trim();
-  return join(dir ? dir : join(homedir(), ".claude"), "settings.json");
+  return dir ? dir : join(homedir(), ".claude");
+}
+
+/** Claude Code's user settings file. */
+export function defaultSettingsPath(env: NodeJS.ProcessEnv = process.env): string {
+  return join(claudeDir(env), "settings.json");
+}
+
+/** Where Claude Code keeps session transcripts, one folder per project. */
+export function defaultTranscriptsDir(env: NodeJS.ProcessEnv = process.env): string {
+  return join(claudeDir(env), "projects");
 }
 
 /** The user's previous status line, kept verbatim so uninstall can put it back exactly. */

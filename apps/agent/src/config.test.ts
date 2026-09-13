@@ -10,6 +10,7 @@ import {
   defaultConfig,
   defaultHome,
   defaultSettingsPath,
+  defaultTranscriptsDir,
   loadOrCreateConfig,
   readConfig,
   saveConfig,
@@ -36,6 +37,11 @@ describe("paths", () => {
   it("finds Claude Code's user settings, honouring CLAUDE_CONFIG_DIR", () => {
     expect(defaultSettingsPath({ CLAUDE_CONFIG_DIR: "/cc" })).toBe(join("/cc", "settings.json"));
     expect(defaultSettingsPath({})).toBe(join(homedir(), ".claude", "settings.json"));
+  });
+
+  it("finds Claude Code's transcripts folder, honouring CLAUDE_CONFIG_DIR", () => {
+    expect(defaultTranscriptsDir({ CLAUDE_CONFIG_DIR: "/cc" })).toBe(join("/cc", "projects"));
+    expect(defaultTranscriptsDir({})).toBe(join(homedir(), ".claude", "projects"));
   });
 });
 

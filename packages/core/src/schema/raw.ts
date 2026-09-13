@@ -42,8 +42,16 @@ export const RawStatusLineSchema = z.object({
 export type RawStatusLine = z.infer<typeof RawStatusLineSchema>;
 
 /**
- * One entry of `claude agents --json`, the presence poll. The entry also carries `pid`, `kind`,
- * `startedAt` and `name`; `name` is session-name content, so none of them are named here.
+ * One entry of `claude agents --json`, the presence poll. The entry also carries `pid`, `kind` and
+ * `name`; `name` is session-name content, so none of them are named here. `startedAt` is epoch
+ * milliseconds in the CLI measured today and was an ISO time in the spike, so both are read; one
+ * that cannot be read is dropped rather than costing the entry.
  */
-export const RawAgentEntrySchema = z.object({ sessionId: z.string().min(1), cwd: z.string().min(1) });
+const StartedAtSchema = z
+  .union([z.number(), z.string().transform((s) => Date.parse(s))])
+  .pipe(z.number().int().nonnegative())
+  .optional()
+  .catch(undefined);
+
+export const RawAgentEntrySchema = z.object({ sessionId: z.string().min(1), cwd: z.string().min(1), startedAt: StartedAtSchema });
 export type RawAgentEntry = z.infer<typeof RawAgentEntrySchema>;

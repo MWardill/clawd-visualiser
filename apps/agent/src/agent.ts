@@ -1,7 +1,7 @@
 import { DEFAULT_CONFIG, type StateConfig } from "@clawd/core";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { agentPaths, loadOrCreateConfig } from "./config";
+import { agentPaths, defaultTranscriptsDir, loadOrCreateConfig } from "./config";
 import { createFocus, powershellFocus, type RunFocusScript } from "./focus/focus";
 import { FleetHost } from "./host/host";
 import { createAgentServer, newIngestCounts, type IngestCounts } from "./http/server";
@@ -9,6 +9,7 @@ import { createStreamHub } from "./http/sse";
 import { isErrno } from "./json-file";
 import { createLogger, type Logger } from "./log";
 import { createPresencePoller, nodeExec, type Exec } from "./presence/poller";
+import { createTranscriptClock } from "./presence/transcripts";
 import { createAliasStore } from "./store/alias-store";
 import { createEventLog } from "./store/event-log";
 
@@ -23,6 +24,8 @@ export type AgentOptions = {
   platform?: NodeJS.Platform;
   stateConfig?: StateConfig;
   tickMs?: number;
+  /** Claude Code's transcripts folder, whose file times date sessions first seen by the poll. */
+  transcriptsDir?: string;
 };
 
 export type RunningAgent = { port: number; stop(): Promise<void> };
@@ -77,7 +80,16 @@ export async function startAgent(opts: AgentOptions): Promise<RunningAgent> {
 
   const aliasStore = createAliasStore(paths.aliases, { log, now });
   const host = new FleetHost({ now, config: opts.stateConfig ?? DEFAULT_CONFIG, aliases: await aliasStore.load(), log });
-  const poller = createPresencePoller({ host, exec: opts.exec ?? nodeExec, command: config.claudeCommand, allowlist: config.allowlist, intervalMs: config.pollIntervalMs, now, log });
+  const poller = createPresencePoller({
+    host,
+    exec: opts.exec ?? nodeExec,
+    command: config.claudeCommand,
+    allowlist: config.allowlist,
+    intervalMs: config.pollIntervalMs,
+    now,
+    log,
+    lastWrite: createTranscriptClock(opts.transcriptsDir ?? defaultTranscriptsDir()),
+  });
   const sensitive = (): readonly string[] => poller.liveDirectories();
   const eventLog = createEventLog(paths.logs, { now, retentionDays: config.logRetentionDays, log, sensitive });
   const stream = createStreamHub({ current: () => host.snapshot(), log, sensitive, now });
@@ -102,6 +114,8 @@ export async function startAgent(opts: AgentOptions): Promise<RunningAgent> {
     sensitive,
   });
 
+  // Read before listening, applied after: an agent that cannot bind its port changes nothing.
+  const history = await eventLog.readRecent();
   const requestedPort = opts.port ?? config.port;
   let port: number;
   try {
@@ -113,6 +127,9 @@ export async function startAgent(opts: AgentOptions): Promise<RunningAgent> {
     }
     throw err;
   }
+  // Synchronous, straight after listen resolves, so no request is handled before the fleet is restored.
+  host.restore(history);
+  log("agent.restored", { events: history.length, sessions: host.sessionCount() });
 
   const tick = setInterval(() => host.tick(), opts.tickMs ?? TICK_MS);
   const sweep = setInterval(() => void eventLog.sweep(), SWEEP_MS);
