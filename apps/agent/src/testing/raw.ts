@@ -1,12 +1,13 @@
 /**
  * Raw payloads shaped like the ones measured in docs/spike-hooks.md. Every field that must never
- * survive ingest carries the canary marker, and so does the session's directory name, so a test can
- * assert that no sink ever contains the marker.
+ * survive ingest carries the canary marker, and so does the parent of the session's directory, so a
+ * test can assert that no sink ever contains the marker. The directory's own name, `repo`, is the
+ * one part of the path the agent keeps, as the pane label.
  */
 export const CANARY = "CANARY";
 /** The allowlisted root the canary sessions run under. */
 export const ALLOWED_ROOT = "C:/work";
-export const CANARY_CWD = "C:/work/CANARY-repo";
+export const CANARY_CWD = "C:/work/CANARY-parent/repo";
 export const OUTSIDE_CWD = "C:/private/CANARY-elsewhere";
 
 const content = {

@@ -56,6 +56,11 @@ These bind every module and every test.
    once per run to count typed prompts (§6.4). The parser names only `type`, `origin.kind`,
    `isMeta` and `isSidechain`. The reader returns a count and a modified time; no path, content or
    error leaves it.
+8. **A pane keeps its directory's last segment, and nothing more.** Unless `paneLabels` is
+   `"generated"` (§7.2), redaction keeps the working directory's last segment as `paneName`, for the
+   pane's label (core design §4). The schema refuses separators, so no parent directory can follow
+   it, and the sinks still reject the live working directories in full. Test sessions run in
+   `C:/work/CANARY-parent/repo`, so the canary check still covers the rest of the path.
 
 ## 3. Package layout
 
@@ -155,7 +160,8 @@ function ingestHook(raw: unknown, ctx: IngestContext): RedactedEvent | null;
 function ingestStatus(raw: unknown, ctx: IngestContext): RedactedEvent | null;
 ```
 
-Both call core's `redact(raw, { now, allowlist })`. `ingestStatus` returns null for anything
+Both call core's `redact(raw, { now, allowlist, paneNames })`, with `paneNames` true unless
+`paneLabels` is `"generated"` (§7.2). `ingestStatus` returns null for anything
 `redact()` did not turn into a `status` event, so the status endpoint cannot inject hook events.
 
 **Failure hooks** (agent-side, §1). Core models `PostToolUse` and `Stop` but returns null for
@@ -304,6 +310,7 @@ Pure. For each entry, read `sessionId` leniently; an entry without one is skippe
   (§5.5) does not cover, appear, as idle. The event's `lastActiveAt` is the later of the entry's
   `startedAt` and the session's transcript's last write (§6.4), so a session quiet for longer than
   the asleep threshold is asleep on the next tick, not ten minutes after the agent noticed it.
+  With pane names on, it also carries the directory's name (privacy rule 8).
 - **Alive, known.** No event. A presence event refreshes `lastEventAt`, which would defeat the
   stale-working timer and churn `updatedAt` every poll.
 - **Gone.** A fleet session that is not `done` and is absent from this poll gets a dead presence
@@ -344,7 +351,9 @@ session (§6.2); a session with no transcript, such as one that has never had a 
 that are neither `isMeta` nor `isSidechain`, goes with the modified time into a `history` event for
 each read session that is in the fleet after reconciling. It raises the session's prompt count and
 sets its last activity for the visibility rule (core design §5.4), which also corrects a restored
-session that a replayed presence dated from when it was noticed. Those sessions are then counted. A counted id that has left the fleet is forgotten,
+session that a replayed presence dated from when it was noticed. With pane names on, the event
+also carries the entry's directory name, which labels a restored pane whose log predates pane names.
+Those sessions are then counted. A counted id that has left the fleet is forgotten,
 so a session that returns is counted again, and every session is counted again after a restart.
 
 ## 7. Stores (B1, B2)
@@ -374,6 +383,7 @@ type AgentConfig = {
   pollIntervalMs: number;         // 10000
   claudeCommand: string;          // "claude"
   logRetentionDays: number;       // 7
+  paneLabels?: "folder" | "generated";  // pane labels from directory names (default, also when absent) or generated tree names
   wrappedStatusLine?: { command: string; [field: string]: unknown };  // set by the installer, verbatim
 };
 ```
@@ -618,6 +628,9 @@ Vitest, next to each module.
   counts a session that left the fleet and returned again.
 - **Restart.** A whole agent started over a log showing one busy session and one that closed comes
   back with the busy one working and the other gone, and writes nothing back to the log.
+- **Pane labels.** A whole agent names the canary session's pane `repo` by default, and with
+  `paneLabels: "generated"` shows a tree name and writes no `paneName` to its log. Reconcile and the
+  poller's `history` carry the name only when enabled. The end-to-end test expects the label `repo`.
 - **Stores.** Config defaults, token generation, invalid config message without values; alias file
   recovery; event log header, day rollover, retention, `parseFixture` round trip.
 - **Server.** Every route and status code; host, origin and token guards; preflight; the JSON

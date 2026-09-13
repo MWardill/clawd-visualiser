@@ -1,7 +1,7 @@
 import { CommandSchema, ENDPOINTS, HealthSchema, containsForbidden, type RedactedEvent, type Snapshot, type TickerEvent } from "@clawd/core";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import type { AgentConfig } from "../config";
+import { usesFolderPaneLabels, type AgentConfig } from "../config";
 import { readBody } from "../ingest/body";
 import { ingestHook, ingestStatus, parseJson } from "../ingest/ingest";
 import type { Logger } from "../log";
@@ -29,7 +29,7 @@ export type ServerHost = {
 
 export type ServerDeps = {
   host: ServerHost;
-  config: Pick<AgentConfig, "allowlist" | "token" | "corsOrigins">;
+  config: Pick<AgentConfig, "allowlist" | "token" | "corsOrigins" | "paneLabels">;
   stream: Pick<StreamHub, "connect">;
   /** Runs after the 202 has been sent. */
   focus(sessionId: string): void;
@@ -116,7 +116,7 @@ export function createAgentServer(deps: ServerDeps): Server {
         deps.counts.badJson++;
         return;
       }
-      const ctx = { now: deps.now(), allowlist: deps.config.allowlist };
+      const ctx = { now: deps.now(), allowlist: deps.config.allowlist, paneNames: usesFolderPaneLabels(deps.config) };
       const event = route === "hook" ? ingestHook(parsed.value, ctx) : ingestStatus(parsed.value, ctx);
       if (event === null) {
         deps.counts.dropped++;

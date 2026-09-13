@@ -25,6 +25,13 @@ describe("reconcile", () => {
     expect(JSON.stringify(events)).not.toContain(CANARY);
   });
 
+  it("keeps the directory's last segment on a first-sight presence when pane names are on, and nothing more of the path", () => {
+    const [named] = reconcile(input({ entries: [rawAgentEntry("s1")], paneNames: true }));
+    expect(named).toMatchObject({ kind: "presence", paneName: "repo" });
+    expect(JSON.stringify(named)).not.toContain(CANARY);
+    expect(reconcile(input({ entries: [rawAgentEntry("s1")] }))[0]).not.toHaveProperty("paneName");
+  });
+
   it("dates a first-sight session by its transcript's last write when the poller found one", () => {
     const entries = [rawAgentEntry("s1", { startedAt: T0 - 86_400_000 }), rawAgentEntry("s2", { startedAt: T0 - 86_400_000 })];
     const events = reconcile(input({ entries, lastWriteAt: new Map([["s1", T0 - 3_600_000]]) }));

@@ -13,6 +13,8 @@ export type ReconcileInput = {
   graceMs: number;
   /** When a first-sight session's transcript was last written, where the poller found one. */
   lastWriteAt?: ReadonlyMap<string, number>;
+  /** Keep each first-sight session's directory name on its presence, for the pane label. */
+  paneNames?: boolean;
 };
 
 export function sessionIdOf(entry: unknown): string | null {
@@ -33,7 +35,7 @@ export function listedIds(entries: readonly unknown[]): Set<string> {
 /** Pure: one poll against the fleet, as presence events (spec §6.2). */
 export function reconcile(input: ReconcileInput): RedactedEvent[] {
   const events: RedactedEvent[] = [];
-  const ctx = { now: input.now, allowlist: input.allowlist };
+  const ctx = { now: input.now, allowlist: input.allowlist, paneNames: input.paneNames === true };
   const listed = new Set<string>();
   for (const entry of input.entries) {
     const id = sessionIdOf(entry);
