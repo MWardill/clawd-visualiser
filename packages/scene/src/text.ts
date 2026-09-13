@@ -29,8 +29,14 @@ export function nameplate(a: { label: string; state: SessionPhase; activity: Act
   };
 }
 
+/** Longest label a pane title shows; a pane is 52 cells wide and longer names would cross its border. */
+export const TITLE_MAX = 24;
+
+/** The pane title: a dash and the lower-case label, cut with an ellipsis when it is too long. */
 export function paneTitle(label: string): string {
-  return `─ ${label.toLowerCase()}`;
+  const lower = label.toLowerCase();
+  const cut = lower.length > TITLE_MAX ? `${lower.slice(0, TITLE_MAX - 1)}…` : lower;
+  return `─ ${cut}`;
 }
 
 export type TextStyle = { size: number; font: string; bold?: boolean; align?: CanvasTextAlign; baseline?: CanvasTextBaseline };

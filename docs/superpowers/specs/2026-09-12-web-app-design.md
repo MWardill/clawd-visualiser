@@ -414,3 +414,4 @@ differently:
 8. idle.ts gained the breathing fix (the template formula rounded to nothing on integer frames).
 9. The scene's hit test maps CSS pixels through the canvas backing store, so non-integer pixel ratios stay exact.
 10. The simulated feed publishes once more right after its source starts, so the first session's snapshot follows its ticker lines in the same call.
+11. (User decision, 13 Sep 2026.) Pane labels come from the agent as the working directory's last path segment, numbered on collision; the scene cuts a title longer than 24 characters with an ellipsis. Session labels stay generated.

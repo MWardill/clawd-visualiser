@@ -22,7 +22,7 @@ A dashboard that shows every Claude Code session on your machine as a Clawd, the
 
 1. **Glanceable state.** Within one second of looking, know which sessions need a human.
 2. **Zero token cost.** All observation is done by the Claude Code harness and a local process. The model is never asked to report on itself.
-3. **Private by construction.** Prompt text, tool inputs and outputs, file paths, assistant messages and repository names are stripped by the local agent at ingest. Nothing downstream can display them because nothing downstream receives them. Cloud viewing is opt-in and receives an anonymised summary of categories only.
+3. **Private by construction.** Prompt text, tool inputs and outputs, file paths and assistant messages are stripped by the local agent at ingest. Nothing downstream can display them because nothing downstream receives them. The local view may name a pane after its directory's last segment; cloud viewing is opt-in and receives an anonymised summary of categories only, with generated pane names.
 4. **Fun to look at.** A black terminal with stars and drifting clouds, box-drawn panes, and the canonical Clawd animated by state.
 5. **Actionable.** Click a Clawd to focus its window and to open a detail pane showing its redacted activity ticker.
 6. **Local data, viewable anywhere.** Raw observation never leaves the machine; anonymised snapshots are published to the web app on Vercel so the city can be watched from any device from the first release. The detail ticker is the one exception and stays local.
@@ -95,7 +95,7 @@ Priority: **P0** first usable version · **P1** next · **P2** later.
 - **FR-12** The agent assigns each session a random alias and each working directory a pane alias. The mapping is persisted locally so aliases survive an agent restart, and exists nowhere else.
 - **FR-13** The published snapshot contains only the fields in section 8.
 - **FR-14** Cloud mode is off by default, requires explicit configuration, and receives snapshots with tool names reduced to categories.
-- **FR-15** Display labels are generated (animal names), never the session name or directory.
+- **FR-15** Session labels are generated (animal names), never the session name. Pane labels default to the working directory's last path segment (`visualiser` for `C:\mw\visualiser`), numbered on collision (`visualiser 2`); an agent setting selects generated tree names instead, and cloud snapshots always carry generated names.
 
 ### 7.7 Visualisation: terminal panes (P0 basic, P1 polish)
 
@@ -315,3 +315,4 @@ The contract comes first and is the fork point. After it, the web app and the ag
 | 12 Sep 2026 | Tailwind and shadcn/ui for chrome; xterm.js for the detail pane; no animation libraries. |
 | 12 Sep 2026 | Contract first, then the web app and the agent concurrently in separate sessions on worktrees; the web app deploys on simulated data from its first commit. |
 | 12 Sep 2026 | Viewing from other devices is a goal from the start: cloud mode is P1 and follows integration; remote viewers get the anonymised snapshot only, never the ticker. |
+| 13 Sep 2026 | Pane labels in the local view are the working directory's last path segment, numbered on collision, behind an agent setting; cloud snapshots keep generated tree names. Session labels stay generated. |

@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PALETTE } from "./engine";
 import { fakeContext } from "./testing/fake-context";
-import { STATE_COLOURS, drawText, mmss, nameplate, paneTitle } from "./text";
+import { STATE_COLOURS, TITLE_MAX, drawText, mmss, nameplate, paneTitle } from "./text";
 
 const T0 = 1_700_000_000_000;
 
@@ -23,6 +23,13 @@ describe("text", () => {
 
   it("titles a pane with a dash and the lower-case label", () => {
     expect(paneTitle("Oak")).toBe("─ oak");
+    expect(paneTitle("visualiser-web")).toBe("─ visualiser-web");
+  });
+
+  it("cuts a title longer than the pane can hold with an ellipsis", () => {
+    expect(paneTitle("a".repeat(TITLE_MAX))).toBe(`─ ${"a".repeat(TITLE_MAX)}`);
+    expect(paneTitle("abcdefghijklmnopqrstuvwxyz")).toBe("─ abcdefghijklmnopqrstuvw…");
+    expect(TITLE_MAX).toBe(24);
   });
 
   it("draws text at a cell boundary with the requested style", () => {
