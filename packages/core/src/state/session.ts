@@ -24,7 +24,7 @@ export type SessionState = {
   contextPct: number | null;
   /** Typed prompts: one per prompt event, raised to the transcript's count by a `history` event. */
   prompts: number;
-  /** When the session last did something: a prompt, a tool call, a permission request or denial, a stop, a subagent change. */
+  /** When the session last did something: a prompt, a tool call, a permission request or denial, a stop, a subagent change. A `history` event sets it to the transcript's last write. */
   lastActiveAt: number;
   /** When the session was first seen. Never changes; the snapshot's sort key. */
   firstSeenAt: number;
@@ -77,8 +77,11 @@ const ACTIVE = new Set<RedactedEvent["kind"]>(["prompt", "tool.start", "tool.end
 /** Pure: applies one event to one session. `now` is the event time. */
 export function reduceSession(prev: SessionState, e: RedactedEvent, now: number, cfg: StateConfig): SessionState {
   if (prev.state === "done") return prev;
-  // A transcript count is not something the session did: lastEventAt, activity and state stay as they are.
-  if (e.kind === "history") return e.prompts > prev.prompts ? { ...prev, prompts: e.prompts } : prev;
+  // A transcript read is not something the session did, so lastEventAt and the state stay as they are.
+  // Its count only ever raises the session's. Its last write replaces lastActiveAt: that corrects a
+  // session first seen without one, such as a presence replayed from a log written before presence
+  // carried a last-active time, which would otherwise date the session from when it was noticed.
+  if (e.kind === "history") return { ...prev, prompts: Math.max(prev.prompts, e.prompts), lastActiveAt: e.lastActiveAt };
   let s: SessionState = { ...prev, lastEventAt: now, ...(ACTIVE.has(e.kind) ? { lastActiveAt: Math.max(prev.lastActiveAt, now) } : {}) };
   switch (e.kind) {
     case "session.start":

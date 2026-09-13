@@ -101,7 +101,7 @@ Variants, with their extra fields:
 | `subagent.stop` | `agentId`, `agentType` | SubagentStop |
 | `status` | `contextPct?: number`, `costUsd?: number`, `rateLimit5h?: number`, `rateLimit7d?: number`, `model?: string` | status line command |
 | `presence` | `alive: boolean`, `lastActiveAt?: number` | `redactPresence()` over one agents-list entry, one per known session. `lastActiveAt`, on a live presence only, is when the session last did anything |
-| `history` | `prompts: number` | The agent's count of typed prompts in the session's transcript, once per session per run. Raises the session's count, never lowers it, and creates no session |
+| `history` | `prompts: number`, `lastActiveAt: number` | The agent's read of the session's transcript, once per session per run: its typed prompt count, which raises the session's and never lowers it, and its last write, which becomes the session's `lastActiveAt`. Creates no session |
 
 `tool` is the built-in tool name, or `"mcp"` for any MCP tool (open question 5 in the PRD).
 `category` is derived by `categories.ts`: `read`, `edit`, `run`, `web`, `spawn`, `other`.
@@ -192,7 +192,7 @@ type SessionState = {
   subagents: string[];        // live agent ids; an array, not a Set, so state stays JSON-serialisable
   contextPct: number | null;
   prompts: number;            // typed prompts: one per prompt event, raised to the transcript's count by `history`
-  lastActiveAt: number;       // last prompt, tool call, permission request or denial, stop, or subagent change
+  lastActiveAt: number;       // last prompt, tool call, permission request or denial, stop, or subagent change; set to the transcript's last write by `history`
   firstSeenAt: number;        // set once, never changed; the snapshot's sort key
   displayHold: { state: SessionState["state"]; activity: Activity | null; until: number } | null;  // what was shown before the last transition
 };

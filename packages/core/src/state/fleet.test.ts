@@ -46,7 +46,7 @@ describe("reduceFleet", () => {
   });
 
   it("ignores a transcript count for a session it has never seen", () => {
-    expect(reduceFleet(emptyFleet(), event("history", T0, { prompts: 3 }, { sessionId: "ghost", paneKey: "k1" }), T0, DEFAULT_CONFIG)).toEqual(emptyFleet());
+    expect(reduceFleet(emptyFleet(), event("history", T0, { prompts: 3, lastActiveAt: T0 }, { sessionId: "ghost", paneKey: "k1" }), T0, DEFAULT_CONFIG)).toEqual(emptyFleet());
   });
 
   it("removes done sessions and empty panes after the linger period", () => {

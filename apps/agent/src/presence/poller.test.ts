@@ -156,6 +156,16 @@ describe("presence poller", () => {
     expect(t.host.sessions().get("s2")?.state).toBe("idle");
   });
 
+  it("hides a restored session its transcript shows quiet past its limit, though the log first saw it recently", async () => {
+    const t = setup(async () => ({ lastWriteAt: T0 - 50 * 3_600_000 + 0.5, prompts: 3 }));
+    t.clock.now = T0 + 60_000;
+    t.host.restore([ev("presence", T0, { alive: true }, "s1")]);
+    t.list(rawAgentEntry("s1", { startedAt: T0 - 60 * 3_600_000 }));
+    await t.poller.pollOnce();
+    expect(t.host.sessions().has("s1")).toBe(true);
+    expect(t.host.snapshot().sessions).toHaveLength(0);
+  });
+
   it("quietly drops restored sessions the first successful poll does not list among allowlisted sessions", async () => {
     const t = setup();
     t.clock.now = T0 + 60_000;

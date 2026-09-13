@@ -33,9 +33,10 @@ view should show the sessions that matter and leave the dormant ones out.
 Core decides, and the snapshot format does not change, so the web app and scene are untouched.
 
 - `SessionState` gains `prompts` and `lastActiveAt`.
-- A new redacted event, `history { prompts }`, raises `prompts` to the given count and never lowers
-  it. It leaves `lastEventAt`, `lastActiveAt` and the state alone, creates no session and produces
-  no ticker line.
+- A new redacted event, `history { prompts, lastActiveAt }`, raises `prompts` to the given count
+  and never lowers it, and sets `lastActiveAt` to the transcript's last write, which corrects a
+  session first seen without one (a presence replayed from an older log, say). It leaves
+  `lastEventAt` and the state alone, creates no session and produces no ticker line.
 - `isShown(session, now, cfg)` in `state/visibility.ts` applies the rule.
 - `deriveSnapshot(fleet, aliases, now, cfg = DEFAULT_CONFIG)` leaves out hidden sessions and panes
   with nothing shown. Aliases are assigned only to what is shown.
@@ -53,15 +54,17 @@ Rejected alternatives:
 - **Transcripts.** On each successful poll, the agent reads the newest transcript,
   `<projects>/<folder>/<sessionId>.jsonl`, of every allowlisted, listed session that is not ended
   and has not been counted in this run, one at a time. For each of those now in the fleet it
-  ingests a `history` event with the count and marks the session counted. A counted id that has
+  ingests a `history` event with the count and the last write, and marks the session counted. A counted id that has
   left the fleet is forgotten, so a session that comes back is counted again, and after a restart
   every session is counted again.
 - **A typed prompt** is a transcript line that parses as an object with `type: "user"` and
   `origin.kind: "human"`, where neither `isMeta` nor `isSidechain` is true. On the user's
   transcripts, from 27 days old to today, every typed prompt carries that origin, and tool results,
   command output, metadata and background-task notifications do not.
-- **The same read** gives the transcript's last write, which dates first-sight sessions as the
-  restart design describes.
+- **The same read** gives the transcript's last write. It dates first-sight sessions as the restart
+  design describes, and through `history` it sets the last activity of every counted session. That
+  matters after a restart: the restored log can hold presence events written before presence
+  carried a last-active time, and replaying one would date the session from when it was noticed.
 
 ## 5. Privacy
 

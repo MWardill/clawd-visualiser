@@ -341,9 +341,10 @@ id that is not a plain name (letters, digits, `-`, `_`) is not looked up.
 The reader returns two numbers (privacy rule 7). The file's modified time dates a first-sight
 session (§6.2); a session with no transcript, such as one that has never had a prompt, is dated by
 `startedAt` alone. The count of typed prompts, lines with `type: "user"` and `origin.kind: "human"`
-that are neither `isMeta` nor `isSidechain`, becomes a `history` event for each read session that
-is in the fleet after reconciling, which raises its prompt count for the visibility rule (core
-design §5.4). Those sessions are then counted. A counted id that has left the fleet is forgotten,
+that are neither `isMeta` nor `isSidechain`, goes with the modified time into a `history` event for
+each read session that is in the fleet after reconciling. It raises the session's prompt count and
+sets its last activity for the visibility rule (core design §5.4), which also corrects a restored
+session that a replayed presence dated from when it was noticed. Those sessions are then counted. A counted id that has left the fleet is forgotten,
 so a session that returns is counted again, and every session is counted again after a restart.
 
 ## 7. Stores (B1, B2)

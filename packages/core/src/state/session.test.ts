@@ -280,10 +280,16 @@ describe("prompts and activity", () => {
     expect(s).toMatchObject({ prompts: 2, lastActiveAt: T0 + 70 });
   });
 
-  it("raises the count to a transcript's without treating it as an event, and never lowers it", () => {
+  it("raises the count to a transcript's without treating the read as an event, and never lowers the count", () => {
     const s = run([ev("prompt", T0 + 10), ev("stop", T0 + 20, { backgroundTasks: 0 })]);
-    const raised = run([ev("history", T0 + 99, { prompts: 12 })], s);
-    expect(raised).toEqual({ ...s, prompts: 12 });
-    expect(run([ev("history", T0 + 120, { prompts: 3 })], raised)).toBe(raised);
+    const raised = run([ev("history", T0 + 99, { prompts: 12, lastActiveAt: T0 + 25 })], s);
+    expect(raised).toEqual({ ...s, prompts: 12, lastActiveAt: T0 + 25 });
+    expect(run([ev("history", T0 + 120, { prompts: 3, lastActiveAt: T0 + 25 })], raised).prompts).toBe(12);
+  });
+
+  it("takes the transcript's last write as the last activity, correcting a session first seen without one", () => {
+    const seen = run([ev("presence", T0, { alive: true })], newSession("s1", "k1", T0));
+    expect(seen.lastActiveAt).toBe(T0);
+    expect(run([ev("history", T0 + 5, { prompts: 3, lastActiveAt: T0 - 50 * 3_600_000 })], seen).lastActiveAt).toBe(T0 - 50 * 3_600_000);
   });
 });

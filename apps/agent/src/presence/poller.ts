@@ -129,7 +129,7 @@ export function createPresencePoller(deps: {
       if (!view) continue;
       counted.add(id);
       if (!stats || stats.prompts === 0) continue;
-      const history = RedactedEventSchema.safeParse({ v: 1, t: now, sessionId: id, paneKey: view.paneKey, kind: "history", prompts: stats.prompts });
+      const history = RedactedEventSchema.safeParse({ v: 1, t: now, sessionId: id, paneKey: view.paneKey, kind: "history", prompts: stats.prompts, lastActiveAt: Math.floor(stats.lastWriteAt) });
       if (history.success) deps.host.ingest(history.data);
     }
     deps.host.forgetEnded(listed);

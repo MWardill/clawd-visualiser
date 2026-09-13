@@ -651,3 +651,7 @@ git commit -m "feat(agent): count typed prompts in each session's transcript onc
 - [ ] **Step 1:** `pnpm test && pnpm typecheck && pnpm lint && pnpm build` in the worktree. Expected: all pass.
 - [ ] **Step 2:** Run the branch against a private copy of `~/.clawd` with the scratchpad trial script and compare the shown sessions with the rule applied by hand.
 - [ ] **Step 3:** Merge `feat/session-visibility` into main from `C:\mw\visualiser` with `--no-ff`, rerun the Step 1 checks on main, remove the worktree. Do not push.
+
+### Amendment: `history` carries the last write
+
+Found on real data at Task 5 Step 2: a restored session created by a replayed presence from an older log had `lastActiveAt` set to when that presence was logged, so two long-quiet sessions stayed shown. `history` now also carries `lastActiveAt`, the transcript's last write floored to whole milliseconds, and the reducer sets the session's `lastActiveAt` to it while still only raising `prompts`. Tests: the schema requires both numbers; a session test for the correction; a poller test for the restored case.
