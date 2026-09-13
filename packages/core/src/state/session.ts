@@ -28,13 +28,14 @@ export type SessionState = {
   displayHold: { state: SessionPhase; activity: Activity | null; until: number } | null;
 };
 
-export function newSession(sessionId: string, paneKey: string, now: number): SessionState {
+/** `since` is when the session went idle, for one that was already quiet when first seen; never later than `now`. */
+export function newSession(sessionId: string, paneKey: string, now: number, since: number = now): SessionState {
   return {
     sessionId,
     paneKey,
     state: "idle",
     activity: null,
-    since: now,
+    since: Math.min(since, now),
     lastEventAt: now,
     waitingOn: null,
     waitingAgent: null,

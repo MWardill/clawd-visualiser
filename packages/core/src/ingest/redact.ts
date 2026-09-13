@@ -42,13 +42,18 @@ function isStatusLine(p: RawStatusLine): boolean {
 
 /**
  * Turn one entry of an agents-list poll into a presence event. `alive` is the poller's verdict:
- * true for an entry in the latest poll, false for a session that has dropped out of it.
+ * true for an entry in the latest poll, false for a session that has dropped out of it. A live
+ * entry is dated by when the session was last active: the later of `lastWriteAt` (its transcript's
+ * last write, when the caller found one) and the entry's own start. Only times are kept.
  */
-export function redactPresence(entry: unknown, alive: boolean, ctx: IngestContext): RedactedEvent | null {
+export function redactPresence(entry: unknown, alive: boolean, ctx: IngestContext, lastWriteAt?: number | null): RedactedEvent | null {
   const parsed = RawAgentEntrySchema.safeParse(entry);
   if (!parsed.success) return null;
   const base = envelope(parsed.data.sessionId, parsed.data.cwd, ctx);
-  return base && validate({ ...base, kind: "presence", alive });
+  if (!base) return null;
+  const known = [lastWriteAt, parsed.data.startedAt].filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0);
+  const lastActiveAt = alive && known.length > 0 ? Math.floor(Math.max(...known)) : undefined;
+  return validate({ ...base, kind: "presence", alive, ...(lastActiveAt === undefined ? {} : { lastActiveAt }) });
 }
 
 /** The fields every redacted event carries, or null when the directory is outside the allowlist. */

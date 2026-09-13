@@ -138,4 +138,28 @@ describe("redactPresence", () => {
     expect(redactPresence("nonsense", true, ctx)).toBeNull();
     expect(redactPresence(null, true, ctx)).toBeNull();
   });
+
+  it("dates a live entry by the later of its transcript's last write and its start", () => {
+    const activeAt = (...args: Parameters<typeof redactPresence>): number | undefined => {
+      const event = redactPresence(...args);
+      return event?.kind === "presence" ? event.lastActiveAt : undefined;
+    };
+    const started = Date.parse(entry.startedAt);
+    expect(activeAt(entry, true, ctx, started + 5_000)).toBe(started + 5_000);
+    expect(activeAt(entry, true, ctx, started - 5_000)).toBe(started);
+    expect(activeAt(entry, true, ctx)).toBe(started);
+    expect(activeAt(entry, true, ctx, null)).toBe(started);
+    expect(activeAt({ ...entry, startedAt: started }, true, ctx)).toBe(started);
+    // A file's modified time has a fractional part; event times are whole milliseconds.
+    expect(activeAt({ ...entry, startedAt: undefined }, true, ctx, started + 0.75)).toBe(started);
+  });
+
+  it("keeps an entry whose start cannot be read, and never dates a dead one", () => {
+    for (const startedAt of ["yesterday-ish", -5, { at: 1 }]) {
+      const event = redactPresence({ ...entry, startedAt }, true, ctx);
+      expect(event).toMatchObject({ kind: "presence", alive: true });
+      expect(event).not.toHaveProperty("lastActiveAt");
+    }
+    expect(redactPresence(entry, false, ctx, ctx.now)).not.toHaveProperty("lastActiveAt");
+  });
 });

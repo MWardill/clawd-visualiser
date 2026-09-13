@@ -19,8 +19,15 @@ describe("RedactedEventSchema", () => {
       { ...base, kind: "subagent.stop", agentId: "a1", agentType: "general-purpose" },
       { ...base, kind: "status", contextPct: 5, costUsd: 1.34, rateLimit5h: 7, rateLimit7d: 22, model: "Fable 5" },
       { ...base, kind: "presence", alive: false },
+      { ...base, kind: "presence", alive: true, lastActiveAt: 1_757_600_000_000 },
     ];
     for (const e of events) expect(RedactedEventSchema.parse(e).kind).toBe(e.kind);
+  });
+
+  it("takes a presence's last activity only as a whole, non-negative time", () => {
+    expect(() => RedactedEventSchema.parse({ ...base, kind: "presence", alive: true, lastActiveAt: -1 })).toThrow();
+    expect(() => RedactedEventSchema.parse({ ...base, kind: "presence", alive: true, lastActiveAt: 1.5 })).toThrow();
+    expect(() => RedactedEventSchema.parse({ ...base, kind: "presence", alive: true, lastActiveAt: "2026-09-12" })).toThrow();
   });
 
   it("rejects forbidden or unknown fields", () => {

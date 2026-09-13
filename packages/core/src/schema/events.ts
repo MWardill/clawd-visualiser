@@ -43,7 +43,9 @@ export const RedactedEventSchema = z.discriminatedUnion("kind", [
       model: z.string().optional(),
     })
     .strict(),
-  z.object({ ...base, kind: z.literal("presence"), alive: z.boolean() }).strict(),
+  // `lastActiveAt`, on a live presence only: when the session last did anything, so one first seen
+  // by the poll (after a restart, say) is idle since then rather than since it was noticed.
+  z.object({ ...base, kind: z.literal("presence"), alive: z.boolean(), lastActiveAt: z.number().int().nonnegative().optional() }).strict(),
 ]);
 export type RedactedEvent = z.infer<typeof RedactedEventSchema>;
 export type RedactedEventKind = RedactedEvent["kind"];
