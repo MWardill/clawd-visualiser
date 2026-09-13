@@ -20,6 +20,7 @@ describe("RedactedEventSchema", () => {
       { ...base, kind: "status", contextPct: 5, costUsd: 1.34, rateLimit5h: 7, rateLimit7d: 22, model: "Fable 5" },
       { ...base, kind: "presence", alive: false },
       { ...base, kind: "presence", alive: true, lastActiveAt: 1_757_600_000_000 },
+      { ...base, kind: "history", prompts: 12 },
     ];
     for (const e of events) expect(RedactedEventSchema.parse(e).kind).toBe(e.kind);
   });
@@ -28,6 +29,12 @@ describe("RedactedEventSchema", () => {
     expect(() => RedactedEventSchema.parse({ ...base, kind: "presence", alive: true, lastActiveAt: -1 })).toThrow();
     expect(() => RedactedEventSchema.parse({ ...base, kind: "presence", alive: true, lastActiveAt: 1.5 })).toThrow();
     expect(() => RedactedEventSchema.parse({ ...base, kind: "presence", alive: true, lastActiveAt: "2026-09-12" })).toThrow();
+  });
+
+  it("takes a transcript count only as a whole, non-negative number", () => {
+    expect(() => RedactedEventSchema.parse({ ...base, kind: "history" })).toThrow();
+    expect(() => RedactedEventSchema.parse({ ...base, kind: "history", prompts: -1 })).toThrow();
+    expect(() => RedactedEventSchema.parse({ ...base, kind: "history", prompts: 2.5 })).toThrow();
   });
 
   it("rejects forbidden or unknown fields", () => {

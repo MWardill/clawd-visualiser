@@ -101,6 +101,7 @@ Variants, with their extra fields:
 | `subagent.stop` | `agentId`, `agentType` | SubagentStop |
 | `status` | `contextPct?: number`, `costUsd?: number`, `rateLimit5h?: number`, `rateLimit7d?: number`, `model?: string` | status line command |
 | `presence` | `alive: boolean`, `lastActiveAt?: number` | `redactPresence()` over one agents-list entry, one per known session. `lastActiveAt`, on a live presence only, is when the session last did anything |
+| `history` | `prompts: number` | The agent's count of typed prompts in the session's transcript, once per session per run. Raises the session's count, never lowers it, and creates no session |
 
 `tool` is the built-in tool name, or `"mcp"` for any MCP tool (open question 5 in the PRD).
 `category` is derived by `categories.ts`: `read`, `edit`, `run`, `web`, `spawn`, `other`.
@@ -190,6 +191,8 @@ type SessionState = {
   backgroundTasks: number;
   subagents: string[];        // live agent ids; an array, not a Set, so state stays JSON-serialisable
   contextPct: number | null;
+  prompts: number;            // typed prompts: one per prompt event, raised to the transcript's count by `history`
+  lastActiveAt: number;       // last prompt, tool call, permission request or denial, stop, or subagent change
   firstSeenAt: number;        // set once, never changed; the snapshot's sort key
   displayHold: { state: SessionState["state"]; activity: Activity | null; until: number } | null;  // what was shown before the last transition
 };
@@ -253,16 +256,25 @@ Plain records rather than Maps, so a fleet is JSON-serialisable and comparable i
 go through `own()`, so an id such as `constructor` is never an inherited hit. Panes are created on
 the first event for a paneKey and dropped when their last session has been `done` for
 `doneLingerMs`. `done` sessions themselves linger for the same period so the view can play the
-exit, then are removed. An event that only ever ends a session (`session.end`, a dead `presence`)
-creates nothing on first sight: it describes a session we never knew. A session created by a live
+exit, then are removed. An event that only ends or describes a session (`session.end`, a dead `presence`,
+`history`) creates nothing on first sight: it concerns a session we never knew. A session created by a live
 `presence` that carries `lastActiveAt` is idle since that time, never later than now, rather than
 since the event, so its asleep timer counts from when it last did anything.
 
 ### 5.4 Snapshot derivation
 
 ```ts
-function deriveSnapshot(f: Fleet, aliases: AliasMap, now: number): { snapshot: Snapshot; aliases: AliasMap };
+function deriveSnapshot(f: Fleet, aliases: AliasMap, now: number, cfg: StateConfig = DEFAULT_CONFIG): { snapshot: Snapshot; aliases: AliasMap };
+function isShown(s: SessionState, now: number, cfg: StateConfig): boolean;
 ```
+
+Only sessions `isShown` accepts are in the snapshot, and only panes with at least one of them;
+hidden sessions stay in the fleet, so a hidden session's next prompt brings it back. A working or
+waiting session is always shown and a session with no prompts never is. Otherwise a session with
+more than `fewPrompts` (8) prompts is always shown, and one with fewer is shown while
+`now − lastActiveAt` is under `oneShotHideMs` (3 hours) for a single prompt or `fewPromptsHideMs`
+(24 hours) for more. A done session is judged like a quiet one, so a session that ends while hidden
+plays no exit. Design: `docs/superpowers/specs/2026-09-13-session-visibility-design.md`.
 
 Applies display holds (state and activity), maps session ids and pane keys to aliases and labels, sorts panes and
 sessions by first appearance (sessions tie-breaking on session id, so the order is deterministic

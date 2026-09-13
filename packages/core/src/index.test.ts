@@ -47,6 +47,7 @@ describe("@clawd/core public API", () => {
       "ensurePaneAlias",
       "ensureSessionAlias",
       "isAllowed",
+      "isShown",
       "newSession",
       "normalisePath",
       "normaliseTool",

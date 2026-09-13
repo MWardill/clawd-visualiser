@@ -45,6 +45,10 @@ describe("reduceFleet", () => {
     expect(f.sessions["s1"]?.since).toBe(T0);
   });
 
+  it("ignores a transcript count for a session it has never seen", () => {
+    expect(reduceFleet(emptyFleet(), event("history", T0, { prompts: 3 }, { sessionId: "ghost", paneKey: "k1" }), T0, DEFAULT_CONFIG)).toEqual(emptyFleet());
+  });
+
   it("removes done sessions and empty panes after the linger period", () => {
     let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1", paneKey: "k1" }), T0, DEFAULT_CONFIG);
     f = reduceFleet(f, event("session.end", T0 + 10, { reason: "other" }, { sessionId: "s1", paneKey: "k1" }), T0 + 10, DEFAULT_CONFIG);

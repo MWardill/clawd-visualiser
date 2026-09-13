@@ -68,6 +68,27 @@ describe("deriveSnapshot", () => {
     expect(only.updatedAt).toBe(new Date(T0 + 20).toISOString());
   });
 
+  it("leaves out hidden sessions and the panes left with none, and brings a session back on its next prompt", () => {
+    let f = reduceFleet(emptyFleet(), event("presence", T0, { alive: true }, { sessionId: "unprompted", paneKey: "k1" }), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("prompt", T0, {}, { sessionId: "used", paneKey: "k2" }), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("stop", T0 + 1, { backgroundTasks: 0 }, { sessionId: "used", paneKey: "k2" }), T0 + 1, DEFAULT_CONFIG);
+    const soon = deriveSnapshot(f, emptyAliasMap(), T0 + DEFAULT_CONFIG.minDisplayMs);
+    expect(soon.snapshot.sessions.map((s) => s.alias)).toEqual(["agent-1"]);
+    expect(soon.snapshot.panes).toHaveLength(1);
+    const later = deriveSnapshot(f, soon.aliases, T0 + 1 + DEFAULT_CONFIG.oneShotHideMs);
+    expect(later.snapshot.sessions).toEqual([]);
+    expect(later.snapshot.panes).toEqual([]);
+    const promptAt = T0 + 2 + DEFAULT_CONFIG.oneShotHideMs;
+    f = reduceFleet(f, event("prompt", promptAt, {}, { sessionId: "unprompted", paneKey: "k1" }), promptAt, DEFAULT_CONFIG);
+    expect(deriveSnapshot(f, later.aliases, promptAt + DEFAULT_CONFIG.minDisplayMs).snapshot.sessions.map((s) => s.state)).toEqual(["working"]);
+  });
+
+  it("takes the hiding limits from the config it is given", () => {
+    let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1", paneKey: "k1" }), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("stop", T0 + 1, { backgroundTasks: 0 }, { sessionId: "s1", paneKey: "k1" }), T0 + 1, DEFAULT_CONFIG);
+    expect(deriveSnapshot(f, emptyAliasMap(), T0 + 10_000, { ...DEFAULT_CONFIG, oneShotHideMs: 5_000 }).snapshot.sessions).toEqual([]);
+  });
+
   it("shows the held activity with the held state", () => {
     let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1", paneKey: "k1" }), T0, DEFAULT_CONFIG);
     f = reduceFleet(f, event("tool.start", T0 + 1, { tool: "Edit", category: "edit", toolUseId: "u1" }, { sessionId: "s1", paneKey: "k1" }), T0 + 1, DEFAULT_CONFIG);

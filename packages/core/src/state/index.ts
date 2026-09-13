@@ -4,3 +4,4 @@ export * from "./fleet";
 export * from "./snapshot";
 export * from "./ticker";
 export * from "./apply";
+export * from "./visibility";

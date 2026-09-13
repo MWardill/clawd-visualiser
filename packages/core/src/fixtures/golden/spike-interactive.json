@@ -1,25 +1,8 @@
 [
  {
   "version": 1,
-  "panes": [
-   {
-    "pane": "pane-1",
-    "label": "Oak"
-   }
-  ],
-  "sessions": [
-   {
-    "alias": "agent-1",
-    "label": "Otter",
-    "pane": "pane-1",
-    "state": "idle",
-    "activity": null,
-    "subagents": 0,
-    "contextPct": null,
-    "since": "2025-09-12T10:00:20.107Z",
-    "updatedAt": "2025-09-12T10:00:20.107Z"
-   }
-  ]
+  "panes": [],
+  "sessions": []
  },
  {
   "version": 1,

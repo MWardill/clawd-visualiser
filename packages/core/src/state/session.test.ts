@@ -264,3 +264,26 @@ describe("reduceSession", () => {
     expect(s.displayHold).toEqual({ state: "working", activity: "edit", until: T0 + 5000 + DEFAULT_CONFIG.minDisplayMs });
   });
 });
+
+describe("prompts and activity", () => {
+  it("starts with no prompts, last active when it went idle", () => {
+    expect(newSession("s1", "k1", T0)).toMatchObject({ prompts: 0, lastActiveAt: T0 });
+    expect(newSession("s1", "k1", T0, T0 - 5_000)).toMatchObject({ prompts: 0, lastActiveAt: T0 - 5_000 });
+  });
+
+  it("counts prompts and dates activity by what the session did, not by its start, status or presence", () => {
+    let s = run([ev("prompt", T0 + 10), ev("tool.start", T0 + 20, { tool: "Read", category: "read", toolUseId: "u1" }), ev("stop", T0 + 30, { backgroundTasks: 0 })]);
+    expect(s).toMatchObject({ prompts: 1, lastActiveAt: T0 + 30 });
+    s = run([ev("status", T0 + 40, { contextPct: 5 }), ev("presence", T0 + 50, { alive: true }), ev("session.start", T0 + 60, {})], s);
+    expect(s.lastActiveAt).toBe(T0 + 30);
+    s = run([ev("prompt", T0 + 70)], s);
+    expect(s).toMatchObject({ prompts: 2, lastActiveAt: T0 + 70 });
+  });
+
+  it("raises the count to a transcript's without treating it as an event, and never lowers it", () => {
+    const s = run([ev("prompt", T0 + 10), ev("stop", T0 + 20, { backgroundTasks: 0 })]);
+    const raised = run([ev("history", T0 + 99, { prompts: 12 })], s);
+    expect(raised).toEqual({ ...s, prompts: 12 });
+    expect(run([ev("history", T0 + 120, { prompts: 3 })], raised)).toBe(raised);
+  });
+});

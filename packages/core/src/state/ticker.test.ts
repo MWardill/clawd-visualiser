@@ -37,6 +37,7 @@ describe("toTickerEvents", () => {
   it("emits nothing for presence or a status without context, and every line validates", () => {
     const s = newSession("s1", "k1", T0);
     expect(toTickerEvents(event("presence", T0, { alive: true }), s, s)).toEqual([]);
+    expect(toTickerEvents(event("history", T0, { prompts: 3 }), s, { ...s, prompts: 3 })).toEqual([]);
     expect(toTickerEvents(event("status", T0, { costUsd: 1 }), s, s)).toEqual([]);
     for (const e of [event("prompt", T0, {}), event("tool.start", T0, { tool: "Read", category: "read", toolUseId: "u" })]) {
       for (const line of toTickerEvents(e, s, reduceSession(s, e, T0, DEFAULT_CONFIG))) expect(() => TickerEventSchema.parse(line)).not.toThrow();

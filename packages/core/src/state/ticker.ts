@@ -43,6 +43,7 @@ function ownLine(e: RedactedEvent, t: string): TickerEvent | null {
     case "status":
       return e.contextPct === undefined ? null : { t, kind: "context", contextPct: e.contextPct };
     case "presence":
+    case "history":
       return null;
     default:
       e satisfies never;
