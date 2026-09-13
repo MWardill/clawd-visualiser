@@ -52,6 +52,10 @@ These bind every module and every test.
    only drop is better never sent.
 6. **Tests prove it with canaries.** Synthetic raw payloads carry a unique canary string in every
    forbidden field. The end-to-end test asserts no canary appears in any sink.
+7. **Transcripts are read to count, and only counts leave.** The poller reads a session's transcript
+   once per run to count typed prompts (§6.4). The parser names only `type`, `origin.kind`,
+   `isMeta` and `isSidechain`. The reader returns a count and a modified time; no path, content or
+   error leaves it.
 
 ## 3. Package layout
 
@@ -324,18 +328,23 @@ the fleet.
 After a successful poll, the poller keeps `sessionId -> { pid, cwd }` for every entry, parsed with
 an agent-local schema, replacing the previous map (§2 rule 4).
 
-### 6.4 Transcript times
+### 6.4 Transcripts
 
-Before reconciling, a successful poll settles restored sessions (§5.5), then looks up when the
-transcript was last written for each allowlisted entry that reconcile will bring in for the first
-time. Known and ended sessions are not looked up. Claude Code appends to
-`<CLAUDE_CONFIG_DIR or ~/.claude>/projects/<folder>/<sessionId>.jsonl` whenever a session does
-anything. The folder name is derived from the working directory in ways that vary (the drive
-letter's case, for one), so the id is looked for in every folder rather than the folder rebuilt.
-Only the file's modified time is read: the transcript is never opened, and neither the path nor an
-error leaves the lookup. An id that is not a plain name (letters, digits, `-`, `_`) is not looked
-up. A session with no transcript, such as one that has never had a prompt, is dated by `startedAt`
-alone.
+Before reconciling, a successful poll settles restored sessions (§5.5), then reads the transcript of
+every allowlisted, listed session that is not ended and has not been counted in this run, one at a
+time, since a first poll after a restart may read them all and some are tens of megabytes. Claude
+Code appends to `<CLAUDE_CONFIG_DIR or ~/.claude>/projects/<folder>/<sessionId>.jsonl` whenever a
+session does anything. The folder name is derived from the working directory in ways that vary (the
+drive letter's case, for one), so the id is looked for in every folder and the newest file wins. An
+id that is not a plain name (letters, digits, `-`, `_`) is not looked up.
+
+The reader returns two numbers (privacy rule 7). The file's modified time dates a first-sight
+session (§6.2); a session with no transcript, such as one that has never had a prompt, is dated by
+`startedAt` alone. The count of typed prompts, lines with `type: "user"` and `origin.kind: "human"`
+that are neither `isMeta` nor `isSidechain`, becomes a `history` event for each read session that
+is in the fleet after reconciling, which raises its prompt count for the visibility rule (core
+design §5.4). Those sessions are then counted. A counted id that has left the fleet is forgotten,
+so a session that returns is counted again, and every session is counted again after a restart.
 
 ## 7. Stores (B1, B2)
 
@@ -602,8 +611,10 @@ Vitest, next to each module.
   keeps ended ones out, and the first poll drops unlisted restored sessions once.
 - **Reconcile.** First sight, known alive, gone after grace, within grace, ended set, failed poll,
   allowlist, malformed entries, first-sight dating by transcript write or start.
-- **Transcript times.** Found by id in any project folder, latest of several, null for a missing
-  root, a folder named like a transcript, or an id that is not a plain name.
+- **Transcripts.** Found by id in any project folder, newest of several, only typed prompts
+  counted, null for a missing root, a folder named like a transcript, or an id that is not a plain
+  name. The poller reads each listed session once per run, raises counts through `history`, and
+  counts a session that left the fleet and returned again.
 - **Restart.** A whole agent started over a log showing one busy session and one that closed comes
   back with the busy one working and the other gone, and writes nothing back to the log.
 - **Stores.** Config defaults, token generation, invalid config message without values; alias file

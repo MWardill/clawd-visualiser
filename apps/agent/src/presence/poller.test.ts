@@ -5,14 +5,15 @@ import { silentLogger } from "../log";
 import { T0, ev } from "../testing/events";
 import { ALLOWED_ROOT, CANARY_CWD, OUTSIDE_CWD, rawAgentEntry } from "../testing/raw";
 import { createPresencePoller, type Exec, type ExecResult } from "./poller";
+import type { TranscriptStats } from "./transcripts";
 
-function setup(lastWrite?: (sessionId: string) => Promise<number | null>) {
+function setup(readTranscript?: (sessionId: string) => Promise<TranscriptStats | null>) {
   const clock = { now: T0 };
   const host = new FleetHost({ now: () => clock.now, config: DEFAULT_CONFIG, aliases: emptyAliasMap(), log: silentLogger });
   let reply: ExecResult = { ok: true, stdout: "[]" };
   const exec = vi.fn<Exec>(async () => reply);
   const log = vi.fn();
-  const poller = createPresencePoller({ host, exec, command: "claude", allowlist: [ALLOWED_ROOT], intervalMs: 10_000, now: () => clock.now, log, ...(lastWrite ? { lastWrite } : {}) });
+  const poller = createPresencePoller({ host, exec, command: "claude", allowlist: [ALLOWED_ROOT], intervalMs: 10_000, now: () => clock.now, log, ...(readTranscript ? { readTranscript } : {}) });
   return {
     host,
     clock,
@@ -109,18 +110,41 @@ describe("presence poller", () => {
     expect(t.host.endedIds().has("s1")).toBe(false);
   });
 
-  it("dates only sessions it sees for the first time by their transcript, so one quiet for long enough sleeps at once", async () => {
+  it("reads each listed, allowlisted session's transcript once per run, so a long-quiet one sleeps at once", async () => {
     const asked: string[] = [];
     const t = setup(async (id) => {
       asked.push(id);
-      return T0 - DEFAULT_CONFIG.asleepAfterMs - 1;
+      return { lastWriteAt: T0 - DEFAULT_CONFIG.asleepAfterMs - 1, prompts: 2 };
     });
     t.host.ingest(ev("prompt", T0, {}, "known"));
     t.list(rawAgentEntry("s1", { startedAt: T0 - 86_400_000 }), rawAgentEntry("known"), rawAgentEntry("outside", { cwd: OUTSIDE_CWD }));
     await t.poller.pollOnce();
-    expect(asked).toEqual(["s1"]);
+    await t.poller.pollOnce();
+    expect(asked).toEqual(["s1", "known"]);
     t.host.tick();
     expect(t.host.sessions().get("s1")?.state).toBe("asleep");
+  });
+
+  it("raises a session's prompt count from its transcript, and counts it again after it leaves the fleet and returns", async () => {
+    const asked: string[] = [];
+    const t = setup(async (id) => {
+      asked.push(id);
+      return { lastWriteAt: T0, prompts: 12 };
+    });
+    t.list(rawAgentEntry("s1"));
+    await t.poller.pollOnce();
+    expect(t.host.snapshot().sessions).toHaveLength(1);
+    t.host.ingest(ev("session.end", t.clock.now, { reason: "other" }));
+    t.clock.now += DEFAULT_CONFIG.doneLingerMs;
+    t.host.tick();
+    t.list();
+    await t.poller.pollOnce();
+    t.host.ingest(ev("session.start", t.clock.now, { source: "resume" }));
+    expect(t.host.snapshot().sessions).toHaveLength(0);
+    t.list(rawAgentEntry("s1"));
+    await t.poller.pollOnce();
+    expect(asked).toEqual(["s1", "s1"]);
+    expect(t.host.snapshot().sessions).toHaveLength(1);
   });
 
   it("dates a session by its start when no transcript is found", async () => {
