@@ -11,6 +11,8 @@ export type ReconcileInput = {
   now: number;
   allowlist: readonly string[];
   graceMs: number;
+  /** When a first-sight session's transcript was last written, where the poller found one. */
+  lastWriteAt?: ReadonlyMap<string, number>;
 };
 
 export function sessionIdOf(entry: unknown): string | null {
@@ -38,8 +40,9 @@ export function reconcile(input: ReconcileInput): RedactedEvent[] {
     if (id === null || listed.has(id)) continue;
     listed.add(id);
     if (input.sessions.has(id) || input.ended.has(id)) continue;
-    // A raw agents-list entry: redactPresence applies the allowlist and keeps only id and pane key.
-    const alive = redactPresence(entry, true, ctx);
+    // A raw agents-list entry: redactPresence applies the allowlist and keeps only id, pane key and
+    // when the session was last active.
+    const alive = redactPresence(entry, true, ctx, input.lastWriteAt?.get(id));
     if (alive) events.push(alive);
   }
   for (const [id, s] of input.sessions) {

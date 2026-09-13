@@ -20,7 +20,7 @@ export const nodeExec: Exec = (command, opts) =>
   });
 
 export type FocusTarget = { pid: number; cwd: string };
-export type PresenceHost = Pick<FleetHost, "ingest" | "sessions" | "endedIds" | "forgetEnded">;
+export type PresenceHost = Pick<FleetHost, "ingest" | "sessions" | "endedIds" | "forgetEnded" | "settleRestored">;
 export type PresencePoller = {
   /** One poll; concurrent callers share it. Resolves false when the poll said nothing. */
   pollOnce(): Promise<boolean>;
@@ -36,7 +36,8 @@ export const PRESENCE_GRACE_MS = 15_000;
 const POLL_TIMEOUT_MS = 15_000;
 const POLL_MAX_BUFFER = 4 * 1024 * 1024;
 
-const TargetSchema = z.object({ sessionId: z.string().min(1), pid: z.number().int().positive(), cwd: z.string().min(1) });
+const ListedSchema = z.object({ sessionId: z.string().min(1), cwd: z.string().min(1) });
+const TargetSchema = ListedSchema.extend({ pid: z.number().int().positive() });
 
 function parseArray(stdout: string): unknown[] | null {
   try {
@@ -56,6 +57,8 @@ export function createPresencePoller(deps: {
   now: () => number;
   log: Logger;
   graceMs?: number;
+  /** When a session's transcript was last written, asked only for sessions seen for the first time. */
+  lastWrite?: (sessionId: string) => Promise<number | null>;
 }): PresencePoller {
   const graceMs = deps.graceMs ?? PRESENCE_GRACE_MS;
   let targets = new Map<string, FocusTarget>();
@@ -64,6 +67,23 @@ export function createPresencePoller(deps: {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let running = false;
   let stopped = false;
+
+  /** Transcript times for the allowlisted sessions reconcile will bring in; known and ended ones are not looked up. */
+  async function lastWrites(allowed: ReadonlySet<string>): Promise<Map<string, number>> {
+    const found = new Map<string, number>();
+    const lookup = deps.lastWrite;
+    if (!lookup) return found;
+    const known = deps.host.sessions();
+    const ended = deps.host.endedIds();
+    const firstSight = [...allowed].filter((id) => !known.has(id) && !ended.has(id));
+    await Promise.all(
+      firstSight.map(async (id) => {
+        const at = await lookup(id).catch(() => null);
+        if (at !== null) found.set(id, at);
+      }),
+    );
+    return found;
+  }
 
   async function run(): Promise<boolean> {
     const result = await deps.exec(`${deps.command} agents --json`, { timeoutMs: POLL_TIMEOUT_MS, maxBuffer: POLL_MAX_BUFFER });
@@ -82,8 +102,16 @@ export function createPresencePoller(deps: {
       if (target.success && isAllowed(target.data.cwd, deps.allowlist)) next.set(target.data.sessionId, { pid: target.data.pid, cwd: target.data.cwd });
     }
     targets = next;
+    const allowed = new Set<string>();
+    for (const entry of entries) {
+      const listedEntry = ListedSchema.safeParse(entry);
+      if (listedEntry.success && isAllowed(listedEntry.data.cwd, deps.allowlist)) allowed.add(listedEntry.data.sessionId);
+    }
+    deps.host.settleRestored(allowed);
+    const lastWriteAt = await lastWrites(allowed);
+    if (stopped) return false;
     const sessions = deps.host.sessions();
-    for (const e of reconcile({ entries, sessions, lastListedAt, ended: deps.host.endedIds(), now, allowlist: deps.allowlist, graceMs })) {
+    for (const e of reconcile({ entries, sessions, lastListedAt, ended: deps.host.endedIds(), now, allowlist: deps.allowlist, graceMs, lastWriteAt })) {
       deps.host.ingest(e);
     }
     deps.host.forgetEnded(listed);

@@ -187,6 +187,8 @@ class FleetHost {
   sessionCount(): number;                  // for health
   endedIds(): ReadonlySet<string>;         // for reconcile (§6.2)
   forgetEnded(keep: ReadonlySet<string>): void;     // drop ended ids absent from the latest poll
+  restore(events: readonly RedactedEvent[]): void;  // replay the event log at startup (§5.5)
+  settleRestored(listed: ReadonlySet<string>): void; // first successful poll after a restore (§5.5)
   aliases(): AliasMap;
   on(listener: HostListener): () => void;
 }
@@ -244,6 +246,23 @@ pruned are dropped. Then the snapshot refreshes.
 `tickerFor` and `sessionIdFor` search `aliases.sessions` for the entry whose `alias` matches. A
 known alias whose session has been pruned returns an empty ticker, not null.
 
+### 5.5 Restore
+
+At startup the host replays yesterday's and today's event log (§7.4) before the server handles a
+request, so a restart does not forget what sessions were doing. Each event goes through §5.1 at its
+recorded time, clamped to now, and produces its ticker lines, but is not emitted for the log, which
+would otherwise copy itself on every restart. One tick at the current time follows: it puts a
+session idle in the log to sleep and prunes sessions the log shows ended.
+
+The log cannot say which sessions closed while the agent was down, so restored sessions wait on the
+first successful poll. `settleRestored(listed)`, called with the ids of that poll's allowlisted
+entries, removes every restored session the poll does not list, with no done state and no ticker
+line: there is no exit to play for a session that ended while nobody watched. A restored session
+that sends a live event first has proved itself and is kept. Only the first call decides.
+
+One gap remains. A session that began waiting on a permission prompt while the agent was down has
+no logged event for it, and shows its logged state until its next hook.
+
 ## 6. Presence (B2)
 
 ### 6.1 Poll
@@ -269,14 +288,18 @@ function reconcile(input: {
   lastListedAt: ReadonlyMap<string, number>;    // kept by the poller: when each id was last in a poll
   ended: ReadonlySet<string>;
   now: number; allowlist: readonly string[]; graceMs: number;
+  lastWriteAt?: ReadonlyMap<string, number>;   // transcript write times of first-sight sessions (§6.4)
 }): RedactedEvent[];
 ```
 
 Pure. For each entry, read `sessionId` leniently; an entry without one is skipped.
 
 - **Alive, first sight.** An entry whose session is not in the fleet and not in the ended set
-  becomes `redactPresence(entry, true, ctx)`, which applies the allowlist. This is how sessions
-  that were already running when the agent started appear, as idle.
+  becomes `redactPresence(entry, true, ctx, lastWriteAt.get(id))`, which applies the allowlist.
+  This is how sessions that were already running when the agent started, and that the restored log
+  (§5.5) does not cover, appear, as idle. The event's `lastActiveAt` is the later of the entry's
+  `startedAt` and the session's transcript's last write (§6.4), so a session quiet for longer than
+  the asleep threshold is asleep on the next tick, not ten minutes after the agent noticed it.
 - **Alive, known.** No event. A presence event refreshes `lastEventAt`, which would defeat the
   stale-working timer and churn `updatedAt` every poll.
 - **Gone.** A fleet session that is not `done` and is absent from this poll gets a dead presence
@@ -300,6 +323,19 @@ the fleet.
 
 After a successful poll, the poller keeps `sessionId -> { pid, cwd }` for every entry, parsed with
 an agent-local schema, replacing the previous map (§2 rule 4).
+
+### 6.4 Transcript times
+
+Before reconciling, a successful poll settles restored sessions (§5.5), then looks up when the
+transcript was last written for each allowlisted entry that reconcile will bring in for the first
+time. Known and ended sessions are not looked up. Claude Code appends to
+`<CLAUDE_CONFIG_DIR or ~/.claude>/projects/<folder>/<sessionId>.jsonl` whenever a session does
+anything. The folder name is derived from the working directory in ways that vary (the drive
+letter's case, for one), so the id is looked for in every folder rather than the folder rebuilt.
+Only the file's modified time is read: the transcript is never opened, and neither the path nor an
+error leaves the lookup. An id that is not a plain name (letters, digits, `-`, `_`) is not looked
+up. A session with no transcript, such as one that has never had a prompt, is dated by `startedAt`
+alone.
 
 ## 7. Stores (B1, B2)
 
@@ -355,7 +391,9 @@ One file per UTC day, `logs/events-YYYY-MM-DD.jsonl`, in core's fixture format: 
 `{"fixture":1,"name":"events-YYYY-MM-DD"}` then one `RedactedEvent` per line, so `parseFixture()`
 and `createReplaySource()` read a day's log unchanged (FR-32). Appends are queued so order is
 kept. Every line is revalidated with `RedactedEventSchema` and checked with `containsForbidden()`
-first. Files older than `logRetentionDays` are deleted at start and hourly.
+first. Files older than `logRetentionDays` are deleted at start and hourly. Before that first
+sweep, yesterday's and today's files are read back for the restore (§5.5); lines that are not valid
+events, such as the header or a line cut short by a crash, are skipped.
 
 The log holds `sessionId`, `paneKey` and the status line's cost and rate-limit figures, as the
 redacted event model allows. It is local and never served.
@@ -528,12 +566,14 @@ the script exits 3.
 
 ## 11. Startup and shutdown
 
-`serve`: load config; load aliases; create the host, event log, poller, SSE hub and server; listen
-on `127.0.0.1:<port>`; start the 500 ms tick, the poll loop and the hourly retention sweep.
+`serve`: load config; load aliases; create the host, event log, poller, SSE hub and server; read
+back the recent event log; listen on `127.0.0.1:<port>`; restore the host from what was read (§5.5)
+before any request is handled; start the 500 ms tick, the poll loop and the hourly retention sweep.
+The log is read before listening but applied after, so an agent that fails to bind changes nothing.
 `EADDRINUSE` exits 1 with a message naming the port. `SIGINT` and `SIGTERM` stop the timers, end
 the streams, close the server, flush the aliases and the log, and exit 0.
 
-`startAgent({ home, port, now, log, exec, runFocus, platform, stateConfig, tickMs })` does all of
+`startAgent({ home, port, now, log, exec, runFocus, platform, stateConfig, tickMs, transcriptsDir })` does all of
 this with injected dependencies and resolves to `{ port, stop() }` once listening, so tests can run
 a whole agent on port 0.
 
@@ -558,9 +598,14 @@ Vitest, next to each module.
   hold before comparing, ignoring `updatedAt`. Also: ticker buffers cap at 200; duplicate
   session.start and unchanged status are dropped; stragglers for ended sessions are dropped and
   session.start reopens; tick-made state lines; snapshot emitted only on change; alias persistence
-  callback.
+  callback. Restore replays at recorded times without emitting for the log, sleeps a quiet session,
+  keeps ended ones out, and the first poll drops unlisted restored sessions once.
 - **Reconcile.** First sight, known alive, gone after grace, within grace, ended set, failed poll,
-  allowlist, malformed entries.
+  allowlist, malformed entries, first-sight dating by transcript write or start.
+- **Transcript times.** Found by id in any project folder, latest of several, null for a missing
+  root, a folder named like a transcript, or an id that is not a plain name.
+- **Restart.** A whole agent started over a log showing one busy session and one that closed comes
+  back with the busy one working and the other gone, and writes nothing back to the log.
 - **Stores.** Config defaults, token generation, invalid config message without values; alias file
   recovery; event log header, day rollover, retention, `parseFixture` round trip.
 - **Server.** Every route and status code; host, origin and token guards; preflight; the JSON

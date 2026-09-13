@@ -1,5 +1,5 @@
 import { RedactedEventSchema, containsForbidden, type RedactedEvent } from "@clawd/core";
-import { appendFile, mkdir, readdir, rm, writeFile } from "node:fs/promises";
+import { appendFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isErrno } from "../json-file";
 import type { Logger } from "../log";
@@ -13,6 +13,12 @@ export type EventLog = {
   sweep(): Promise<void>;
   /** Resolves once every append so far has been written. */
   flush(): Promise<void>;
+  /**
+   * Yesterday's and today's events, in the order they were written, for restoring state at startup.
+   * Two files, because a session busy across UTC midnight began in yesterday's. Lines that are not
+   * valid events (the header, a line cut short by a crash) are skipped.
+   */
+  readRecent(): Promise<RedactedEvent[]>;
 };
 
 export function logFileName(ms: number): string {
@@ -73,5 +79,31 @@ export function createEventLog(
       }
     },
     flush: () => chain,
+    async readRecent() {
+      await chain;
+      const today = deps.now();
+      const events: RedactedEvent[] = [];
+      for (const name of [logFileName(today - DAY_MS), logFileName(today)]) {
+        let text: string;
+        try {
+          text = await readFile(join(dir, name), "utf8");
+        } catch (err) {
+          if (!isErrno(err, "ENOENT")) deps.log("store.logReadFailed");
+          continue;
+        }
+        for (const line of text.split(/\r?\n/)) {
+          if (line.trim() === "") continue;
+          let value: unknown;
+          try {
+            value = JSON.parse(line);
+          } catch {
+            continue;
+          }
+          const parsed = RedactedEventSchema.safeParse(value);
+          if (parsed.success) events.push(parsed.data);
+        }
+      }
+      return events;
+    },
   };
 }

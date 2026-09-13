@@ -6,13 +6,13 @@ import { T0, ev } from "../testing/events";
 import { ALLOWED_ROOT, CANARY_CWD, OUTSIDE_CWD, rawAgentEntry } from "../testing/raw";
 import { createPresencePoller, type Exec, type ExecResult } from "./poller";
 
-function setup() {
+function setup(lastWrite?: (sessionId: string) => Promise<number | null>) {
   const clock = { now: T0 };
   const host = new FleetHost({ now: () => clock.now, config: DEFAULT_CONFIG, aliases: emptyAliasMap(), log: silentLogger });
   let reply: ExecResult = { ok: true, stdout: "[]" };
   const exec = vi.fn<Exec>(async () => reply);
   const log = vi.fn();
-  const poller = createPresencePoller({ host, exec, command: "claude", allowlist: [ALLOWED_ROOT], intervalMs: 10_000, now: () => clock.now, log });
+  const poller = createPresencePoller({ host, exec, command: "claude", allowlist: [ALLOWED_ROOT], intervalMs: 10_000, now: () => clock.now, log, ...(lastWrite ? { lastWrite } : {}) });
   return {
     host,
     clock,
@@ -107,6 +107,42 @@ describe("presence poller", () => {
     t.list();
     await t.poller.pollOnce();
     expect(t.host.endedIds().has("s1")).toBe(false);
+  });
+
+  it("dates only sessions it sees for the first time by their transcript, so one quiet for long enough sleeps at once", async () => {
+    const asked: string[] = [];
+    const t = setup(async (id) => {
+      asked.push(id);
+      return T0 - DEFAULT_CONFIG.asleepAfterMs - 1;
+    });
+    t.host.ingest(ev("prompt", T0, {}, "known"));
+    t.list(rawAgentEntry("s1", { startedAt: T0 - 86_400_000 }), rawAgentEntry("known"), rawAgentEntry("outside", { cwd: OUTSIDE_CWD }));
+    await t.poller.pollOnce();
+    expect(asked).toEqual(["s1"]);
+    t.host.tick();
+    expect(t.host.sessions().get("s1")?.state).toBe("asleep");
+  });
+
+  it("dates a session by its start when no transcript is found", async () => {
+    const t = setup(async () => null);
+    t.list(rawAgentEntry("s1", { startedAt: T0 - DEFAULT_CONFIG.asleepAfterMs }), rawAgentEntry("s2"));
+    await t.poller.pollOnce();
+    t.host.tick();
+    expect(t.host.sessions().get("s1")?.state).toBe("asleep");
+    expect(t.host.sessions().get("s2")?.state).toBe("idle");
+  });
+
+  it("quietly drops restored sessions the first successful poll does not list among allowlisted sessions", async () => {
+    const t = setup();
+    t.clock.now = T0 + 60_000;
+    t.host.restore([ev("prompt", T0, {}, "s1"), ev("prompt", T0, {}, "gone"), ev("prompt", T0, {}, "elsewhere")]);
+    t.reply({ ok: false });
+    await t.poller.pollOnce();
+    expect([...t.host.sessions().keys()]).toEqual(["s1", "gone", "elsewhere"]);
+    t.list(rawAgentEntry("s1"), rawAgentEntry("elsewhere", { cwd: OUTSIDE_CWD }));
+    await t.poller.pollOnce();
+    expect([...t.host.sessions().keys()]).toEqual(["s1"]);
+    expect(t.host.sessions().get("s1")?.state).toBe("working");
   });
 
   it("shares one run between callers that poll at the same time", async () => {

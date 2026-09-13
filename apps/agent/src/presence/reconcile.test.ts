@@ -21,8 +21,14 @@ const input = (over: Partial<ReconcileInput> = {}): ReconcileInput => ({
 describe("reconcile", () => {
   it("brings a listed session the fleet has never seen in as an alive presence, without its name or path", () => {
     const events = reconcile(input({ entries: [rawAgentEntry("s1")] }));
-    expect(events).toEqual([{ v: 1, t: T0 + 60_000, sessionId: "s1", paneKey: KEY, kind: "presence", alive: true }]);
+    expect(events).toEqual([{ v: 1, t: T0 + 60_000, sessionId: "s1", paneKey: KEY, kind: "presence", alive: true, lastActiveAt: T0 }]);
     expect(JSON.stringify(events)).not.toContain(CANARY);
+  });
+
+  it("dates a first-sight session by its transcript's last write when the poller found one", () => {
+    const entries = [rawAgentEntry("s1", { startedAt: T0 - 86_400_000 }), rawAgentEntry("s2", { startedAt: T0 - 86_400_000 })];
+    const events = reconcile(input({ entries, lastWriteAt: new Map([["s1", T0 - 3_600_000]]) }));
+    expect(events.map((e) => (e.kind === "presence" ? e.lastActiveAt : null))).toEqual([T0 - 3_600_000, T0 - 86_400_000]);
   });
 
   it("says nothing about a listed session it already knows", () => {
