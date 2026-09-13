@@ -1,25 +1,8 @@
 [
  {
   "version": 1,
-  "panes": [
-   {
-    "pane": "pane-1",
-    "label": "Oak"
-   }
-  ],
-  "sessions": [
-   {
-    "alias": "agent-1",
-    "label": "Otter",
-    "pane": "pane-1",
-    "state": "idle",
-    "activity": null,
-    "subagents": 0,
-    "contextPct": null,
-    "since": "2025-09-12T10:00:30.750Z",
-    "updatedAt": "2025-09-12T10:00:30.750Z"
-   }
-  ]
+  "panes": [],
+  "sessions": []
  },
  {
   "version": 1,
@@ -177,25 +160,8 @@
  },
  {
   "version": 1,
-  "panes": [
-   {
-    "pane": "pane-1",
-    "label": "Oak"
-   }
-  ],
-  "sessions": [
-   {
-    "alias": "agent-2",
-    "label": "Heron",
-    "pane": "pane-1",
-    "state": "idle",
-    "activity": null,
-    "subagents": 0,
-    "contextPct": null,
-    "since": "2025-09-12T10:01:50.961Z",
-    "updatedAt": "2025-09-12T10:01:50.961Z"
-   }
-  ]
+  "panes": [],
+  "sessions": []
  },
  {
   "version": 1,
@@ -309,25 +275,8 @@
  },
  {
   "version": 1,
-  "panes": [
-   {
-    "pane": "pane-1",
-    "label": "Oak"
-   }
-  ],
-  "sessions": [
-   {
-    "alias": "agent-3",
-    "label": "Badger",
-    "pane": "pane-1",
-    "state": "idle",
-    "activity": null,
-    "subagents": 0,
-    "contextPct": null,
-    "since": "2025-09-12T10:02:25.603Z",
-    "updatedAt": "2025-09-12T10:02:25.603Z"
-   }
-  ]
+  "panes": [],
+  "sessions": []
  },
  {
   "version": 1,
@@ -463,25 +412,8 @@
  },
  {
   "version": 1,
-  "panes": [
-   {
-    "pane": "pane-1",
-    "label": "Oak"
-   }
-  ],
-  "sessions": [
-   {
-    "alias": "agent-4",
-    "label": "Lynx",
-    "pane": "pane-1",
-    "state": "idle",
-    "activity": null,
-    "subagents": 0,
-    "contextPct": null,
-    "since": "2025-09-12T10:03:55.863Z",
-    "updatedAt": "2025-09-12T10:03:55.863Z"
-   }
-  ]
+  "panes": [],
+  "sessions": []
  },
  {
   "version": 1,
@@ -568,39 +500,6 @@
     "contextPct": null,
     "since": "2025-09-12T10:04:13.797Z",
     "updatedAt": "2025-09-12T10:04:13.797Z"
-   }
-  ]
- },
- {
-  "version": 1,
-  "panes": [
-   {
-    "pane": "pane-1",
-    "label": "Oak"
-   }
-  ],
-  "sessions": [
-   {
-    "alias": "agent-4",
-    "label": "Lynx",
-    "pane": "pane-1",
-    "state": "idle",
-    "activity": null,
-    "subagents": 0,
-    "contextPct": null,
-    "since": "2025-09-12T10:04:13.797Z",
-    "updatedAt": "2025-09-12T10:04:20.727Z"
-   },
-   {
-    "alias": "agent-5",
-    "label": "Finch",
-    "pane": "pane-1",
-    "state": "idle",
-    "activity": null,
-    "subagents": 0,
-    "contextPct": null,
-    "since": "2025-09-12T10:05:19.107Z",
-    "updatedAt": "2025-09-12T10:05:19.107Z"
    }
   ]
  },
@@ -788,17 +687,6 @@
     "contextPct": null,
     "since": "2025-09-12T10:04:13.797Z",
     "updatedAt": "2025-09-12T10:04:20.727Z"
-   },
-   {
-    "alias": "agent-6",
-    "label": "Vole",
-    "pane": "pane-1",
-    "state": "idle",
-    "activity": null,
-    "subagents": 0,
-    "contextPct": null,
-    "since": "2025-09-12T10:06:39.856Z",
-    "updatedAt": "2025-09-12T10:06:39.856Z"
    }
   ]
  },

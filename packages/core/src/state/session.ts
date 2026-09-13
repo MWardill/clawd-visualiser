@@ -22,6 +22,10 @@ export type SessionState = {
   /** Live subagent ids. An array, not a Set, so state is JSON-serialisable and comparable. */
   subagents: string[];
   contextPct: number | null;
+  /** Typed prompts: one per prompt event, raised to the transcript's count by a `history` event. */
+  prompts: number;
+  /** When the session last did something: a prompt, a tool call, a permission request or denial, a stop, a subagent change. A `history` event sets it to the transcript's last write. */
+  lastActiveAt: number;
   /** When the session was first seen. Never changes; the snapshot's sort key. */
   firstSeenAt: number;
   /** What was shown before the last transition, held until `until` so quick flips do not flicker. */
@@ -43,6 +47,8 @@ export function newSession(sessionId: string, paneKey: string, now: number, sinc
     backgroundTasks: 0,
     subagents: [],
     contextPct: null,
+    prompts: 0,
+    lastActiveAt: Math.min(since, now),
     firstSeenAt: now,
     displayHold: null,
   };
@@ -65,10 +71,18 @@ const settle = (s: SessionState, spawning = false): SessionState => (s.state ===
 const endWait = (s: SessionState): SessionState => ({ ...s, waitingOn: null, waitingAgent: null });
 const rest = (s: SessionState): SessionState => ({ ...endWait(s), activity: null });
 
+/** Events that mean the session did something. A start, an end, a presence poll or a status line does not. */
+const ACTIVE = new Set<RedactedEvent["kind"]>(["prompt", "tool.start", "tool.end", "permission.request", "permission.denied", "stop", "subagent.start", "subagent.stop"]);
+
 /** Pure: applies one event to one session. `now` is the event time. */
 export function reduceSession(prev: SessionState, e: RedactedEvent, now: number, cfg: StateConfig): SessionState {
   if (prev.state === "done") return prev;
-  let s: SessionState = { ...prev, lastEventAt: now };
+  // A transcript read is not something the session did, so lastEventAt and the state stay as they are.
+  // Its count only ever raises the session's. Its last write replaces lastActiveAt: that corrects a
+  // session first seen without one, such as a presence replayed from a log written before presence
+  // carried a last-active time, which would otherwise date the session from when it was noticed.
+  if (e.kind === "history") return { ...prev, prompts: Math.max(prev.prompts, e.prompts), lastActiveAt: e.lastActiveAt };
+  let s: SessionState = { ...prev, lastEventAt: now, ...(ACTIVE.has(e.kind) ? { lastActiveAt: Math.max(prev.lastActiveAt, now) } : {}) };
   switch (e.kind) {
     case "session.start":
       return s;
@@ -77,7 +91,7 @@ export function reduceSession(prev: SessionState, e: RedactedEvent, now: number,
     case "presence":
       return e.alive ? s : rest(transition(s, "done", now, cfg));
     case "prompt":
-      return settle(transition(endWait(s), "working", now, cfg));
+      return settle(transition(endWait({ ...s, prompts: s.prompts + 1 }), "working", now, cfg));
     case "tool.start": {
       if (e.agentId) {
         s = resting(s) ? transition(s, "working", now, cfg) : s;

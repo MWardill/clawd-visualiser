@@ -1,7 +1,9 @@
 import { ensurePaneAlias, ensureSessionAlias, type AliasMap } from "../alias/names";
 import { SnapshotSchema, type Activity, type SessionPhase, type SessionSnapshot, type Snapshot } from "../schema/snapshot";
+import { DEFAULT_CONFIG, type StateConfig } from "./config";
 import type { Fleet } from "./fleet";
 import type { SessionState } from "./session";
+import { isShown } from "./visibility";
 
 /** What to show right now: the held previous state and activity until the hold expires. */
 function displayed(s: SessionState, now: number): { state: SessionPhase; activity: Activity | null } {
@@ -16,11 +18,15 @@ export function displayedState(s: SessionState, now: number): SessionPhase {
 
 /**
  * The only place a wire Snapshot is made, and the only place local identifiers are left behind.
- * Returns the alias map too, since new sessions or panes may have been given aliases.
+ * Sessions `isShown` rejects are left out, and so are panes with nothing shown; both stay in the
+ * fleet. Returns the alias map too, since new sessions or panes may have been given aliases.
  */
-export function deriveSnapshot(f: Fleet, aliases: AliasMap, now: number): { snapshot: Snapshot; aliases: AliasMap } {
+export function deriveSnapshot(f: Fleet, aliases: AliasMap, now: number, cfg: StateConfig = DEFAULT_CONFIG): { snapshot: Snapshot; aliases: AliasMap } {
   let map = aliases;
+  const shown = Object.values(f.sessions).filter((s) => isShown(s, now, cfg));
+  const shownPanes = new Set(shown.map((s) => s.paneKey));
   const panes = Object.values(f.panes)
+    .filter((p) => shownPanes.has(p.paneKey))
     .sort((a, b) => a.firstSeenAt - b.firstSeenAt)
     .map((p) => {
       const r = ensurePaneAlias(map, p.paneKey);
@@ -28,7 +34,7 @@ export function deriveSnapshot(f: Fleet, aliases: AliasMap, now: number): { snap
       return { pane: r.alias, label: r.label };
     });
   // First sight, not `since`: sorting by `since` would reshuffle the fleet on every state change.
-  const sessions: SessionSnapshot[] = Object.values(f.sessions)
+  const sessions: SessionSnapshot[] = shown
     .sort((a, b) => a.firstSeenAt - b.firstSeenAt || (a.sessionId < b.sessionId ? -1 : a.sessionId > b.sessionId ? 1 : 0))
     .map((s) => {
       const sr = ensureSessionAlias(map, s.sessionId);

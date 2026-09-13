@@ -1,9 +1,10 @@
-import { isAllowed } from "@clawd/core";
+import { RedactedEventSchema, isAllowed } from "@clawd/core";
 import { exec } from "node:child_process";
 import { z } from "zod";
 import type { FleetHost } from "../host/host";
 import type { Logger } from "../log";
 import { listedIds, reconcile } from "./reconcile";
+import type { TranscriptStats } from "./transcripts";
 
 export type ExecResult = { ok: true; stdout: string } | { ok: false };
 export type Exec = (command: string, opts: { timeoutMs: number; maxBuffer: number }) => Promise<ExecResult>;
@@ -57,32 +58,37 @@ export function createPresencePoller(deps: {
   now: () => number;
   log: Logger;
   graceMs?: number;
-  /** When a session's transcript was last written, asked only for sessions seen for the first time. */
-  lastWrite?: (sessionId: string) => Promise<number | null>;
+  /** A session's transcript figures: its last write and its typed prompt count. Read once per session per run. */
+  readTranscript?: (sessionId: string) => Promise<TranscriptStats | null>;
 }): PresencePoller {
   const graceMs = deps.graceMs ?? PRESENCE_GRACE_MS;
   let targets = new Map<string, FocusTarget>();
   const lastListedAt = new Map<string, number>();
+  /** Sessions whose transcript has been read in this run and which are still in the fleet. */
+  const counted = new Set<string>();
   let inFlight: Promise<boolean> | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let running = false;
   let stopped = false;
 
-  /** Transcript times for the allowlisted sessions reconcile will bring in; known and ended ones are not looked up. */
-  async function lastWrites(allowed: ReadonlySet<string>): Promise<Map<string, number>> {
-    const found = new Map<string, number>();
-    const lookup = deps.lastWrite;
-    if (!lookup) return found;
+  /**
+   * Transcript figures for the allowlisted, listed sessions not counted in this run and not ended,
+   * read one at a time: a first poll after a restart may read every transcript, and some are tens of
+   * megabytes. Counted ids that have left the fleet are forgotten first, so a returning session is
+   * counted again.
+   */
+  async function readUncounted(allowed: ReadonlySet<string>): Promise<Map<string, TranscriptStats | null>> {
+    const read = new Map<string, TranscriptStats | null>();
+    const reader = deps.readTranscript;
+    if (!reader) return read;
     const known = deps.host.sessions();
+    for (const id of [...counted]) if (!known.has(id)) counted.delete(id);
     const ended = deps.host.endedIds();
-    const firstSight = [...allowed].filter((id) => !known.has(id) && !ended.has(id));
-    await Promise.all(
-      firstSight.map(async (id) => {
-        const at = await lookup(id).catch(() => null);
-        if (at !== null) found.set(id, at);
-      }),
-    );
-    return found;
+    for (const id of allowed) {
+      if (counted.has(id) || ended.has(id)) continue;
+      read.set(id, await reader(id).catch(() => null));
+    }
+    return read;
   }
 
   async function run(): Promise<boolean> {
@@ -108,11 +114,23 @@ export function createPresencePoller(deps: {
       if (listedEntry.success && isAllowed(listedEntry.data.cwd, deps.allowlist)) allowed.add(listedEntry.data.sessionId);
     }
     deps.host.settleRestored(allowed);
-    const lastWriteAt = await lastWrites(allowed);
+    const read = await readUncounted(allowed);
     if (stopped) return false;
+    const lastWriteAt = new Map<string, number>();
+    for (const [id, stats] of read) if (stats) lastWriteAt.set(id, stats.lastWriteAt);
     const sessions = deps.host.sessions();
     for (const e of reconcile({ entries, sessions, lastListedAt, ended: deps.host.endedIds(), now, allowlist: deps.allowlist, graceMs, lastWriteAt })) {
       deps.host.ingest(e);
+    }
+    // Counts go to sessions now in the fleet, including those reconcile just brought in.
+    const fleet = deps.host.sessions();
+    for (const [id, stats] of read) {
+      const view = fleet.get(id);
+      if (!view) continue;
+      counted.add(id);
+      if (!stats || stats.prompts === 0) continue;
+      const history = RedactedEventSchema.safeParse({ v: 1, t: now, sessionId: id, paneKey: view.paneKey, kind: "history", prompts: stats.prompts, lastActiveAt: Math.floor(stats.lastWriteAt) });
+      if (history.success) deps.host.ingest(history.data);
     }
     deps.host.forgetEnded(listed);
     for (const id of [...lastListedAt.keys()]) if (!listed.has(id) && !sessions.has(id)) lastListedAt.delete(id);

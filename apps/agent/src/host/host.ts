@@ -127,7 +127,7 @@ export class FleetHost {
   }
 
   snapshot(): Snapshot {
-    const { snapshot, aliases } = deriveSnapshot(this.fleet, this.aliasMap, this.deps.now());
+    const { snapshot, aliases } = deriveSnapshot(this.fleet, this.aliasMap, this.deps.now(), this.deps.config);
     this.setAliases(aliases);
     return snapshot;
   }
@@ -216,7 +216,7 @@ export class FleetHost {
   }
 
   private refresh(now: number): void {
-    const { snapshot, aliases } = deriveSnapshot(this.fleet, this.aliasMap, now);
+    const { snapshot, aliases } = deriveSnapshot(this.fleet, this.aliasMap, now, this.deps.config);
     this.setAliases(aliases);
     const key = JSON.stringify({ ...snapshot, generatedAt: "" });
     if (key === this.lastSnapshotKey) return;

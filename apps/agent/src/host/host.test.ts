@@ -242,6 +242,19 @@ describe("FleetHost", () => {
     expect(seen.tickers[0]?.alias).toBe("agent-7");
   });
 
+  it("leaves hidden sessions out of its snapshot, judged by its own config", () => {
+    const clock = { now: T0 };
+    const host = new FleetHost({ now: () => clock.now, config: { ...DEFAULT_CONFIG, oneShotHideMs: 60_000 }, aliases: emptyAliasMap(), log: silentLogger });
+    host.ingest(ev("presence", T0, { alive: true }, "unprompted"));
+    host.ingest(ev("prompt", T0, {}, "once"));
+    host.ingest(ev("stop", T0 + 1, { backgroundTasks: 0 }, "once"));
+    clock.now = T0 + 30_000;
+    expect(host.snapshot().sessions).toHaveLength(1);
+    clock.now = T0 + 61_000;
+    expect(host.snapshot().sessions).toHaveLength(0);
+    expect(host.sessionCount()).toBe(2);
+  });
+
   it("describes sessions for reconciliation", () => {
     const { host, clock } = makeHost();
     host.ingest(ev("prompt", T0, {}));

@@ -9,7 +9,7 @@ import { createStreamHub } from "./http/sse";
 import { isErrno } from "./json-file";
 import { createLogger, type Logger } from "./log";
 import { createPresencePoller, nodeExec, type Exec } from "./presence/poller";
-import { createTranscriptClock } from "./presence/transcripts";
+import { createTranscriptReader } from "./presence/transcripts";
 import { createAliasStore } from "./store/alias-store";
 import { createEventLog } from "./store/event-log";
 
@@ -24,7 +24,7 @@ export type AgentOptions = {
   platform?: NodeJS.Platform;
   stateConfig?: StateConfig;
   tickMs?: number;
-  /** Claude Code's transcripts folder, whose file times date sessions first seen by the poll. */
+  /** Claude Code's transcripts folder, read to date sessions and count their typed prompts. */
   transcriptsDir?: string;
 };
 
@@ -88,7 +88,7 @@ export async function startAgent(opts: AgentOptions): Promise<RunningAgent> {
     intervalMs: config.pollIntervalMs,
     now,
     log,
-    lastWrite: createTranscriptClock(opts.transcriptsDir ?? defaultTranscriptsDir()),
+    readTranscript: createTranscriptReader(opts.transcriptsDir ?? defaultTranscriptsDir()),
   });
   const sensitive = (): readonly string[] => poller.liveDirectories();
   const eventLog = createEventLog(paths.logs, { now, retentionDays: config.logRetentionDays, log, sensitive });

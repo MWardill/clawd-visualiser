@@ -10,6 +10,12 @@ export type StateConfig = {
    * interrupt, a lost hook). Generous, because a single tool call can legitimately run for minutes.
    */
   staleWorkingMs: number;
+  /** A quiet session with exactly one prompt leaves the view this long after its last activity. */
+  oneShotHideMs: number;
+  /** A quiet session with up to `fewPrompts` prompts leaves the view this long after its last activity. */
+  fewPromptsHideMs: number;
+  /** A session with more prompts than this stays in view however quiet it is. */
+  fewPrompts: number;
 };
 
 export const DEFAULT_CONFIG: StateConfig = {
@@ -17,4 +23,7 @@ export const DEFAULT_CONFIG: StateConfig = {
   minDisplayMs: 1_500,
   doneLingerMs: 4_000,
   staleWorkingMs: 30 * 60_000,
+  oneShotHideMs: 3 * 3_600_000,
+  fewPromptsHideMs: 24 * 3_600_000,
+  fewPrompts: 8,
 };

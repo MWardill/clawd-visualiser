@@ -46,6 +46,10 @@ export const RedactedEventSchema = z.discriminatedUnion("kind", [
   // `lastActiveAt`, on a live presence only: when the session last did anything, so one first seen
   // by the poll (after a restart, say) is idle since then rather than since it was noticed.
   z.object({ ...base, kind: z.literal("presence"), alive: z.boolean(), lastActiveAt: z.number().int().nonnegative().optional() }).strict(),
+  // What the agent read from a session's transcript, once per session per run: its typed prompt count,
+  // which can raise the session's count but never lower it, and its last write, which is when the
+  // session last did anything. It describes a session rather than creating one.
+  z.object({ ...base, kind: z.literal("history"), prompts: z.number().int().nonnegative(), lastActiveAt: z.number().int().nonnegative() }).strict(),
 ]);
 export type RedactedEvent = z.infer<typeof RedactedEventSchema>;
 export type RedactedEventKind = RedactedEvent["kind"];

@@ -68,7 +68,7 @@ Priority: **P0** first usable version · **P1** next · **P2** later.
 
 - **FR-1** Detect a session on its first hook event of any kind. The HTTP `SessionStart` hook does not fire in practice; the command hook does, so the installer registers both.
 - **FR-2** Detect end on `SessionEnd`, or on disappearance from `claude agents --json`, which the agent polls every few seconds. A killed session sends no `SessionEnd`. The agents list includes interactive and headless sessions with PID, working directory, start time and session ID.
-- **FR-3** Group sessions by working directory into panes. A pane is created when its first session appears and removed when its last session ends.
+- **FR-3** Group sessions by working directory into panes. A pane is created when its first session appears and removed when its last session ends or leaves the view (FR-7a).
 - **FR-4** Directory allowlist. User-level hooks fire for every session on the machine, so the agent only accepts sessions whose working directory matches a configured allowlist. Everything else is dropped at ingest, before logging.
 
 ### 7.2 State derivation (P0)
@@ -76,6 +76,7 @@ Priority: **P0** first usable version · **P1** next · **P2** later.
 - **FR-5** Each session has exactly one state: `working`, `waiting`, `idle`, `asleep`, `done`.
 - **FR-6** Transitions are defined in section 9. `idle` becomes `asleep` after a configurable period (default 10 minutes).
 - **FR-7** Each state and activity has a minimum display duration (default 1.5 s) to prevent flicker.
+- **FR-7a** Dormant sessions leave the view. Working and waiting sessions are always shown. A session with no typed prompts is never shown; one with a single prompt is hidden 3 hours after its last activity, one with two to eight after 24 hours, and one with more is never hidden. A hidden session returns on its next prompt. Prompt counts come from the session's transcript, read locally by the agent, which keeps only the number.
 
 ### 7.3 Activity categorisation (P0)
 
