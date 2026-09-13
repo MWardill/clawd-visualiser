@@ -1,0 +1,45 @@
+// Strings for nameplates and titles, and the one place text is put on the canvas.
+import type { Activity, SessionPhase } from "@clawd/core";
+import { PALETTE, type PixelContext } from "./engine";
+
+export const STATE_COLOURS: Record<SessionPhase, string> = {
+  working: PALETTE.state.green,
+  waiting: PALETTE.state.amber,
+  idle: PALETTE.night.text,
+  asleep: PALETTE.state.blue,
+  done: PALETTE.state.pink,
+};
+
+/** `mm:ss` for a duration; negatives read as zero. */
+export function mmss(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+}
+
+export type Nameplate = { name: string; subs: string; status: string; colour: string };
+
+/** Two lines under a Clawd: the name with its subagent count, then state, activity and time in state. */
+export function nameplate(a: { label: string; state: SessionPhase; activity: Activity | null; subagents: number; since: number }, now: number): Nameplate {
+  const activity = a.state === "working" && a.activity ? `·${a.activity}` : "";
+  return {
+    name: a.label.toLowerCase(),
+    subs: a.subagents > 0 ? ` ×${a.subagents}` : "",
+    status: `${a.state}${activity} ${mmss(now - a.since)}`,
+    colour: STATE_COLOURS[a.state],
+  };
+}
+
+export function paneTitle(label: string): string {
+  return `─ ${label.toLowerCase()}`;
+}
+
+export type TextStyle = { size: number; font: string; bold?: boolean; align?: CanvasTextAlign; baseline?: CanvasTextBaseline };
+
+/** Draws text anchored on a cell boundary. `size` is in canvas pixels, already scaled for the pixel ratio. */
+export function drawText(ctx: PixelContext, PX: number, text: string, gx: number, gy: number, col: string, style: TextStyle): void {
+  ctx.fillStyle = col;
+  ctx.font = `${style.bold ? "bold " : ""}${style.size}px ${style.font}`;
+  ctx.textAlign = style.align ?? "left";
+  ctx.textBaseline = style.baseline ?? "top";
+  ctx.fillText(text, gx * PX, gy * PX);
+}

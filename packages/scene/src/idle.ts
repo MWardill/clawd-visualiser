@@ -32,9 +32,9 @@ export function mountIdleClawd(canvas: HTMLCanvasElement, options: IdleClawdOpti
 
   function render(f: number) {
     ctx!.clearRect(0, 0, canvas.width, canvas.height);
-    // blink for 5 frames out of every 80, breathe on a slow sine, both as in the template's demo
+    // blink for 5 frames out of every 80 as in the template's demo; lift one cell on the rising part of a slow sine to breathe
     const eyes: EyeVariant = f % 80 >= 75 ? "blink" : "forward";
-    const breath = Math.round(Math.sin(f * 0.12) * 0.5);
+    const breath = Math.sin(f * 0.12) > 0.3 ? -1 : 0;
     engine.drawClawd(ox, oy + breath, { eyes });
     engine.tickParticles();
   }

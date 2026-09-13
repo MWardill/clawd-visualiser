@@ -1,0 +1,28 @@
+/*
+  The one hand-written effect in the chrome: the waiting count blinks amber while it is non-zero,
+  in steps, like a terminal cursor. Everything else is Tailwind utilities.
+*/
+@keyframes attention-blink {
+  0%,
+  60% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 0.35;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+.attention {
+  color: var(--amber);
+  font-weight: 700;
+  animation: attention-blink 1.5s steps(1, end) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .attention {
+    animation: none;
+  }
+}
