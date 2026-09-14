@@ -1,14 +1,27 @@
 import { paneKey, paneName } from "../alias/pane";
+import { atLeast, type DetailLevel, type EventDetail } from "../schema/detail";
 import { EVENT_SCHEMA_VERSION, RedactedEventSchema, type RedactedEvent } from "../schema/events";
-import { RawAgentEntrySchema, RawHookSchema, RawStatusLineSchema, type RawHook, type RawStatusLine } from "../schema/raw";
+import {
+  RawAgentEntryDetailSchema,
+  RawAgentEntrySchema,
+  RawHookDetailSchema,
+  RawHookSchema,
+  RawStatusLineDetailSchema,
+  RawStatusLineSchema,
+  type RawHook,
+  type RawStatusLine,
+} from "../schema/raw";
 import { isAllowed } from "./allowlist";
 import { categoryFor, normaliseTool } from "./categories";
+import { hookDetail, presenceDetail, statusDetail } from "./detail";
 
 export type IngestContext = {
   now: number;
   allowlist: readonly string[];
   /** Keep the working directory's last segment on every event as `paneName`, for pane labels. Off unless set. */
   paneNames?: boolean;
+  /** How much of a payload's shape and paths to keep (detail levels design §2). Absent means none. */
+  detail?: DetailLevel;
 };
 
 /** Payload fields that must never survive ingest. Tested against every fixture. */
@@ -30,10 +43,19 @@ export const FORBIDDEN_KEYS = [
  */
 export function redact(raw: unknown, ctx: IngestContext): RedactedEvent | null {
   if (typeof raw !== "object" || raw === null) return null;
-  const hook = RawHookSchema.safeParse(raw);
-  if (hook.success) return redactHook(hook.data, ctx);
-  const status = RawStatusLineSchema.safeParse(raw);
-  if (status.success && isStatusLine(status.data)) return redactStatus(status.data, ctx);
+  const level = ctx.detail ?? "none";
+  if (level === "none") {
+    const hook = RawHookSchema.safeParse(raw);
+    if (hook.success) return redactHook(hook.data, ctx);
+    const status = RawStatusLineSchema.safeParse(raw);
+    if (status.success && isStatusLine(status.data)) return redactStatus(status.data, ctx);
+    return null;
+  }
+  // Above none the wider shapes are parsed, still in strip mode; the level decides what is kept.
+  const hook = RawHookDetailSchema.safeParse(raw);
+  if (hook.success) return redactHook(hook.data, ctx, hookDetail(level, hook.data));
+  const status = RawStatusLineDetailSchema.safeParse(raw);
+  if (status.success && isStatusLine(status.data)) return redactStatus(status.data, ctx, statusDetail(level, status.data));
   return null;
 }
 
@@ -52,13 +74,15 @@ function isStatusLine(p: RawStatusLine): boolean {
  * last write, when the caller found one) and the entry's own start. Only times are kept.
  */
 export function redactPresence(entry: unknown, alive: boolean, ctx: IngestContext, lastWriteAt?: number | null): RedactedEvent | null {
-  const parsed = RawAgentEntrySchema.safeParse(entry);
+  const paths = atLeast(ctx.detail ?? "none", "paths");
+  const parsed = paths ? RawAgentEntryDetailSchema.safeParse(entry) : RawAgentEntrySchema.safeParse(entry);
   if (!parsed.success) return null;
   const base = envelope(parsed.data.sessionId, parsed.data.cwd, ctx);
   if (!base) return null;
+  const detail = paths ? presenceDetail("paths", parsed.data) : undefined;
   const known = [lastWriteAt, parsed.data.startedAt].filter((n): n is number => typeof n === "number" && Number.isFinite(n) && n >= 0);
   const lastActiveAt = alive && known.length > 0 ? Math.floor(Math.max(...known)) : undefined;
-  return validate({ ...base, kind: "presence", alive, ...(lastActiveAt === undefined ? {} : { lastActiveAt }) });
+  return validate({ ...base, ...(detail === undefined ? {} : { detail }), kind: "presence", alive, ...(lastActiveAt === undefined ? {} : { lastActiveAt }) });
 }
 
 /** The fields every redacted event carries, or null when the directory is outside the allowlist. */
@@ -73,12 +97,12 @@ function validate(event: unknown): RedactedEvent | null {
   return parsed.success ? parsed.data : null;
 }
 
-function redactHook(p: RawHook, ctx: IngestContext): RedactedEvent | null {
+function redactHook(p: RawHook, ctx: IngestContext, detail?: EventDetail): RedactedEvent | null {
   // Internal helpers (the session-naming helper) have an empty agent_type. Nothing of theirs is ours.
   if (p.agent_id && !p.agent_type) return null;
   const env = envelope(p.session_id, p.cwd, ctx);
   if (!env) return null;
-  const base = { ...env, ...(p.agent_id ? { agentId: p.agent_id } : {}) };
+  const base = { ...env, ...(p.agent_id ? { agentId: p.agent_id } : {}), ...(detail === undefined ? {} : { detail }) };
   const rawTool = p.tool_name ?? "unknown";
   const toolFields = { tool: normaliseTool(rawTool), category: categoryFor(rawTool) };
   switch (p.hook_event_name) {
@@ -111,9 +135,10 @@ function redactHook(p: RawHook, ctx: IngestContext): RedactedEvent | null {
   }
 }
 
-function redactStatus(p: RawStatusLine, ctx: IngestContext): RedactedEvent | null {
-  const base = envelope(p.session_id, p.cwd, ctx);
-  if (!base) return null;
+function redactStatus(p: RawStatusLine, ctx: IngestContext, detail?: EventDetail): RedactedEvent | null {
+  const env = envelope(p.session_id, p.cwd, ctx);
+  if (!env) return null;
+  const base = { ...env, ...(detail === undefined ? {} : { detail }) };
   const pct = (v: number | null | undefined): number | undefined => (typeof v === "number" ? Math.min(100, Math.max(0, v)) : undefined);
   const contextPct = pct(p.context_window?.used_percentage);
   const costUsd = p.cost?.total_cost_usd;
