@@ -7,7 +7,7 @@ import { agentPaths, defaultConfig, saveConfig } from "./config";
 import { createLogger } from "./log";
 import type { Exec } from "./presence/poller";
 import { openStream, parseSse, send, waitFor } from "./testing/http";
-import { ALLOWED_ROOT, CANARY, OUTSIDE_CWD, rawAgentEntry, rawHook, rawSessionScript, rawStatus } from "./testing/raw";
+import { ALLOWED_ROOT, CANARY, LOCAL_ONLY, OUTSIDE_CWD, SESSION_CWD, rawAgentEntry, rawHook, rawSessionScript, rawStatus } from "./testing/raw";
 import { useTempDirs } from "./testing/tmp";
 
 describe("agent end to end", () => {
@@ -19,9 +19,9 @@ describe("agent end to end", () => {
     agent = null;
   });
 
-  it("serves the contract, focuses a session, and lets no canary from any raw payload reach any sink", async () => {
+  it.each(["none", "hints", "paths"] as const)("serves the contract, focuses a session, and lets no canary reach any sink at level %s", async (level) => {
     const home = await tempDir();
-    const config = { ...defaultConfig(), allowlist: [ALLOWED_ROOT], pollIntervalMs: 1_000 };
+    const config = { ...defaultConfig(), allowlist: [ALLOWED_ROOT], pollIntervalMs: 1_000, detail: level };
     await saveConfig(agentPaths(home), config);
     const logged: string[] = [];
     let listed: unknown[] = [];
@@ -97,5 +97,16 @@ describe("agent end to end", () => {
       ["stdout", logged.join("")],
     ];
     for (const [sink, text] of sinks) expect(text.includes(CANARY), `canary found in ${sink}`).toBe(false);
+    for (const [sink, text] of sinks.slice(1)) expect(text.includes(LOCAL_ONLY), `local-only string found in ${sink}`).toBe(false);
+    const responses = sinks[0]![1];
+    expect(responses.includes(LOCAL_ONLY), "local-only strings in responses").toBe(level === "paths");
+    expect(responses.includes('"detail":{'), "detail objects in responses").toBe(level !== "none");
+    const parsed = SnapshotSchema.parse(JSON.parse(snapshot.body));
+    if (level === "paths") {
+      expect(parsed.sessions[1]?.detail).toMatchObject({ name: "LOCALONLY session name", dir: SESSION_CWD, permissionMode: "default" });
+      expect(parsed.sessions[0]?.detail?.subject).toEqual({ kind: "file", text: "src/LOCALONLY-secret.ts" });
+      expect(parsed.panes[0]?.detail).toEqual({ dir: SESSION_CWD });
+    }
+    if (level === "hints") expect(parsed.sessions[0]?.detail).toEqual({ permissionMode: "default", shells: 1, subject: { kind: "file", text: "ts" } });
   }, 20_000);
 });
