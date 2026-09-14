@@ -1,7 +1,7 @@
-import { CommandSchema, ENDPOINTS, HealthSchema, containsForbidden, type RedactedEvent, type Snapshot, type TickerEvent } from "@clawd/core";
+import { CommandSchema, ENDPOINTS, HealthSchema, containsForbidden, stripDetail, type RedactedEvent, type Snapshot, type TickerEvent } from "@clawd/core";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
-import { usesFolderPaneLabels, type AgentConfig } from "../config";
+import { detailLevel, usesFolderPaneLabels, type AgentConfig } from "../config";
 import { readBody } from "../ingest/body";
 import { ingestHook, ingestStatus, parseJson } from "../ingest/ingest";
 import type { Logger } from "../log";
@@ -29,7 +29,7 @@ export type ServerHost = {
 
 export type ServerDeps = {
   host: ServerHost;
-  config: Pick<AgentConfig, "allowlist" | "token" | "corsOrigins" | "paneLabels">;
+  config: Pick<AgentConfig, "allowlist" | "token" | "corsOrigins" | "paneLabels" | "detail">;
   stream: Pick<StreamHub, "connect">;
   /** Runs after the 202 has been sent. */
   focus(sessionId: string): void;
@@ -70,9 +70,9 @@ export function createAgentServer(deps: ServerDeps): Server {
 
   const port = (): number => (server.address() as AddressInfo | null)?.port ?? 0;
 
-  /** Every JSON body is checked for forbidden keys and live directories before it is written. */
+  /** Every JSON body is checked for forbidden keys and live directories before it is written. Detail is the one place a directory may live. */
   function send(res: ServerResponse, status: number, body: unknown, headers: Headers = {}): void {
-    if (containsForbidden(body, deps.sensitive()) !== null) {
+    if (containsForbidden(stripDetail(body), deps.sensitive()) !== null) {
       deps.log("privacy.blocked");
       sendJson(res, 500, { error: "blocked" }, headers);
       return;
@@ -116,7 +116,7 @@ export function createAgentServer(deps: ServerDeps): Server {
         deps.counts.badJson++;
         return;
       }
-      const ctx = { now: deps.now(), allowlist: deps.config.allowlist, paneNames: usesFolderPaneLabels(deps.config) };
+      const ctx = { now: deps.now(), allowlist: deps.config.allowlist, paneNames: usesFolderPaneLabels(deps.config), detail: detailLevel(deps.config) };
       const event = route === "hook" ? ingestHook(parsed.value, ctx) : ingestStatus(parsed.value, ctx);
       if (event === null) {
         deps.counts.dropped++;
@@ -149,7 +149,7 @@ export function createAgentServer(deps: ServerDeps): Server {
 
     if (path === ENDPOINTS.snapshot) return onlyGet(() => send(res, 200, deps.host.snapshot(), cors));
     if (path === ENDPOINTS.health) {
-      return onlyGet(() => send(res, 200, HealthSchema.parse({ ok: true, version: AGENT_VERSION, sessions: deps.host.sessionCount() }), cors));
+      return onlyGet(() => send(res, 200, HealthSchema.parse({ ok: true, version: AGENT_VERSION, sessions: deps.host.sessionCount(), detail: detailLevel(deps.config) }), cors));
     }
     if (path === ENDPOINTS.stream) return onlyGet(() => deps.stream.connect(req, res, cors));
     if (path === ENDPOINTS.command) {

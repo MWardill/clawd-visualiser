@@ -12,6 +12,8 @@ describe("ingestHook", () => {
       "session.start",
       "prompt",
       "tool.start",
+      "tool.end",
+      "tool.start",
       "permission.request",
       "tool.end",
       "tool.start",

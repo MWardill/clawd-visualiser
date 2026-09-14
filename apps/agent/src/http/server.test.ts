@@ -6,7 +6,7 @@ import { FleetHost } from "../host/host";
 import { silentLogger } from "../log";
 import { T0 } from "../testing/events";
 import { openStream, send, waitFor } from "../testing/http";
-import { ALLOWED_ROOT, CANARY, rawHook, rawStatus } from "../testing/raw";
+import { ALLOWED_ROOT, CANARY, LOCAL_ONLY, SESSION_CWD, rawHook, rawStatus } from "../testing/raw";
 import { AGENT_VERSION } from "../version";
 import { createAgentServer, newIngestCounts, type ServerDeps, type ServerHost } from "./server";
 import { createStreamHub, type StreamHub } from "./sse";
@@ -154,7 +154,7 @@ describe("api routes", () => {
     const { port } = await start();
     await hook(port, rawHook("UserPromptSubmit", "s1"));
     const reply = await send(port, { path: "/api/health" });
-    expect(HealthSchema.parse(JSON.parse(reply.body))).toEqual({ ok: true, version: AGENT_VERSION, sessions: 1 });
+    expect(HealthSchema.parse(JSON.parse(reply.body))).toEqual({ ok: true, version: AGENT_VERSION, sessions: 1, detail: "none" });
   });
 
   it("serves a session's ticker backfill and 404 for an unknown alias", async () => {
@@ -237,5 +237,27 @@ describe("api routes", () => {
     const reply = await hook(port, rawHook("UserPromptSubmit", "s1"));
     expect(reply.status).toBe(200);
     expect(reply.body).toBe("{}");
+  });
+});
+
+describe("detail level", () => {
+  it("reports the level in health and lets detail through the sink check", async () => {
+    const { port } = await start({ config: { allowlist: [ALLOWED_ROOT], token: TOKEN, corsOrigins: [WEB], detail: "paths" }, sensitive: () => [SESSION_CWD] });
+    expect(HealthSchema.parse(JSON.parse((await send(port, { path: "/api/health" })).body)).detail).toBe("paths");
+    await hook(port, rawHook("PreToolUse", "s1", { tool_name: "Write", tool_use_id: "t1" }));
+    await waitFor(async () => (await send(port, { path: "/api/snapshot" })).body.includes(LOCAL_ONLY));
+    const snapshot = SnapshotSchema.parse(JSON.parse((await send(port, { path: "/api/snapshot" })).body));
+    expect(snapshot.sessions[0]?.detail).toMatchObject({ dir: SESSION_CWD, subject: { kind: "file", text: "src/LOCALONLY-secret.ts" } });
+    expect(snapshot.panes[0]?.detail).toEqual({ dir: SESSION_CWD });
+  });
+
+  it("defaults to none: no detail key and no local string in any response", async () => {
+    const { port } = await start({ sensitive: () => [SESSION_CWD] });
+    expect(HealthSchema.parse(JSON.parse((await send(port, { path: "/api/health" })).body)).detail).toBe("none");
+    await hook(port, rawHook("PreToolUse", "s1", { tool_name: "Write", tool_use_id: "t1" }));
+    await waitFor(async () => (await send(port, { path: "/api/snapshot" })).body.includes("agent-1"));
+    const body = (await send(port, { path: "/api/snapshot" })).body;
+    expect(body).not.toContain("detail");
+    expect(body).not.toContain(LOCAL_ONLY);
   });
 });

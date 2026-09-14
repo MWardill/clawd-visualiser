@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { FleetHost } from "../host/host";
 import { silentLogger } from "../log";
 import { T0, ev } from "../testing/events";
-import { ALLOWED_ROOT, CANARY_CWD, OUTSIDE_CWD, rawAgentEntry } from "../testing/raw";
+import { ALLOWED_ROOT, SESSION_CWD, OUTSIDE_CWD, rawAgentEntry } from "../testing/raw";
 import { createPresencePoller, type Exec, type ExecResult } from "./poller";
 import type { TranscriptStats } from "./transcripts";
 
@@ -43,10 +43,10 @@ describe("presence poller", () => {
     const t = setup();
     t.list(rawAgentEntry("s1"), rawAgentEntry("s2", { cwd: OUTSIDE_CWD, pid: 7 }), rawAgentEntry("s3", { pid: "not a number" }));
     await t.poller.pollOnce();
-    expect(t.poller.lookup("s1")).toEqual({ pid: 4242, cwd: CANARY_CWD });
+    expect(t.poller.lookup("s1")).toEqual({ pid: 4242, cwd: SESSION_CWD });
     expect(t.poller.lookup("s2")).toBeNull();
     expect(t.poller.lookup("s3")).toBeNull();
-    expect(t.poller.liveDirectories()).toEqual([CANARY_CWD]);
+    expect(t.poller.liveDirectories()).toEqual([SESSION_CWD]);
   });
 
   it.each([
@@ -168,7 +168,7 @@ describe("presence poller", () => {
 
   it("names a restored pane on the history it sends, when pane names are on", async () => {
     const t = setup(async () => ({ lastWriteAt: T0, prompts: 12 }), true);
-    t.host.restore([ev("prompt", T0 - 1_000, {}, "s1", paneKey(CANARY_CWD))]);
+    t.host.restore([ev("prompt", T0 - 1_000, {}, "s1", paneKey(SESSION_CWD))]);
     t.list(rawAgentEntry("s1"));
     await t.poller.pollOnce();
     expect(t.host.snapshot().panes.map((p) => p.label)).toEqual(["repo"]);

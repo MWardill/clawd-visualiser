@@ -9,7 +9,7 @@ import type { Exec } from "./presence/poller";
 import { createEventLog } from "./store/event-log";
 import { ev } from "./testing/events";
 import { send, waitFor } from "./testing/http";
-import { ALLOWED_ROOT, CANARY_CWD, rawAgentEntry, rawHook } from "./testing/raw";
+import { ALLOWED_ROOT, SESSION_CWD, rawAgentEntry, rawHook } from "./testing/raw";
 import { useTempDirs } from "./testing/tmp";
 
 describe("startAgent", () => {
@@ -40,7 +40,7 @@ describe("startAgent", () => {
     const paths = agentPaths(home);
     await saveConfig(paths, { ...defaultConfig(), allowlist: [ALLOWED_ROOT] });
     const now = Date.now();
-    const key = paneKey(CANARY_CWD);
+    const key = paneKey(SESSION_CWD);
     const previousRun = createEventLog(paths.logs, { now: () => now, retentionDays: 7, log: silentLogger });
     previousRun.append(ev("prompt", now - 60_000, {}, "busy", key));
     previousRun.append(ev("tool.start", now - 50_000, { tool: "Bash", category: "run", toolUseId: "u1" }, "busy", key));

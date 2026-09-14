@@ -2,10 +2,10 @@ import { paneKey } from "@clawd/core";
 import { describe, expect, it } from "vitest";
 import type { SessionView } from "../host/host";
 import { T0 } from "../testing/events";
-import { ALLOWED_ROOT, CANARY, CANARY_CWD, OUTSIDE_CWD, rawAgentEntry } from "../testing/raw";
+import { ALLOWED_ROOT, CANARY, SESSION_CWD, OUTSIDE_CWD, rawAgentEntry } from "../testing/raw";
 import { listedIds, reconcile, sessionIdOf, type ReconcileInput } from "./reconcile";
 
-const KEY = paneKey(CANARY_CWD);
+const KEY = paneKey(SESSION_CWD);
 const view = (over: Partial<SessionView> = {}): SessionView => ({ paneKey: KEY, state: "idle", firstSeenAt: T0, lastEventAt: T0, ...over });
 const input = (over: Partial<ReconcileInput> = {}): ReconcileInput => ({
   entries: [],
