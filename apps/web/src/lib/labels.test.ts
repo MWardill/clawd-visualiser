@@ -29,11 +29,14 @@ describe("labels", () => {
     expect(sceneLabel({ sessions: 2, waiting: 1, subagents: 2, panes: 2 })).toBe("2 sessions in 2 panes, 1 waiting");
   });
 
-  it("names the source in the status bar", () => {
+  it("names the source in the status bar, with the detail level when above none", () => {
+    const live = { mode: "live" as const, agentUrl: "http://127.0.0.1:4750", connected: true, rejected: 0, detail: "none" as const };
     expect(sourceBadge({ mode: "probing" })).toBe("probing for agent");
-    expect(sourceBadge({ mode: "live", agentUrl: "http://127.0.0.1:4750", connected: true, rejected: 0 })).toBe("live · 127.0.0.1:4750");
-    expect(sourceBadge({ mode: "live", agentUrl: "http://127.0.0.1:4750", connected: true, rejected: 3 })).toBe("live · 127.0.0.1:4750 · 3 rejected");
-    expect(sourceBadge({ mode: "live", agentUrl: "http://127.0.0.1:4750", connected: false, rejected: 0 })).toBe("live · reconnecting");
+    expect(sourceBadge(live)).toBe("live · 127.0.0.1:4750");
+    expect(sourceBadge({ ...live, rejected: 3 })).toBe("live · 127.0.0.1:4750 · 3 rejected");
+    expect(sourceBadge({ ...live, detail: "paths" })).toBe("live · 127.0.0.1:4750 · paths");
+    expect(sourceBadge({ ...live, detail: "hints", rejected: 1 })).toBe("live · 127.0.0.1:4750 · hints · 1 rejected");
+    expect(sourceBadge({ ...live, connected: false })).toBe("live · reconnecting");
     expect(sourceBadge({ mode: "simulated", reason: "no-agent" })).toBe("simulated · no agent");
     expect(sourceBadge({ mode: "simulated", reason: "lost-agent" })).toBe("simulated · agent lost");
     expect(sourceBadge({ mode: "simulated", reason: "forced" })).toBe("simulated · forced");

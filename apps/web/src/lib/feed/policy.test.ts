@@ -85,7 +85,14 @@ describe("connection policy", () => {
 
   it("carries the rejected count into the status", () => {
     const r = run("auto", [{ type: "start" }, { type: "probe", ok: true }, { type: "connection", connected: true, rejected: 2 }]);
-    expect(toFeedStatus(r.state, "http://127.0.0.1:4750")).toEqual({ mode: "live", agentUrl: "http://127.0.0.1:4750", connected: true, rejected: 2 });
+    expect(toFeedStatus(r.state, "http://127.0.0.1:4750")).toEqual({ mode: "live", agentUrl: "http://127.0.0.1:4750", connected: true, rejected: 2, detail: "none" });
+  });
+
+  it("keeps the agent's detail level from the probe and reports none when it sent none", () => {
+    const r = run("auto", [{ type: "start" }, { type: "probe", ok: true, detail: "paths" }]);
+    expect(toFeedStatus(r.state, "http://127.0.0.1:4750")).toMatchObject({ mode: "live", detail: "paths" });
+    const plain = run("auto", [{ type: "start" }, { type: "probe", ok: true }]);
+    expect(toFeedStatus(plain.state, "http://127.0.0.1:4750")).toMatchObject({ mode: "live", detail: "none" });
   });
 
   it("forced simulated never probes; forced live never falls back", () => {

@@ -1,5 +1,6 @@
 // One ticker line per event, coloured for xterm.js. The only strings are the fields TickerEvent
-// carries: a kind, an activity, a tool name, a subagent type, a state, a reason. Nothing else exists to show.
+// carries: a kind, an activity, a tool name, a subagent type, a state, a reason, and the subject
+// its detail may carry. Nothing else exists to show.
 import type { Activity, SessionPhase, TickerEvent } from "@clawd/core";
 import { hhmmss } from "../time";
 
@@ -13,6 +14,12 @@ const ACTIVITY_CODES: Record<Activity, string> = { read: "34", edit: "32", run: 
 const STATE_CODES: Record<SessionPhase, string> = { working: "32", waiting: "33", idle: "2", asleep: "34", done: "35" };
 
 const KIND_WIDTH = 14;
+/** Longest subject a line shows; a path longer than this is cut with an ellipsis. */
+const SUBJECT_MAX = 48;
+
+function cutText(s: string, max: number): string {
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
 
 /** Drops control characters from a free-text field before it reaches the terminal; tool names and reasons never contain any, so this is belt and braces. */
 function plain(s: string): string {
@@ -34,6 +41,7 @@ export function formatTicker(e: TickerEvent): string {
       const parts = [time, e.kind === "permission" ? paint("33", kind) : kind];
       if (e.activity) parts.push(paint(ACTIVITY_CODES[e.activity], e.activity.padEnd(5)));
       if (e.tool) parts.push(plain(e.tool).padEnd(12));
+      if (e.detail?.subject) parts.push(dim(plain(cutText(e.detail.subject.text, SUBJECT_MAX))));
       if (e.durationMs !== undefined) parts.push(dim(`${Math.round(e.durationMs)}ms`));
       return parts.join(" ").trimEnd();
     }

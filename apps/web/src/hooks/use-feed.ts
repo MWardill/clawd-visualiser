@@ -62,7 +62,7 @@ export function useFeed(): FeedApi {
     const run = (effect: Effect): void => {
       switch (effect) {
         case "probe":
-          void probeHealth(base).then((ok) => dispatch({ type: "probe", ok }));
+          void probeHealth(base).then((health) => dispatch({ type: "probe", ok: health !== null, ...(health?.detail === undefined ? {} : { detail: health.detail }) }));
           break;
         case "start-live":
           startFeed(createLiveFeed(base));

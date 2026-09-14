@@ -23,11 +23,12 @@ describe("agent helpers", () => {
     expect(agentUrl()).toBe(DEFAULT_AGENT_URL);
   });
 
-  it("probes health and accepts only a valid Health body", async () => {
-    expect(await probeHealth(BASE, respond({ ok: true, version: "0.1.0", sessions: 2 }))).toBe(true);
-    expect(await probeHealth(BASE, respond({ ok: true, version: "0.1.0", sessions: 2, extra: 1 }))).toBe(false);
-    expect(await probeHealth(BASE, respond({ ok: true }, 500))).toBe(false);
-    expect(await probeHealth(BASE, async () => { throw new TypeError("refused"); })).toBe(false);
+  it("probes health and returns the Health body only when it validates", async () => {
+    expect(await probeHealth(BASE, respond({ ok: true, version: "0.1.0", sessions: 2 }))).toEqual({ ok: true, version: "0.1.0", sessions: 2 });
+    expect(await probeHealth(BASE, respond({ ok: true, version: "0.1.0", sessions: 2, detail: "paths" }))).toMatchObject({ detail: "paths" });
+    expect(await probeHealth(BASE, respond({ ok: true, version: "0.1.0", sessions: 2, extra: 1 }))).toBeNull();
+    expect(await probeHealth(BASE, respond({ ok: true }, 500))).toBeNull();
+    expect(await probeHealth(BASE, async () => { throw new TypeError("refused"); })).toBeNull();
   });
 
   it("hits the health endpoint of the base it is given", async () => {
