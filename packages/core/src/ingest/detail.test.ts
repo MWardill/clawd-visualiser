@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { PathsDetailSchema } from "../schema/detail";
 import { RawAgentEntryDetailSchema, RawHookDetailSchema, RawStatusLineDetailSchema } from "../schema/raw";
 import { agentType, dir, ext, hookDetail, host, label, permissionMode, presenceDetail, program, relative, statusDetail } from "./detail";
 
@@ -35,6 +36,7 @@ describe("derivations", () => {
     expect(host("http://[::1]:8080/x")).toBe("[::1]");
     expect(host("not a url")).toBeUndefined();
     expect(host("mailto:someone@example.com")).toBeUndefined();
+    expect(host("http://foo_bar.example.com/x")).toBeUndefined();
   });
 
   it("bounds the agent type and the permission mode", () => {
@@ -56,6 +58,8 @@ describe("derivations", () => {
     expect(relative("\\\\server\\share\\file.txt", cwd)).toBe("//server/share/file.txt");
     expect(relative("", cwd)).toBeUndefined();
     expect(relative(`C:\\mw\\visualiser\\${"x".repeat(600)}`, cwd)).toHaveLength(512);
+    expect(dir("C:\\mw\\vis\u001bualiser")).toBe("C:/mw/visualiser");
+    expect(relative("C:\\mw\\visualiser\\src\\a\u0007pp.ts", cwd)).toBe("src/app.ts");
   });
 
   it("cleans free text: no control characters, trimmed, cut, none when empty", () => {
@@ -92,6 +96,14 @@ describe("hookDetail", () => {
   it("drops tool input it cannot read rather than the event", () => {
     expect(hookDetail("paths", hook({ tool_input: "junk" }))).toEqual({ dir: "C:/mw/visualiser" });
     expect(hookDetail("paths", hook({ tool_input: { file_path: 42 } }))).toEqual({ dir: "C:/mw/visualiser" });
+  });
+
+  it("strips control characters from file and dir so the schema accepts them", () => {
+    const detail = hookDetail(
+      "paths",
+      hook({ cwd: "C:\\mw\\vis\u001bualiser", tool_name: "Write", tool_input: { file_path: "C:\\mw\\visualiser\\src\\a\u0007pp.ts" } }),
+    );
+    expect(() => PathsDetailSchema.parse(detail)).not.toThrow();
   });
 });
 

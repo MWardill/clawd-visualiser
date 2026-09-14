@@ -5,6 +5,9 @@ import type { RawAgentEntryDetail, RawHookDetail, RawStatusLineDetail } from "..
 
 const cut = (s: string, max: number): string => (s.length > max ? s.slice(0, max) : s);
 const segments = (p: string): string[] => p.split(/[\\/]+/).filter((s) => s.length > 0);
+/** Removes control characters, the class the schemas' `text()` bound refuses. */
+const stripControl = (s: string): string => s.replace(/[\x00-\x1f\x7f]/g, "");
+const HOST_PATTERN = /^[A-Za-z0-9.:[\]-]{1,253}$/;
 
 /** The program a shell command runs: its first token after any `NAME=value` prefixes, without directory or Windows extension. */
 export function program(command: string): string | undefined {
@@ -25,11 +28,11 @@ export function ext(path: string): string | undefined {
   return /^[a-z0-9]{1,16}$/.test(e) ? e : undefined;
 }
 
-/** A URL's hostname, or none when it has none or does not parse. */
+/** A URL's hostname, or none when it has none, does not parse, or does not match the schema's bound. */
 export function host(url: string): string | undefined {
   try {
     const h = new URL(url).hostname;
-    return h.length >= 1 && h.length <= 253 ? h : undefined;
+    return HOST_PATTERN.test(h) ? h : undefined;
   } catch {
     return undefined;
   }
@@ -45,14 +48,14 @@ export function permissionMode(mode: string): string | undefined {
 
 /** A directory with forward slashes and no trailing slash, except a bare root. */
 export function dir(cwd: string): string {
-  const s = cwd.replace(/\\/g, "/");
+  const s = stripControl(cwd).replace(/\\/g, "/");
   const stripped = s.replace(/\/+$/, "");
   return cut(stripped === "" ? "/" : stripped, 512);
 }
 
 /** `file` relative to `cwd` when it lies inside it (compared without case), else as given, with forward slashes. */
 export function relative(file: string, cwd: string): string | undefined {
-  const f = file.replace(/\\/g, "/");
+  const f = stripControl(file).replace(/\\/g, "/");
   const root = dir(cwd);
   if (f.toLowerCase() === root.toLowerCase()) return ".";
   const prefix = `${root}/`;
@@ -63,7 +66,7 @@ export function relative(file: string, cwd: string): string | undefined {
 
 /** Free text for the wire: control characters removed, trimmed, cut; none when nothing is left. */
 export function label(s: string, max = 120): string | undefined {
-  const clean = s.replace(/[\x00-\x1f\x7f]/g, "").trim();
+  const clean = stripControl(s).trim();
   return clean.length === 0 ? undefined : cut(clean, max);
 }
 
