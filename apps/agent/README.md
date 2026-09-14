@@ -42,7 +42,7 @@ By default the agent keeps only states, categories, tool names and timings. `age
 adds the program a shell command runs, the extension of a file being read or edited, the hostname
 of a fetch, the subagent type, the permission mode and the background shell count. `agent detail
 paths` adds the file or directory a tool touches (relative to the working directory), the working
-directory and the session's name. `agent detail none` turns it back off. Restart the agent after
+directory, the session's name and an Agent call's short description. `agent detail none` turns it back off. Restart the agent after
 changing it.
 
 Whatever the level, the event log on disk and any cloud snapshot are level none, and prompts,
