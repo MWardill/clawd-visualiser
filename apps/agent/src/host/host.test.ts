@@ -70,6 +70,19 @@ describe("FleetHost restore", () => {
     expect(host.snapshot().sessions[0]?.state).toBe("asleep");
   });
 
+  it("brings a wait answered while the agent was down back asleep, when the log holds a later transcript write", () => {
+    const answeredAt = T0 + 60 * 60_000;
+    const { host, clock } = makeHost(answeredAt + DEFAULT_CONFIG.asleepAfterMs + 2_000);
+    host.restore([
+      ev("prompt", T0, {}),
+      ev("tool.start", T0 + 1_000, { tool: "Write", category: "edit", toolUseId: "u1" }),
+      ev("permission.request", T0 + 1_001, { tool: "Write", category: "edit" }),
+      ev("history", answeredAt + 1_000, { prompts: 1, lastActiveAt: answeredAt }),
+    ]);
+    clock.now += DEFAULT_CONFIG.minDisplayMs;
+    expect(host.snapshot().sessions[0]?.state).toBe("asleep");
+  });
+
   it("keeps a session the log shows ended out of the fleet, even when a poll still lists it", () => {
     const { host } = makeHost(T0 + 60_000);
     host.restore([ev("prompt", T0, {}), ev("session.end", T0 + 1, { reason: "other" })]);
