@@ -22,6 +22,7 @@ describe("poseFor", () => {
     expect(poseFor(actor(), T0, 10).particle).toBeNull();
     expect(ACTIVITY_COLOURS.read).toBe(PALETTE.state.blue);
     expect(ACTIVITY_COLOURS.run).toBe(PALETTE.state.amber);
+    expect(ACTIVITY_COLOURS.edit).toBe(PALETTE.state.green);
   });
 
   it("hops, shows the exclamation mark and sweats after ten seconds while waiting", () => {

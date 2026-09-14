@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { PALETTE } from "./engine";
 import { CELL, MARGIN, SEAT_H, SEAT_W, TITLE_ROWS, seatOrigin } from "./layout";
 import { mountPanesScene } from "./panes";
+import { SCENE_COLOURS } from "./sprites";
 import { fakeContext } from "./testing/fake-context";
 
 const T0 = 1_700_000_000_000;
@@ -142,5 +143,16 @@ describe("mountPanesScene", () => {
     h.frame(200);
     h.frame(300);
     expect(h.texts.some((t) => t.text === "feed/agent.ts")).toBe(false);
+  });
+
+  it("captions a working Clawd's web activity with the same colour the particle uses", () => {
+    const h = harness();
+    const working = { ...SNAPSHOT.sessions[0]!, state: "working" as const, activity: "web" as const, detail: { name: "Fix Login", subject: { kind: "host" as const, text: "example.com" } } };
+    h.scene.setSnapshot({ ...SNAPSHOT, sessions: [working] });
+    h.setNow(T0 + 5000);
+    h.frame(0);
+    h.frame(100);
+    const cap = h.texts.find((t) => t.text === "example.com");
+    expect(cap?.col).toBe(SCENE_COLOURS.web);
   });
 });

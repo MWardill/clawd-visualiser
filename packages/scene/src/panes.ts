@@ -5,9 +5,9 @@ import { emptyWorld, reconcile, seatsUsed, tick, type Actor, type ScenePane, typ
 import { createAtmosphere, drawNight, type Atmosphere } from "./atmosphere";
 import { CLAWD_BODY, PALETTE, createEngine, type EyeVariant, type PixelContext } from "./engine";
 import { CAPTION_ROW, CELL, CONTEXT_ROW, CONTEXT_W, NAME_ROW, SEAT_H, SEAT_W, SPRITE_DX, SPRITE_DY, STATUS_ROW, layoutPanes, type PaneRect } from "./layout";
-import { poseFor } from "./poses";
+import { ACTIVITY_COLOURS, poseFor } from "./poses";
 import { drawBox, drawClawdWalking, drawClawdWave, drawExclaim, drawMini, drawSparkle, drawSweat, drawZzz } from "./sprites";
-import { ACTIVITY_COLOURS, caption, drawText, nameplate, paneTitle } from "./text";
+import { caption, drawText, nameplate, paneTitle } from "./text";
 
 export type PanesSceneOptions = {
   /** CSS pixels per cell. Default 6. */

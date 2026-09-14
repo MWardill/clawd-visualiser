@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PALETTE } from "./engine";
 import { fakeContext } from "./testing/fake-context";
-import { ACTIVITY_COLOURS, STATE_COLOURS, TITLE_MAX, caption, drawText, mmss, nameplate, paneTitle } from "./text";
+import { STATE_COLOURS, TITLE_MAX, caption, drawText, mmss, nameplate, paneTitle } from "./text";
 
 const T0 = 1_700_000_000_000;
 
@@ -33,7 +33,6 @@ describe("text", () => {
     expect(caption({ kind: "program", text: "git" }, 40)).toBe("git");
     expect(caption({ kind: "host", text: "example.com" }, 8)).toBe("example…");
     expect(caption({ kind: "agent", text: "Find the login form" }, 1)).toBe("…");
-    expect(ACTIVITY_COLOURS.edit).toBe(PALETTE.state.green);
   });
 
   it("titles a pane with a dash and the lower-case label", () => {

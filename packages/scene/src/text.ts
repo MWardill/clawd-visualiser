@@ -10,17 +10,6 @@ export const STATE_COLOURS: Record<SessionPhase, string> = {
   done: PALETTE.state.pink,
 };
 
-/** Caption colours by activity, matching the ticker's. */
-export const ACTIVITY_COLOURS: Record<Activity, string> = {
-  read: PALETTE.state.blue,
-  edit: PALETTE.state.green,
-  run: PALETTE.state.amber,
-  web: PALETTE.state.pink,
-  spawn: PALETTE.clawd.body,
-  think: PALETTE.night.text,
-  other: PALETTE.night.text,
-};
-
 /** `mm:ss` for a duration; negatives read as zero. */
 export function mmss(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));

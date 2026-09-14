@@ -23,7 +23,7 @@ export type Pose = {
   heart: boolean;
 };
 
-/** Keystroke colours by activity. */
+/** Colours by activity, shared by the working particle tint and the caption under a Clawd. */
 export const ACTIVITY_COLOURS: Record<Activity, string> = {
   read: PALETTE.state.blue,
   edit: PALETTE.state.green,
