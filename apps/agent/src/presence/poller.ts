@@ -3,7 +3,7 @@ import { exec } from "node:child_process";
 import { z } from "zod";
 import type { FleetHost } from "../host/host";
 import type { Logger } from "../log";
-import { listedIds, reconcile } from "./reconcile";
+import { listedIds, reconcile, type ListedDetail } from "./reconcile";
 import type { TranscriptStats } from "./transcripts";
 
 export type ExecResult = { ok: true; stdout: string } | { ok: false };
@@ -70,6 +70,12 @@ export function createPresencePoller(deps: {
   const lastListedAt = new Map<string, number>();
   /** Sessions whose transcript has been read in this run and which are still in the fleet. */
   const counted = new Set<string>();
+  /**
+   * The directory and name each listed session was last sent from the agents list, at paths. Kept
+   * across polls and compared with, rather than the fleet's detail, so a status line naming the
+   * session differently cannot make every poll write a presence. Replaced only by a successful poll.
+   */
+  let sent: ReadonlyMap<string, ListedDetail> = new Map();
   let inFlight: Promise<boolean> | null = null;
   let timer: ReturnType<typeof setTimeout> | null = null;
   let running = false;
@@ -126,9 +132,9 @@ export function createPresencePoller(deps: {
     const lastWriteAt = new Map<string, number>();
     for (const [id, stats] of read) if (stats) lastWriteAt.set(id, stats.lastWriteAt);
     const sessions = deps.host.sessions();
-    for (const e of reconcile({ entries, sessions, lastListedAt, ended: deps.host.endedIds(), now, allowlist: deps.allowlist, graceMs, lastWriteAt, paneNames: deps.paneNames === true, ...(deps.detail === undefined ? {} : { detail: deps.detail }) })) {
-      deps.host.ingest(e);
-    }
+    const reconciled = reconcile({ entries, sessions, lastListedAt, ended: deps.host.endedIds(), now, allowlist: deps.allowlist, graceMs, lastWriteAt, paneNames: deps.paneNames === true, ...(deps.detail === undefined ? {} : { detail: deps.detail }), sent });
+    sent = reconciled.sent;
+    for (const e of reconciled.events) deps.host.ingest(e);
     // Counts go to sessions now in the fleet, including those reconcile just brought in.
     const fleet = deps.host.sessions();
     for (const [id, stats] of read) {

@@ -314,7 +314,9 @@ function reconcile(input: {
   ended: ReadonlySet<string>;
   now: number; allowlist: readonly string[]; graceMs: number;
   lastWriteAt?: ReadonlyMap<string, number>;   // transcript write times of first-sight sessions (§6.4)
-}): RedactedEvent[];
+  detail?: DetailLevel;                         // the agent's detail level (§2 rule 9)
+  sent?: ReadonlyMap<string, { dir?: string; name?: string }>;  // the previous successful poll's `sent`
+}): { events: RedactedEvent[]; sent: Map<string, { dir?: string; name?: string }> };
 ```
 
 Pure. For each entry, read `sessionId` leniently; an entry without one is skipped.
@@ -326,8 +328,20 @@ Pure. For each entry, read `sessionId` leniently; an entry without one is skippe
   `startedAt` and the session's transcript's last write (§6.4), so a session quiet for longer than
   the asleep threshold is asleep on the next tick, not ten minutes after the agent noticed it.
   With pane names on, it also carries the directory's name (privacy rule 8).
-- **Alive, known.** No event. A presence event refreshes `lastEventAt`, which would defeat the
-  stale-working timer and churn `updatedAt` every poll.
+- **Alive, known.** Below `paths`, no event. At `paths`, a known session's listed name and
+  directory are passed on when they change: a session in the fleet, not in the ended set and not
+  `done`, gets `redactPresence(entry, true, ctx)` when the entry's `dir` or `name` differs from what
+  it was last sent, an absent field counting as a value. That reaches the sessions a first-sight
+  presence never does: one whose first hook came before the list showed it, one restored from the
+  level-none log, and one named after it was first seen. What each session was last sent is the
+  `sent` map, which the poller keeps from one successful poll to the next. Every alive presence at
+  `paths`, first-sight ones included, records its `dir` and `name` there, and an id the poll does
+  not list, or lists as ended or `done`, is dropped from it, so a session that returns is sent its
+  name again. It is compared with that and never with the fleet's detail: a status line may name the
+  session slightly differently, and the two sources would flap, writing a presence every poll. An
+  alive presence changes no state and leaves `lastEventAt` alone (core design §5.2), so it neither
+  holds off the stale-working timer nor moves `updatedAt`. It goes to the event log stripped to level
+  none, a bare presence line, and adds no ticker line.
 - **Gone.** A fleet session that is not `done` and is absent from this poll gets a dead presence
   event when `now − max(firstSeenAt, lastListedAt, lastEventAt) > graceMs` (15 s), built from
   fleet state: `{ v: 1, t: now, sessionId, paneKey, kind: "presence", alive: false }`, validated

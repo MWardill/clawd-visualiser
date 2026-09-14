@@ -25,7 +25,11 @@ describe("agent end to end", () => {
     await saveConfig(agentPaths(home), config);
     const logged: string[] = [];
     let listed: unknown[] = [];
-    const exec: Exec = async () => ({ ok: true, stdout: JSON.stringify(listed) });
+    let polls = 0;
+    const exec: Exec = async () => {
+      polls += 1;
+      return { ok: true, stdout: JSON.stringify(listed) };
+    };
     const focused: number[] = [];
     agent = await startAgent({
       home,
@@ -62,9 +66,21 @@ describe("agent end to end", () => {
     await post("/ingest/hook", rawHook("UserPromptSubmit", "e2e-three"));
     await stream.waitFor((text) => text.includes('"alias":"agent-3"'));
 
+    // Hook first, no status line: the session is known before any poll lists it, so only a presence for a known session can bring its listed name.
+    await post("/ingest/hook", rawHook("UserPromptSubmit", "e2e-four"));
+    await stream.waitFor((text) => text.includes('"alias":"agent-4"'));
+    const updatedAtOfFour = async () => SnapshotSchema.parse(JSON.parse((await send(port, { path: "/api/snapshot" })).body)).sessions.find((s) => s.alias === "agent-4")?.updatedAt;
+    const hookedAt = await updatedAtOfFour();
+    expect(hookedAt).toBeDefined();
+    listed = [rawAgentEntry("e2e-two"), rawAgentEntry("e2e-three", { name: "LOCALONLY listed name" }), rawAgentEntry("e2e-four", { name: "LOCALONLY hook-first name" })];
+    // The poll that starts next after the change is the first that can only read the new list; it has finished once the one after it starts.
+    const pollsAtChange = polls;
+    await waitFor(() => polls >= pollsAtChange + 2, 5_000);
+    expect(await updatedAtOfFour(), "a presence moved the hook-first session's updatedAt").toBe(hookedAt);
+
     const bodies: string[] = [];
     const snapshot = await send(port, { path: "/api/snapshot" });
-    expect(SnapshotSchema.parse(JSON.parse(snapshot.body)).sessions.map((s) => s.alias)).toEqual(["agent-1", "agent-2", "agent-3"]);
+    expect(SnapshotSchema.parse(JSON.parse(snapshot.body)).sessions.map((s) => s.alias)).toEqual(["agent-1", "agent-2", "agent-3", "agent-4"]);
     expect(SnapshotSchema.parse(JSON.parse(snapshot.body)).panes.map((p) => p.label)).toEqual(["repo"]);
     bodies.push(snapshot.body, (await send(port, { path: "/api/health" })).body);
     for (const alias of ["agent-1", "agent-2"]) {
@@ -96,6 +112,7 @@ describe("agent end to end", () => {
     const events = logFiles.flatMap((text) => parseFixture(text).events);
     expect(events.some((e) => e.sessionId === "e2e-one" && e.kind === "session.end")).toBe(true);
     expect(events.some((e) => e.sessionId === "outside")).toBe(false);
+    expect(events.filter((e) => e.sessionId === "e2e-four" && e.kind === "presence"), "presence lines for the hook-first session").toHaveLength(level === "paths" ? 1 : 0);
 
     const sinks: [string, string][] = [
       ["stream and responses", bodies.join("\n")],
@@ -111,8 +128,10 @@ describe("agent end to end", () => {
     expect(responses.includes('"detail":{'), "detail objects in responses").toBe(level !== "none");
     if (level === "none") expect(responses.includes('"detail'), "no detail text in responses at level none").toBe(false);
     expect(responses.includes("LOCALONLY listed name"), "agents-list name in responses").toBe(level === "paths");
+    expect(responses.includes("LOCALONLY hook-first name"), "hook-first session's agents-list name in responses").toBe(level === "paths");
     const parsed = SnapshotSchema.parse(JSON.parse(snapshot.body));
     if (level === "paths") {
+      expect(parsed.sessions[3]?.detail).toMatchObject({ name: "LOCALONLY hook-first name", dir: SESSION_CWD });
       expect(parsed.sessions[2]?.detail).toMatchObject({ name: "LOCALONLY listed name", dir: SESSION_CWD });
       expect(parsed.sessions[1]?.detail).toMatchObject({ name: "LOCALONLY session name", dir: SESSION_CWD, permissionMode: "default" });
       expect(parsed.sessions[0]?.detail?.subject).toEqual({ kind: "file", text: "src/LOCALONLY-secret.ts" });

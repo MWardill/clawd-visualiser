@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG, emptyAliasMap, paneKey } from "@clawd/core";
+import { DEFAULT_CONFIG, emptyAliasMap, paneKey, type DetailLevel, type RedactedEvent } from "@clawd/core";
 import { describe, expect, it, vi } from "vitest";
 import { FleetHost } from "../host/host";
 import { silentLogger } from "../log";
@@ -7,13 +7,13 @@ import { ALLOWED_ROOT, SESSION_CWD, OUTSIDE_CWD, rawAgentEntry } from "../testin
 import { createPresencePoller, type Exec, type ExecResult } from "./poller";
 import type { TranscriptStats } from "./transcripts";
 
-function setup(readTranscript?: (sessionId: string) => Promise<TranscriptStats | null>, paneNames = false) {
+function setup(readTranscript?: (sessionId: string) => Promise<TranscriptStats | null>, paneNames = false, detail?: DetailLevel) {
   const clock = { now: T0 };
   const host = new FleetHost({ now: () => clock.now, config: DEFAULT_CONFIG, aliases: emptyAliasMap(), log: silentLogger });
   let reply: ExecResult = { ok: true, stdout: "[]" };
   const exec = vi.fn<Exec>(async () => reply);
   const log = vi.fn();
-  const poller = createPresencePoller({ host, exec, command: "claude", allowlist: [ALLOWED_ROOT], intervalMs: 10_000, now: () => clock.now, log, ...(readTranscript ? { readTranscript } : {}), ...(paneNames ? { paneNames } : {}) });
+  const poller = createPresencePoller({ host, exec, command: "claude", allowlist: [ALLOWED_ROOT], intervalMs: 10_000, now: () => clock.now, log, ...(readTranscript ? { readTranscript } : {}), ...(paneNames ? { paneNames } : {}), ...(detail === undefined ? {} : { detail }) });
   return {
     host,
     clock,
@@ -185,6 +185,41 @@ describe("presence poller", () => {
     await t.poller.pollOnce();
     expect([...t.host.sessions().keys()]).toEqual(["s1"]);
     expect(t.host.sessions().get("s1")?.state).toBe("working");
+  });
+
+  it("at paths gives a session first heard through a hook its listed name, writing one presence per change and leaving updatedAt alone", async () => {
+    const t = setup(undefined, false, "paths");
+    const logged: RedactedEvent[] = [];
+    let tickerLines = 0;
+    t.host.on({ event: (e) => logged.push(e), ticker: () => (tickerLines += 1) });
+    t.host.ingest(ev("prompt", T0, {}, "s1", paneKey(SESSION_CWD)));
+    const promptLines = tickerLines;
+    t.clock.now = T0 + 5_000;
+    t.list(rawAgentEntry("s1", { name: "listed first" }));
+    await t.poller.pollOnce();
+    await t.poller.pollOnce();
+    const [session] = t.host.snapshot().sessions;
+    expect(session?.detail).toEqual({ dir: SESSION_CWD, name: "listed first" });
+    expect(session?.updatedAt).toBe(new Date(T0).toISOString());
+    expect(logged.filter((e) => e.kind === "presence")).toHaveLength(1);
+    expect(tickerLines).toBe(promptLines);
+    t.list(rawAgentEntry("s1", { name: "listed second" }));
+    await t.poller.pollOnce();
+    expect(t.host.snapshot().sessions[0]?.detail).toEqual({ dir: SESSION_CWD, name: "listed second" });
+    expect(logged.filter((e) => e.kind === "presence")).toHaveLength(2);
+  });
+
+  it("gives a known session nothing new below paths", async () => {
+    for (const detail of [undefined, "none", "hints"] as const) {
+      const t = setup(undefined, false, detail);
+      const logged: RedactedEvent[] = [];
+      t.host.on({ event: (e) => logged.push(e) });
+      t.host.ingest(ev("prompt", T0, {}, "s1", paneKey(SESSION_CWD)));
+      t.list(rawAgentEntry("s1", { name: "listed first" }));
+      await t.poller.pollOnce();
+      expect(logged.map((e) => e.kind)).toEqual(["prompt"]);
+      expect(t.host.snapshot().sessions[0]).not.toHaveProperty("detail");
+    }
   });
 
   it("shares one run between callers that poll at the same time", async () => {
