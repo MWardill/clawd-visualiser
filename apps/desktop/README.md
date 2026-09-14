@@ -44,3 +44,8 @@ One thing to know about the binary: with `ELECTRON_RUN_AS_NODE=1` in the environ
 plain Node and ignores the app entirely, which is how the hook scripts will use it in stage 5. A
 VS Code extension host sets that variable and its children inherit it, so if `electron --version`
 prints a Node version, unset it (or prefix the command with `env -u ELECTRON_RUN_AS_NODE`).
+
+What stage 1 leaves in place: `pnpm --filter @clawd/desktop dev` bundles and starts the app;
+`--dev-url` and `CLAWD_DESKTOP_URL` choose the page; the window is sandboxed, denies new windows
+and refuses to leave its origin. The main process quits when the window closes, which stage 4
+changes when the tray arrives. The agent is still the CLI's; stage 2 brings it inside.
