@@ -46,7 +46,7 @@ directory and the session's name. `agent detail none` turns it back off. Restart
 changing it.
 
 Whatever the level, the event log on disk and any cloud snapshot are level none, and prompts,
-commands, tool output and assistant text are never read. Design:
+the rest of a command, tool output and assistant text are never read. Design:
 `docs/superpowers/specs/2026-09-14-detail-levels-design.md`.
 
 ## Endpoints
@@ -75,11 +75,13 @@ are for the hook scripts and need the token from `config.json`.
 
 ## Privacy
 
-Raw payloads live in memory for one request. Prompts, tool input and output, assistant text and
-transcript paths never reach any sink: the log, the alias file, any response or the stream. Session
-names and working directories reach responses and the stream only inside `detail` at the paths
-level, and never the event log or the alias file. Every outgoing body is checked before it is
-written, outside its `detail` object, and operational logs carry codes and numbers only.
+Raw payloads live in memory for one request. Prompts, tool output, assistant text and transcript
+paths never reach any sink: the log, the alias file, any response or the stream. Tool input is
+never passed on whole: at the hints and paths levels only the values listed under Detail levels,
+and at paths an Agent call's description, are taken from it, and those values, with the session's
+name and working directory at paths, reach responses and the stream only inside `detail`, never the
+event log, the alias file or stdout. Every outgoing body is checked before it is written, outside
+its `detail` object, and operational logs carry a timestamp, a code and numbers only.
 `src/agent.e2e.test.ts` proves it with canary payloads.
 
 To run the same check over the raw spike recordings, which never leave your machine:
