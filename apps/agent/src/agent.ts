@@ -1,7 +1,7 @@
 import { DEFAULT_CONFIG, type StateConfig } from "@clawd/core";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { agentPaths, defaultTranscriptsDir, loadOrCreateConfig, usesFolderPaneLabels } from "./config";
+import { agentPaths, defaultTranscriptsDir, detailLevel, loadOrCreateConfig, usesFolderPaneLabels } from "./config";
 import { createFocus, powershellFocus, type RunFocusScript } from "./focus/focus";
 import { FleetHost } from "./host/host";
 import { createAgentServer, newIngestCounts, type IngestCounts } from "./http/server";
@@ -91,6 +91,7 @@ export async function startAgent(opts: AgentOptions): Promise<RunningAgent> {
     log,
     readTranscript: createTranscriptReader(opts.transcriptsDir ?? defaultTranscriptsDir()),
     paneNames: folderLabels,
+    detail: detailLevel(config),
   });
   const sensitive = (): readonly string[] => poller.liveDirectories();
   const eventLog = createEventLog(paths.logs, { now, retentionDays: config.logRetentionDays, log, sensitive });

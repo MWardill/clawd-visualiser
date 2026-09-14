@@ -52,7 +52,8 @@ export function deriveSnapshot(f: Fleet, aliases: AliasMap, now: number, cfg: St
     .map((p) => {
       const r = ensurePaneAlias(map, p.paneKey);
       map = r.map;
-      return { pane: r.alias, label: folders.get(p.paneKey) ?? r.label };
+      const dir = shown.find((s) => s.paneKey === p.paneKey && s.detail.dir !== undefined)?.detail.dir;
+      return { pane: r.alias, label: folders.get(p.paneKey) ?? r.label, ...(dir === undefined ? {} : { detail: { dir } }) };
     });
   // First sight, not `since`: sorting by `since` would reshuffle the fleet on every state change.
   const sessions: SessionSnapshot[] = shown
@@ -73,6 +74,8 @@ export function deriveSnapshot(f: Fleet, aliases: AliasMap, now: number, cfg: St
         contextPct: s.contextPct,
         since: new Date(s.since).toISOString(),
         updatedAt: new Date(s.lastEventAt).toISOString(),
+        // Only when there is something to say, so level none stays byte for byte what it was.
+        ...(Object.keys(s.detail).length === 0 ? {} : { detail: s.detail }),
       };
     });
   const snapshot = SnapshotSchema.parse({ version: 1, generatedAt: new Date(now).toISOString(), panes, sessions });

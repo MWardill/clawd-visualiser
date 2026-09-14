@@ -181,3 +181,22 @@ describe("stream hub", () => {
     expect(vi.getTimerCount()).toBe(0);
   });
 });
+
+describe("stream and detail", () => {
+  it("frames a snapshot whose detail holds a live directory, and still refuses that directory outside detail", () => {
+    const T = "2026-09-12T10:00:00.000Z";
+    const session = { alias: "agent-1", label: "Otter", pane: "pane-1", state: "working" as const, activity: null, subagents: 0, contextPct: null, since: T, updatedAt: T };
+    const snapshot = { version: 1 as const, generatedAt: T, panes: [{ pane: "pane-1", label: "Oak" }], sessions: [session] };
+    const chunks: string[] = [];
+    const res = { writeHead() {}, write: (c: string) => (chunks.push(c), true), end() {}, writableLength: 0, writableEnded: false };
+    const log = vi.fn();
+    const hub = createStreamHub({ current: () => snapshot, log, sensitive: () => ["C:/work/repo"], minIntervalMs: 0 });
+    hub.connect({ on() {} }, res);
+    hub.snapshot({ ...snapshot, sessions: [{ ...session, detail: { dir: "C:/work/repo" } }] });
+    expect(chunks.join("")).toContain('"dir":"C:/work/repo"');
+    expect(log).not.toHaveBeenCalledWith("privacy.blocked");
+    hub.snapshot({ ...snapshot, sessions: [{ ...session, label: "C:/work/repo" }] });
+    expect(log).toHaveBeenCalledWith("privacy.blocked");
+    hub.closeAll();
+  });
+});

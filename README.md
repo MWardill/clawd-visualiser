@@ -5,9 +5,11 @@ sitting in a terminal-style pane for its repository. At a glance you can see whi
 working, which are waiting on you and which are asleep, and click one to jump to its window.
 
 It costs zero model tokens: everything is observed through Claude Code's hooks and a small local
-process, and the model is never asked to report on itself. No session content is ever displayed or
-transmitted. Prompts, tool arguments and outputs, file paths and assistant text are stripped at
-ingest; what remains is state, activity category and timing.
+process, and the model is never asked to report on itself. Prompts, full commands, tool outputs and
+assistant text are stripped at ingest and never displayed or transmitted; by default what remains is
+state, activity category and timing. An opt-in `detail` setting on the agent can add short hints
+taken from tool calls (a program name, a hostname, a file path) and session names to the local view
+only; the cloud always gets the anonymised form.
 
 ## Status
 

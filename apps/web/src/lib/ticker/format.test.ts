@@ -48,6 +48,16 @@ describe("formatTicker", () => {
     for (const ch of line) expect(ch.charCodeAt(0)).toBeGreaterThanOrEqual(32);
   });
 
+  it("appends the subject after the tool, dimmed and cut, and never the permission mode", () => {
+    const line = stripAnsi(formatTicker({ t: T, kind: "tool.start", activity: "edit", tool: "Edit", detail: { subject: { kind: "file", text: "src/app.ts" }, permissionMode: "plan" } }));
+    expect(line).toContain("Edit");
+    expect(line).toContain("src/app.ts");
+    expect(line).not.toContain("plan");
+    const long = stripAnsi(formatTicker({ t: T, kind: "tool.end", activity: "read", tool: "Read", durationMs: 1, detail: { subject: { kind: "file", text: "x".repeat(80) } } }));
+    expect(long).toContain(`${"x".repeat(47)}…`);
+    expect(long).not.toContain("x".repeat(48));
+  });
+
   it("only ever prints values the TickerEvent schema carries", () => {
     const full = TickerEventSchema.parse({ t: T, kind: "tool.end", activity: "run", tool: "Bash", durationMs: 1234, agentType: "x", state: "working", contextPct: 12, reason: "r" });
     const tokens = stripAnsi(formatTicker(full)).replace(TIME, "").split(/\s+/).filter(Boolean);

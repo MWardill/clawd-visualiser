@@ -5,6 +5,7 @@ import {
   SnapshotSchema,
   StreamTickerMessageSchema,
   containsForbidden,
+  stripDetail,
   type Snapshot,
   type StreamTickerMessage,
 } from "@clawd/core";
@@ -54,7 +55,7 @@ export function createStreamHub(opts: {
   let heartbeat: ReturnType<typeof setInterval> | null = null;
 
   function frame(event: string, data: unknown): string | null {
-    if (containsForbidden(data, opts.sensitive?.() ?? []) !== null) {
+    if (containsForbidden(stripDetail(data), opts.sensitive?.() ?? []) !== null) {
       opts.log("privacy.blocked");
       return null;
     }

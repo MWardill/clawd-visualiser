@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { EventDetailSchema } from "./detail";
 
 export const EVENT_SCHEMA_VERSION = 1 as const;
 
@@ -15,6 +16,9 @@ const base = {
   // The working directory's last segment, for the pane's label, when the agent keeps it. Never a
   // path: the schema refuses separators.
   paneName: z.string().min(1).max(255).regex(/^[^\\/]+$/).optional(),
+  // What the agent's detail level lets the event say beyond its kind (detail levels design §3).
+  // Absent at level none, so that level's wire format is unchanged.
+  detail: EventDetailSchema.optional(),
 };
 
 const tool = { tool: z.string().min(1), category: ToolCategorySchema };

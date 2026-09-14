@@ -6,6 +6,7 @@
 //
 //   probing --probe ok--> live --stream down for GRACE_MS--> simulated (lost-agent)
 //      +--probe fails--> simulated (no-agent) --re-probe every REPROBE_MS, ok--> live
+import type { DetailLevel } from "@clawd/core";
 import type { FeedStatus, SimulatedReason } from "./types";
 
 export type SourceMode = "auto" | "simulated" | "live";
@@ -17,11 +18,13 @@ export type PolicyState = {
   connected: boolean;
   rejected: number;
   reason: SimulatedReason | null;
+  /** The agent's detail level from the last successful probe; none until one answers. */
+  detail: DetailLevel;
 };
 
 export type PolicyEvent =
   | { type: "start" }
-  | { type: "probe"; ok: boolean }
+  | { type: "probe"; ok: boolean; detail?: DetailLevel }
   | { type: "connection"; connected: boolean; rejected: number }
   | { type: "grace-elapsed" }
   | { type: "reprobe-due" };
@@ -40,7 +43,7 @@ export function parseSourceMode(search: string): SourceMode {
 }
 
 export function initialPolicy(mode: SourceMode): PolicyState {
-  return { mode, phase: "probing", connected: false, rejected: 0, reason: null };
+  return { mode, phase: "probing", connected: false, rejected: 0, reason: null, detail: "none" };
 }
 
 const none: Effect[] = [];
@@ -53,7 +56,7 @@ export function reducePolicy(s: PolicyState, e: PolicyEvent): { state: PolicySta
       return { state: { ...s, phase: "probing" }, effects: ["probe"] };
     case "probe":
       if (s.mode !== "auto" || s.phase === "live") return { state: s, effects: none };
-      if (e.ok) return { state: { ...s, phase: "live", connected: false, rejected: 0, reason: null }, effects: ["start-live", "schedule-grace"] };
+      if (e.ok) return { state: { ...s, phase: "live", connected: false, rejected: 0, reason: null, detail: e.detail ?? "none" }, effects: ["start-live", "schedule-grace"] };
       if (s.phase === "probing") return { state: { ...s, phase: "simulated", reason: "no-agent" }, effects: ["start-simulated", "schedule-reprobe"] };
       return { state: s, effects: ["schedule-reprobe"] };
     case "reprobe-due":
@@ -76,7 +79,7 @@ export function toFeedStatus(s: PolicyState, agentUrl: string): FeedStatus {
     case "probing":
       return { mode: "probing" };
     case "live":
-      return { mode: "live", agentUrl, connected: s.connected, rejected: s.rejected };
+      return { mode: "live", agentUrl, connected: s.connected, rejected: s.rejected, detail: s.detail };
     case "simulated":
       return { mode: "simulated", reason: s.reason ?? "no-agent" };
     default:

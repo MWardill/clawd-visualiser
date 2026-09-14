@@ -36,8 +36,10 @@ export function sourceBadge(status: FeedStatus): string {
       return "probing for agent";
     case "live": {
       if (!status.connected) return "live · reconnecting";
-      const host = hostOf(status.agentUrl);
-      return status.rejected > 0 ? `live · ${host} · ${status.rejected} rejected` : `live · ${host}`;
+      const parts = ["live", hostOf(status.agentUrl)];
+      if (status.detail !== "none") parts.push(status.detail);
+      if (status.rejected > 0) parts.push(`${status.rejected} rejected`);
+      return parts.join(" · ");
     }
     case "simulated":
       return `simulated · ${REASONS[status.reason]}`;

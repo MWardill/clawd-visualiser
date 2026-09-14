@@ -2,7 +2,7 @@
 // reconcile() brings the world in line with a snapshot; tick() advances tweens and phases. Both
 // mutate the world they are given and return it; both are deterministic for a given clock, so the
 // tests drive them with fixed times. No canvas here.
-import type { Activity, SessionPhase, Snapshot } from "@clawd/core";
+import type { Activity, SessionPhase, Snapshot, Subject } from "@clawd/core";
 import { easeInOut, easeOut, lerp } from "./engine";
 import { MINI_HOME, doorOrigin, miniSlot, seatOrigin, type XY } from "./layout";
 
@@ -20,6 +20,9 @@ export type Actor = {
   activity: Activity | null;
   subagents: number;
   contextPct: number | null;
+  /** From the session's detail, when the agent's level gives them. */
+  name: string | null;
+  subject: Subject | null;
   /** Epoch ms the current state began, from the snapshot. */
   since: number;
   phase: ActorPhase;
@@ -165,6 +168,8 @@ export function reconcile(world: World, s: Snapshot, now: number): World {
         activity: ss.activity,
         subagents: 0,
         contextPct: ss.contextPct,
+        name: ss.detail?.name ?? null,
+        subject: ss.detail?.subject ?? null,
         since: Date.parse(ss.since),
         phase: "entering",
         phaseAt: now,
@@ -180,6 +185,8 @@ export function reconcile(world: World, s: Snapshot, now: number): World {
     a.label = ss.label;
     a.activity = ss.activity;
     a.contextPct = ss.contextPct;
+    a.name = ss.detail?.name ?? null;
+    a.subject = ss.detail?.subject ?? null;
     a.since = Date.parse(ss.since);
     if (ss.state === "done" && (a.phase === "entering" || a.phase === "seated")) {
       a.phase = "waving";

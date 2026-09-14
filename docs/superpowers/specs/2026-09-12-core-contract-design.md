@@ -191,7 +191,7 @@ type SessionState = {
   state: "working" | "waiting" | "idle" | "asleep" | "done";
   activity: Activity | null;
   since: number;              // when `state` began
-  lastEventAt: number;
+  lastEventAt: number;        // the latest event's time: `updatedAt` and the stale-working timer; `history` and a live `presence` leave it, a dead `presence` sets it
   waitingOn: string | null;   // toolUseId of the pending permission, when one could be resolved
   waitingAgent: string | null; // the subagent whose permission request is pending; null for the parent's own
   inFlight: { toolUseId: string; tool: string; category: ToolCategory }[];  // parent tool calls started, not yet ended
@@ -221,7 +221,7 @@ Two tool calls can be in flight at once, so `inFlight` is a list and not a singl
 | working or waiting | `stop` with no subagent tasks and no live subagents | idle; any wait ends |
 | working or waiting | `stop` with subagent tasks | working, activity `spawn`; any wait ends |
 | idle | `tick` past `asleepAfterMs` | asleep |
-| working | `tick` past `staleWorkingMs` since the last event | idle. The Stop never came: a user interrupt, a lost hook. Generous (30 minutes), since one tool call can run for minutes |
+| working | `tick` past `staleWorkingMs` since `lastEventAt` | idle. The Stop never came: a user interrupt, a lost hook. Generous (30 minutes), since one tool call can run for minutes |
 | idle / asleep | `prompt` | working |
 | any | `session.end`, or `presence.alive === false` | done |
 
@@ -238,7 +238,10 @@ one subagent at a time, so the last one to finish clears it and the parent reads
 rather than `spawn` until its next Stop. A `stop` also ends a wait whose `PostToolUse` never arrived.
 
 `subagent.start` and `subagent.stop` update the set and never change `state`. `status` updates
-`contextPct`. `tool.start` inside a subagent (`agentId` set) reads as `spawn` on the parent rather
+`contextPct`. A live `presence` changes no state and leaves `lastEventAt` alone, as `history` does:
+it is the poller seeing the session listed, not the session doing anything, so a poll neither holds
+off the stale-working timer nor moves `updatedAt`. It still folds in any `detail` it carries. A dead
+`presence` sets `lastEventAt`, as `session.end` does, because it is when the session ended. `tool.start` inside a subagent (`agentId` set) reads as `spawn` on the parent rather
 than the tool's own category, so the parent reads as "running subagents"; a parent tool still in
 flight takes precedence, as it does everywhere activity is derived.
 
@@ -352,14 +355,15 @@ web app.
 | `GET /api/stream` | SSE. `event: snapshot` with a full `Snapshot` on connect and whenever it changes, debounced to at most four a second. `event: ticker` with `{ alias, event: TickerEvent }`. Heartbeat comment every 15 s. |
 | `GET /api/ticker/:alias` | last 200 `TickerEvent`s for a session, for the detail pane's backfill |
 | `POST /api/command` | a `Command`; `202` when accepted |
-| `GET /api/health` | `{ ok: true, version, sessions }` |
+| `GET /api/health` | `{ ok: true, version, sessions, detailLevel }`, `detailLevel` present only above level none |
 
 Default agent address `http://127.0.0.1:4750`, overridable by the web app through
 `NEXT_PUBLIC_AGENT_URL`. The agent sends CORS headers for the web app's origin. When the web app
 cannot reach an agent it falls back to the simulated source and says so in the status bar.
 
-Cloud mode (M6) publishes the same `Snapshot` to Redis with `ext` stripped and tool names already
-reduced to categories; it never publishes ticker events.
+Cloud mode (M6) publishes `toCloudSnapshot(s)` to Redis: the same `Snapshot` at level none, with
+every `detail` object removed, `ext` stripped and tool names already reduced to categories; it never
+publishes ticker events.
 
 ## 9. Fixtures
 

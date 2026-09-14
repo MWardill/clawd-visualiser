@@ -1,6 +1,6 @@
 // The three HTTP calls the app makes to the agent, each validated with the shared schemas. `fetch`
 // is injected so tests need no network.
-import { CommandSchema, DEFAULT_AGENT_URL, ENDPOINTS, HealthSchema, TickerEventSchema, type Command, type TickerEvent } from "@clawd/core";
+import { CommandSchema, DEFAULT_AGENT_URL, ENDPOINTS, HealthSchema, TickerEventSchema, type Command, type Health, type TickerEvent } from "@clawd/core";
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
@@ -13,14 +13,15 @@ export function agentUrl(): string {
 
 export const PROBE_TIMEOUT_MS = 1500;
 
-/** True when an agent answers the health endpoint with a valid Health body within the timeout. */
-export async function probeHealth(base: string, fetchFn: FetchLike = defaultFetch, timeoutMs = PROBE_TIMEOUT_MS): Promise<boolean> {
+/** The agent's Health when it answers with a valid body within the timeout, else null. */
+export async function probeHealth(base: string, fetchFn: FetchLike = defaultFetch, timeoutMs = PROBE_TIMEOUT_MS): Promise<Health | null> {
   try {
     const res = await fetchFn(`${base}${ENDPOINTS.health}`, { signal: AbortSignal.timeout(timeoutMs) });
-    if (!res.ok) return false;
-    return HealthSchema.safeParse(await res.json()).success;
+    if (!res.ok) return null;
+    const parsed = HealthSchema.safeParse(await res.json());
+    return parsed.success ? parsed.data : null;
   } catch {
-    return false;
+    return null;
   }
 }
 

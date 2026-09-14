@@ -9,7 +9,7 @@ Earlier drafts are in `docs/archive/`. Measured facts about Claude Code's hooks 
 
 ## 1. Summary
 
-A dashboard that shows every Claude Code session on your machine as a Clawd, the Claude Code crab, sitting in a terminal-style pane for its repository. At a glance you can tell which sessions are working, which are waiting on you and which are asleep, and click one to jump to its window. The data stays local; an anonymised summary is published so the same view is available on any of your devices. It costs zero model tokens, and no session content is ever displayed or transmitted, locally or otherwise.
+A dashboard that shows every Claude Code session on your machine as a Clawd, the Claude Code crab, sitting in a terminal-style pane for its repository. At a glance you can tell which sessions are working, which are waiting on you and which are asleep, and click one to jump to its window. The data stays local; an anonymised summary is published so the same view is available on any of your devices. It costs zero model tokens. Session content is never displayed or transmitted; an opt-in local detail level may add file paths and session names to the view on this machine, and the cloud only ever receives the anonymised form.
 
 ## 2. Problem
 
@@ -22,7 +22,7 @@ A dashboard that shows every Claude Code session on your machine as a Clawd, the
 
 1. **Glanceable state.** Within one second of looking, know which sessions need a human.
 2. **Zero token cost.** All observation is done by the Claude Code harness and a local process. The model is never asked to report on itself.
-3. **Private by construction.** Prompt text, tool inputs and outputs, file paths and assistant messages are stripped by the local agent at ingest. Nothing downstream can display them because nothing downstream receives them. The local view may name a pane after its directory's last segment; cloud viewing is opt-in and receives an anonymised summary of categories only, with generated pane names.
+3. **Private by construction.** Prompt text, tool inputs and outputs and assistant messages are stripped by the local agent at ingest at every level. Nothing downstream can display them because nothing downstream receives them. The local view may name a pane after its directory's last segment and, when the `detail` setting is `hints` or `paths`, show what a session is working on (FR-9a); the cloud always receives level `none`, an anonymised summary of categories only, with generated pane names.
 4. **Fun to look at.** A black terminal with stars and drifting clouds, box-drawn panes, and the canonical Clawd animated by state.
 5. **Actionable.** Click a Clawd to focus its window and to open a detail pane showing its redacted activity ticker.
 6. **Local data, viewable anywhere.** Raw observation never leaves the machine; anonymised snapshots are published to the web app on Vercel so the city can be watched from any device from the first release. The detail ticker is the one exception and stays local.
@@ -30,7 +30,7 @@ A dashboard that shows every Claude Code session on your machine as a Clawd, the
 
 ## 4. Non-goals (v1)
 
-- Displaying or transmitting session content anywhere: prompts, tool inputs or outputs, file paths, assistant text. This is a hard boundary, not a later feature.
+- Displaying or transmitting prompts, tool inputs or outputs, or assistant text, anywhere, at any detail level. This is a hard boundary, not a later feature. Paths and session names are local-only and opt-in (FR-9a).
 - Sending prompts or answering permission prompts from the web UI. Claude Code Remote Control already covers that.
 - Multi-user or team dashboards.
 - Cost and usage accounting as a feature. The status line payload carries cost and rate limits, so the data is available, but no v1 screen is built around it.
@@ -82,6 +82,7 @@ Priority: **P0** first usable version · **P1** next · **P2** later.
 
 - **FR-8** Map tool names to categories: `read` (Read, Glob, Grep), `edit` (Edit, Write, NotebookEdit), `run` (Bash, PowerShell), `web` (WebFetch, WebSearch), `spawn` (Agent), `think` (between events), `other` (MCP tools and unknown).
 - **FR-9** Redaction at ingest. The agent keeps from each payload only: session ID, working directory (hashed to a pane alias), event name, tool name, tool-use ID, duration, agent ID and type for subagents, permission mode, `background_tasks` counts, `SessionEnd` reason, and the status line's context, cost and rate-limit numbers. `prompt`, `tool_input`, `tool_response`, `last_assistant_message`, transcript paths and session names are discarded before anything is stored. A test suite feeds recorded payloads through ingest and asserts none of those fields survive.
+- **FR-9a** Detail levels. An agent setting `detail` with values `none` (default), `hints` and `paths`, cumulative, decides what an event may carry beyond FR-9 in an optional `detail` object. `hints`: the program name of a shell command, the extension of a file read or edited, the hostname of a fetch, the subagent type of an Agent call, the permission mode, the number of background shells. `paths`: the file or directory a tool touches relative to the working directory, the working directory, the session's name, an Agent call's short description. The event log and any cloud snapshot are always level `none`: core's `stripDetail` removes every `detail` key, and four invariants are proven by test (detail levels design §4).
 
 ### 7.4 Subagents (P0)
 
@@ -129,7 +130,7 @@ The look is the "panes" concept from the proof of concept: a black terminal with
 ### 7.9 Click: focus and detail (P1)
 
 - **FR-26** Clicking a Clawd issues a focus command for its alias. The agent resolves the alias to a session in the agents list and raises its window by working directory: the VS Code workspace window for that directory, or the top-level window owning the process for a terminal session (Windows). Tabs and panels inside the window are not targeted.
-- **FR-27** Clicking a Clawd also opens a detail pane rendered with xterm.js, styled as a terminal, that streams the session's **redacted ticker**: one line per event with timestamp, event name, activity category, tool name, duration, state transitions, subagent starts and stops, and context percentage. Because redaction happened at ingest, the ticker cannot contain prompt text, tool arguments, file paths or assistant output, and the same lines are what the local event log holds. The ticker is local-mode only and is never part of a cloud snapshot.
+- **FR-27** Clicking a Clawd also opens a detail pane rendered with xterm.js, styled as a terminal, that streams the session's **redacted ticker**: one line per event with timestamp, event name, activity category, tool name, duration, state transitions, subagent starts and stops, and context percentage. Above level `none`, a tool line also shows its subject: the file, program, host or agent (FR-9a). Because redaction happened at ingest, the ticker cannot contain prompt text, full tool arguments or assistant output. Above level `none` a tool line carries only its derived subject; file paths and Agent descriptions appear only at level `paths`, and only in the local view. The local event log holds the same events at level `none`. The ticker is local-mode only and is never part of a cloud snapshot.
 - **FR-28** If the session has ended, the detail pane shows a copyable `claude --resume <id>` command instead (P2).
 
 ### 7.10 Timeline view (P1)
@@ -317,3 +318,4 @@ The contract comes first and is the fork point. After it, the web app and the ag
 | 12 Sep 2026 | Contract first, then the web app and the agent concurrently in separate sessions on worktrees; the web app deploys on simulated data from its first commit. |
 | 12 Sep 2026 | Viewing from other devices is a goal from the start: cloud mode is P1 and follows integration; remote viewers get the anonymised snapshot only, never the ticker. |
 | 13 Sep 2026 | Pane labels in the local view are the working directory's last path segment, numbered on collision, behind an agent setting; cloud snapshots keep generated tree names. Session labels stay generated. |
+| 14 Sep 2026 | Detail levels: an opt-in agent setting adds hints or paths to the local view; the event log and the cloud stay at level none through one strip function with invariant tests. Content is never read at any level. |
