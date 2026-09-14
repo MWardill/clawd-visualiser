@@ -1,4 +1,4 @@
-import { RedactedEventSchema, redactPresence, type RedactedEvent } from "@clawd/core";
+import { RedactedEventSchema, redactPresence, type DetailLevel, type RedactedEvent } from "@clawd/core";
 import type { SessionView } from "../host/host";
 
 export type ReconcileInput = {
@@ -15,6 +15,8 @@ export type ReconcileInput = {
   lastWriteAt?: ReadonlyMap<string, number>;
   /** Keep each first-sight session's directory name on its presence, for the pane label. */
   paneNames?: boolean;
+  /** The agent's detail level: at paths a first-sight presence keeps the entry's directory and name in `detail`. */
+  detail?: DetailLevel;
 };
 
 export function sessionIdOf(entry: unknown): string | null {
@@ -35,7 +37,7 @@ export function listedIds(entries: readonly unknown[]): Set<string> {
 /** Pure: one poll against the fleet, as presence events (spec §6.2). */
 export function reconcile(input: ReconcileInput): RedactedEvent[] {
   const events: RedactedEvent[] = [];
-  const ctx = { now: input.now, allowlist: input.allowlist, paneNames: input.paneNames === true };
+  const ctx = { now: input.now, allowlist: input.allowlist, paneNames: input.paneNames === true, ...(input.detail === undefined ? {} : { detail: input.detail }) };
   const listed = new Set<string>();
   for (const entry of input.entries) {
     const id = sessionIdOf(entry);

@@ -1,4 +1,4 @@
-import { RedactedEventSchema, isAllowed, paneName } from "@clawd/core";
+import { RedactedEventSchema, isAllowed, paneName, type DetailLevel } from "@clawd/core";
 import { exec } from "node:child_process";
 import { z } from "zod";
 import type { FleetHost } from "../host/host";
@@ -62,6 +62,8 @@ export function createPresencePoller(deps: {
   readTranscript?: (sessionId: string) => Promise<TranscriptStats | null>;
   /** Put each listed session's directory name on the presence and history events it builds. */
   paneNames?: boolean;
+  /** The agent's detail level, passed to the presence events it builds. Absent means none. */
+  detail?: DetailLevel;
 }): PresencePoller {
   const graceMs = deps.graceMs ?? PRESENCE_GRACE_MS;
   let targets = new Map<string, FocusTarget>();
@@ -124,7 +126,7 @@ export function createPresencePoller(deps: {
     const lastWriteAt = new Map<string, number>();
     for (const [id, stats] of read) if (stats) lastWriteAt.set(id, stats.lastWriteAt);
     const sessions = deps.host.sessions();
-    for (const e of reconcile({ entries, sessions, lastListedAt, ended: deps.host.endedIds(), now, allowlist: deps.allowlist, graceMs, lastWriteAt, paneNames: deps.paneNames === true })) {
+    for (const e of reconcile({ entries, sessions, lastListedAt, ended: deps.host.endedIds(), now, allowlist: deps.allowlist, graceMs, lastWriteAt, paneNames: deps.paneNames === true, ...(deps.detail === undefined ? {} : { detail: deps.detail }) })) {
       deps.host.ingest(e);
     }
     // Counts go to sessions now in the fleet, including those reconcile just brought in.

@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG, SnapshotSchema, StreamTickerMessageSchema, TickerEventSchema, parseFixture } from "@clawd/core";
+import { DEFAULT_CONFIG, HealthSchema, SnapshotSchema, StreamTickerMessageSchema, TickerEventSchema, parseFixture } from "@clawd/core";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -54,9 +54,17 @@ describe("agent end to end", () => {
     await post("/ingest/hook", rawHook("UserPromptSubmit", "outside", { cwd: OUTSIDE_CWD }));
     await stream.waitFor((text) => text.includes('"contextPct":42'));
 
+    // A session with no status line: its name can only come from the agents list, so it must be listed before its first hook.
+    const sessionCount = async () => HealthSchema.parse(JSON.parse((await send(port, { path: "/api/health" })).body)).sessions;
+    const before = await sessionCount();
+    listed = [rawAgentEntry("e2e-two"), rawAgentEntry("e2e-three", { name: "LOCALONLY listed name" })];
+    await waitFor(async () => (await sessionCount()) === before + 1, 5_000);
+    await post("/ingest/hook", rawHook("UserPromptSubmit", "e2e-three"));
+    await stream.waitFor((text) => text.includes('"alias":"agent-3"'));
+
     const bodies: string[] = [];
     const snapshot = await send(port, { path: "/api/snapshot" });
-    expect(SnapshotSchema.parse(JSON.parse(snapshot.body)).sessions.map((s) => s.alias)).toEqual(["agent-1", "agent-2"]);
+    expect(SnapshotSchema.parse(JSON.parse(snapshot.body)).sessions.map((s) => s.alias)).toEqual(["agent-1", "agent-2", "agent-3"]);
     expect(SnapshotSchema.parse(JSON.parse(snapshot.body)).panes.map((p) => p.label)).toEqual(["repo"]);
     bodies.push(snapshot.body, (await send(port, { path: "/api/health" })).body);
     for (const alias of ["agent-1", "agent-2"]) {
@@ -101,8 +109,10 @@ describe("agent end to end", () => {
     const responses = sinks[0]![1];
     expect(responses.includes(LOCAL_ONLY), "local-only strings in responses").toBe(level === "paths");
     expect(responses.includes('"detail":{'), "detail objects in responses").toBe(level !== "none");
+    expect(responses.includes("LOCALONLY listed name"), "agents-list name in responses").toBe(level === "paths");
     const parsed = SnapshotSchema.parse(JSON.parse(snapshot.body));
     if (level === "paths") {
+      expect(parsed.sessions[2]?.detail).toMatchObject({ name: "LOCALONLY listed name", dir: SESSION_CWD });
       expect(parsed.sessions[1]?.detail).toMatchObject({ name: "LOCALONLY session name", dir: SESSION_CWD, permissionMode: "default" });
       expect(parsed.sessions[0]?.detail?.subject).toEqual({ kind: "file", text: "src/LOCALONLY-secret.ts" });
       expect(parsed.panes[0]?.detail).toEqual({ dir: SESSION_CWD });

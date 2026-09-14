@@ -2,7 +2,7 @@ import { paneKey } from "@clawd/core";
 import { describe, expect, it } from "vitest";
 import type { SessionView } from "../host/host";
 import { T0 } from "../testing/events";
-import { ALLOWED_ROOT, CANARY, SESSION_CWD, OUTSIDE_CWD, rawAgentEntry } from "../testing/raw";
+import { ALLOWED_ROOT, CANARY, LOCAL_ONLY, SESSION_CWD, OUTSIDE_CWD, rawAgentEntry } from "../testing/raw";
 import { listedIds, reconcile, sessionIdOf, type ReconcileInput } from "./reconcile";
 
 const KEY = paneKey(SESSION_CWD);
@@ -30,6 +30,17 @@ describe("reconcile", () => {
     expect(named).toMatchObject({ kind: "presence", paneName: "repo" });
     expect(JSON.stringify(named)).not.toContain(CANARY);
     expect(reconcile(input({ entries: [rawAgentEntry("s1")] }))[0]).not.toHaveProperty("paneName");
+  });
+
+  it("puts the listed session's directory and name in detail at paths, and no detail at none", () => {
+    const [atPaths] = reconcile(input({ entries: [rawAgentEntry("s1")], detail: "paths" }));
+    expect(atPaths).toMatchObject({ kind: "presence", alive: true, detail: { dir: SESSION_CWD, name: "LOCALONLY session name" } });
+    expect(JSON.stringify(atPaths)).not.toContain(CANARY);
+    for (const detail of [undefined, "none", "hints"] as const) {
+      const [event] = reconcile(input({ entries: [rawAgentEntry("s1")], ...(detail === undefined ? {} : { detail }) }));
+      expect(event).not.toHaveProperty("detail");
+      expect(JSON.stringify(event)).not.toContain(LOCAL_ONLY);
+    }
   });
 
   it("dates a first-sight session by its transcript's last write when the poller found one", () => {
