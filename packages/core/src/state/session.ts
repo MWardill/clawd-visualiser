@@ -77,20 +77,17 @@ const ACTIVE = new Set<RedactedEvent["kind"]>(["prompt", "tool.start", "tool.end
 /** Pure: applies one event to one session. `now` is the event time. */
 export function reduceSession(prev: SessionState, e: RedactedEvent, now: number, cfg: StateConfig): SessionState {
   if (prev.state === "done") return prev;
-  // A transcript read is not something the session did, so lastEventAt stays as it is, and so does the
-  // state, bar one case below. Its count only ever raises the session's. Its last write replaces
-  // lastActiveAt: that corrects a session first seen without one, such as a presence replayed from a log
-  // written before presence carried a last-active time, which would otherwise date the session from when
-  // it was noticed.
-  if (e.kind === "history") {
+  // A waiting session whose transcript moved on well after it was last heard from was answered while no
+  // hook reached us: the agent was down, or the answer fired none. It has been idle since that write.
+  if (e.kind === "history" && prev.state === "waiting" && e.lastActiveAt - prev.lastActiveAt >= cfg.unheardAnswerMs) {
     const read: SessionState = { ...prev, prompts: Math.max(prev.prompts, e.prompts), lastActiveAt: e.lastActiveAt };
-    // A waiting transcript that moved on well after the session was last heard from was answered while no
-    // hook reached us: the agent was down, or the answer fired none. The session has been idle since then.
-    if (prev.state === "waiting" && e.lastActiveAt - prev.lastActiveAt >= cfg.unheardAnswerMs) {
-      return { ...rest(transition(read, "idle", now, cfg)), since: Math.min(e.lastActiveAt, now), inFlight: [] };
-    }
-    return read;
+    return { ...rest(transition(read, "idle", now, cfg)), since: Math.min(e.lastActiveAt, now), inFlight: [] };
   }
+  // Any other transcript read is not something the session did, so lastEventAt and the state stay as they are.
+  // Its count only ever raises the session's. Its last write replaces lastActiveAt: that corrects a
+  // session first seen without one, such as a presence replayed from a log written before presence
+  // carried a last-active time, which would otherwise date the session from when it was noticed.
+  if (e.kind === "history") return { ...prev, prompts: Math.max(prev.prompts, e.prompts), lastActiveAt: e.lastActiveAt };
   let s: SessionState = { ...prev, lastEventAt: now, ...(ACTIVE.has(e.kind) ? { lastActiveAt: Math.max(prev.lastActiveAt, now) } : {}) };
   switch (e.kind) {
     case "session.start":
