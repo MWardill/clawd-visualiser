@@ -1,6 +1,8 @@
+import type { SessionDetail } from "../schema/detail";
 import type { RedactedEvent, ToolCategory } from "../schema/events";
 import type { Activity, SessionPhase } from "../schema/snapshot";
 import type { StateConfig } from "./config";
+import { mergeSessionDetail } from "./detail";
 
 export type InFlightTool = { toolUseId: string; tool: string; category: ToolCategory };
 
@@ -30,6 +32,8 @@ export type SessionState = {
   firstSeenAt: number;
   /** What was shown before the last transition, held until `until` so quick flips do not flicker. */
   displayHold: { state: SessionPhase; activity: Activity | null; until: number } | null;
+  /** What the agent's detail level lets the session say about itself (detail levels design §3). Empty at level none. */
+  detail: SessionDetail;
 };
 
 /** `since` is when the session went idle, for one that was already quiet when first seen; never later than `now`. */
@@ -51,6 +55,7 @@ export function newSession(sessionId: string, paneKey: string, now: number, sinc
     lastActiveAt: Math.min(since, now),
     firstSeenAt: now,
     displayHold: null,
+    detail: {},
   };
 }
 
@@ -82,7 +87,7 @@ export function reduceSession(prev: SessionState, e: RedactedEvent, now: number,
   // session first seen without one, such as a presence replayed from a log written before presence
   // carried a last-active time, which would otherwise date the session from when it was noticed.
   if (e.kind === "history") return { ...prev, prompts: Math.max(prev.prompts, e.prompts), lastActiveAt: e.lastActiveAt };
-  let s: SessionState = { ...prev, lastEventAt: now, ...(ACTIVE.has(e.kind) ? { lastActiveAt: Math.max(prev.lastActiveAt, now) } : {}) };
+  let s: SessionState = { ...prev, lastEventAt: now, detail: mergeSessionDetail(prev.detail, e), ...(ACTIVE.has(e.kind) ? { lastActiveAt: Math.max(prev.lastActiveAt, now) } : {}) };
   switch (e.kind) {
     case "session.start":
       return s;

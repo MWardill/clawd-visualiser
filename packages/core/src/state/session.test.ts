@@ -293,3 +293,23 @@ describe("prompts and activity", () => {
     expect(run([ev("history", T0 + 5, { prompts: 3, lastActiveAt: T0 - 50 * 3_600_000 })], seen).lastActiveAt).toBe(T0 - 50 * 3_600_000);
   });
 });
+
+describe("detail", () => {
+  it("starts empty and folds each event's detail in, without touching the rest of the state", () => {
+    expect(newSession("s1", "k1", T0).detail).toEqual({});
+    const plain = run([ev("prompt", T0 + 10), ev("tool.start", T0 + 20, { tool: "Bash", category: "run", toolUseId: "u1" })]);
+    const detailed = run([
+      ev("prompt", T0 + 10, { detail: { permissionMode: "acceptEdits", dir: "C:/mw/visualiser" } }),
+      ev("tool.start", T0 + 20, { tool: "Bash", category: "run", toolUseId: "u1", detail: { program: "git", permissionMode: "acceptEdits" } }),
+    ]);
+    expect(detailed.detail).toEqual({ permissionMode: "acceptEdits", dir: "C:/mw/visualiser", subject: { kind: "program", text: "git" } });
+    expect({ ...detailed, detail: {} }).toEqual({ ...plain, detail: {} });
+  });
+
+  it("leaves a done session and a history event alone", () => {
+    const done = run([ev("session.end", T0, { reason: "x" })]);
+    expect(run([ev("prompt", T0 + 1, { detail: { name: "late" } })], done)).toBe(done);
+    const s = run([ev("prompt", T0)]);
+    expect(run([ev("history", T0 + 1, { prompts: 3, lastActiveAt: T0 })], s).detail).toEqual({});
+  });
+});

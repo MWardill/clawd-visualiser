@@ -110,4 +110,18 @@ describe("deriveSnapshot", () => {
     const held = deriveSnapshot(f, emptyAliasMap(), T0 + 5100).snapshot.sessions[0]!;
     expect(held).toMatchObject({ state: "working", activity: "edit" });
   });
+
+  it("carries session detail and the pane's directory only when there is any", () => {
+    const ids = { sessionId: "s1", paneKey: "k1", paneName: "visualiser" };
+    let f = reduceFleet(emptyFleet(), event("prompt", T0, { detail: { permissionMode: "plan", dir: "C:/mw/visualiser", name: "Fix login" } }, ids), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("tool.start", T0 + 1, { tool: "Edit", category: "edit", toolUseId: "u1", detail: { file: "src/app.ts", ext: "ts" } }, ids), T0 + 1, DEFAULT_CONFIG);
+    const { snapshot } = deriveSnapshot(f, emptyAliasMap(), T0 + 5000);
+    expect(snapshot.sessions[0]?.detail).toEqual({ permissionMode: "plan", dir: "C:/mw/visualiser", name: "Fix login", subject: { kind: "file", text: "src/app.ts" } });
+    expect(snapshot.sessions[0]?.label).toBe("Otter");
+    expect(snapshot.panes[0]).toEqual({ pane: "pane-1", label: "visualiser", detail: { dir: "C:/mw/visualiser" } });
+    const bare = reduceFleet(emptyFleet(), event("prompt", T0, {}, ids), T0, DEFAULT_CONFIG);
+    const plain = deriveSnapshot(bare, emptyAliasMap(), T0 + 5000).snapshot;
+    expect(plain.sessions[0]).not.toHaveProperty("detail");
+    expect(plain.panes[0]).not.toHaveProperty("detail");
+  });
 });

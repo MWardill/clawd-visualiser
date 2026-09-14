@@ -48,4 +48,16 @@ describe("toTickerEvents", () => {
     const after = reduceSession(newSession("s1", "k1", T0), e, T0, DEFAULT_CONFIG);
     expect(toTickerEvents(e, null, after)).toEqual([{ t: new Date(T0).toISOString(), kind: "prompt" }]);
   });
+
+  it("puts the subject and the permission mode on tool and permission lines, and nothing on the rest", () => {
+    const s = newSession("s1", "k1", T0);
+    const line = (e: RedactedEvent) => toTickerEvents(e, s, s)[0];
+    const detail = { file: "src/app.ts", ext: "ts", permissionMode: "plan" };
+    expect(line(event("tool.start", T0, { tool: "Edit", category: "edit", toolUseId: "u", detail }))).toMatchObject({ kind: "tool.start", detail: { subject: { kind: "file", text: "src/app.ts" }, permissionMode: "plan" } });
+    expect(line(event("tool.end", T0, { tool: "Edit", category: "edit", toolUseId: "u", durationMs: 1, detail: { ext: "ts" } }))).toMatchObject({ detail: { subject: { kind: "file", text: "ts" } } });
+    expect(line(event("permission.request", T0, { tool: "Bash", category: "run", detail: { program: "rm" } }))).toMatchObject({ kind: "permission", detail: { subject: { kind: "program", text: "rm" } } });
+    expect(line(event("tool.start", T0, { tool: "Edit", category: "edit", toolUseId: "u" }))).not.toHaveProperty("detail");
+    expect(line(event("tool.start", T0, { tool: "X", category: "other", toolUseId: "u", detail: { dir: "C:/mw" } }))).not.toHaveProperty("detail");
+    expect(line(event("prompt", T0, { detail: { permissionMode: "plan" } }))).toEqual({ t: new Date(T0).toISOString(), kind: "prompt" });
+  });
 });
