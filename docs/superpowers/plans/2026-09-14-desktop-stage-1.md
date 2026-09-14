@@ -66,8 +66,7 @@
   "scripts": {
     "bundle": "node build/bundle.mjs",
     "dev": "node build/bundle.mjs && electron .",
-    "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --noEmit"
+    "test": "vitest run --passWithNoTests"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",
@@ -163,8 +162,10 @@ Expected: the lockfile gains `@clawd/desktop`; Electron's postinstall downloads 
 Run: `pnpm --filter @clawd/desktop exec electron --version`
 Expected: `v44.3.0` or a later 44.
 
-Run: `pnpm --filter @clawd/desktop test && pnpm --filter @clawd/desktop typecheck`
-Expected: vitest reports no test files and exits 0; `tsc` finds nothing to check yet and exits 0.
+Run: `pnpm --filter @clawd/desktop test`
+Expected: vitest reports no test files and exits 0. There is no `typecheck` script yet: `tsc` refuses a config with no input files (TS18003), so Task 2 adds the script together with the first source file, and every commit stays green.
+
+If `electron --version` prints a Node version such as `v24.20.0`, the shell has `ELECTRON_RUN_AS_NODE=1` set (a VS Code extension host sets it, and children inherit it). Unset it, or prefix the command with `env -u ELECTRON_RUN_AS_NODE`, and it prints the Electron version.
 
 - [ ] **Step 6: Commit**
 
@@ -262,7 +263,13 @@ export function resolveDevUrl(args: Args, env: Readonly<Record<string, string | 
 }
 ```
 
-- [ ] **Step 4: Run the tests to verify they pass**
+- [ ] **Step 4: Add the type check script, now that there is a source file, and run the checks**
+
+In `apps/desktop/package.json`, after the `test` script:
+
+```json
+    "typecheck": "tsc --noEmit"
+```
 
 Run: `cd apps/desktop && npx vitest run src/args.test.ts && npx tsc --noEmit`
 Expected: PASS.
@@ -270,7 +277,7 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add apps/desktop/src/args.ts apps/desktop/src/args.test.ts
+git add apps/desktop/src/args.ts apps/desktop/src/args.test.ts apps/desktop/package.json
 git commit -m "feat(desktop): parse the app's own arguments and resolve the development URL"
 ```
 

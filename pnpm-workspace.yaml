@@ -7,3 +7,5 @@ packages:
 allowBuilds:
   esbuild: true
   unrs-resolver: true
+  # electron downloads its binary in a postinstall step.
+  electron: true
