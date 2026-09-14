@@ -45,8 +45,9 @@ These bind every module and every test.
    a record of numbers and booleans. There is no parameter a string could travel through, so an
    error message that quotes a payload cannot be logged. Errors are reduced to a code.
 4. **Presence details for focus stay in memory.** The poller keeps each listed session's `pid` and
-   `cwd` from the latest poll so focus can find the window. They are never serialised, logged or
-   exposed on any endpoint, and are replaced on the next poll.
+   `cwd` from the latest poll so focus can find the window. These copies are never serialised,
+   logged or exposed on any endpoint, and are replaced on the next poll. At the paths level the
+   working directory does reach endpoints, but only inside `detail`, where ingest puts it (rule 9).
 5. **Only modelled hook events are registered.** `MessageDisplay` carries assistant text deltas and
    `Notification` carries messages; neither changes state, so the installer does not subscribe to
    them. This narrows the PRD's "http hooks for every event" on purpose: content the agent would

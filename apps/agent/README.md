@@ -75,11 +75,12 @@ are for the hook scripts and need the token from `config.json`.
 
 ## Privacy
 
-Raw payloads live in memory for one request. Prompts, tool input and output, assistant text,
-transcript paths, session names and working directories never reach the log, the alias file, any
-response or the stream; every outgoing body is checked before it is written, outside its `detail`
-object, and operational logs
-carry codes and numbers only. `src/agent.e2e.test.ts` proves it with canary payloads.
+Raw payloads live in memory for one request. Prompts, tool input and output, assistant text and
+transcript paths never reach any sink: the log, the alias file, any response or the stream. Session
+names and working directories reach responses and the stream only inside `detail` at the paths
+level, and never the event log or the alias file. Every outgoing body is checked before it is
+written, outside its `detail` object, and operational logs carry codes and numbers only.
+`src/agent.e2e.test.ts` proves it with canary payloads.
 
 To run the same check over the raw spike recordings, which never leave your machine:
 

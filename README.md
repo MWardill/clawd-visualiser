@@ -6,10 +6,9 @@ working, which are waiting on you and which are asleep, and click one to jump to
 
 It costs zero model tokens: everything is observed through Claude Code's hooks and a small local
 process, and the model is never asked to report on itself. Prompts, tool inputs and outputs and
-assistant text are never displayed or transmitted. An opt-in `detail` setting on the agent can add
-file paths and session names to the local view only; the cloud always gets the anonymised form.
-Prompts, tool arguments and outputs, file paths and assistant text are stripped at
-ingest; what remains is state, activity category and timing.
+assistant text are stripped at ingest and never displayed or transmitted; by default what remains is
+state, activity category and timing. An opt-in `detail` setting on the agent can add file paths and
+session names to the local view only; the cloud always gets the anonymised form.
 
 ## Status
 

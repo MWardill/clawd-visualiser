@@ -358,8 +358,9 @@ Default agent address `http://127.0.0.1:4750`, overridable by the web app throug
 `NEXT_PUBLIC_AGENT_URL`. The agent sends CORS headers for the web app's origin. When the web app
 cannot reach an agent it falls back to the simulated source and says so in the status bar.
 
-Cloud mode (M6) publishes the same `Snapshot` to Redis with `ext` stripped and tool names already
-reduced to categories; it never publishes ticker events.
+Cloud mode (M6) publishes `toCloudSnapshot(s)` to Redis: the same `Snapshot` at level none, with
+every `detail` object removed, `ext` stripped and tool names already reduced to categories; it never
+publishes ticker events.
 
 ## 9. Fixtures
 
