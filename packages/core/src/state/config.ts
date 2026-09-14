@@ -10,6 +10,13 @@ export type StateConfig = {
    * interrupt, a lost hook). Generous, because a single tool call can legitimately run for minutes.
    */
   staleWorkingMs: number;
+  /**
+   * A waiting session whose transcript was written at least this long after it was last heard from was
+   * answered while no hook reached us (the agent was down, or the answer fired none), so a `history`
+   * event carrying that write ends the wait. A transcript trails its hook by about 0.1 s, so this only
+   * needs to clear that trailing write and the odd late append.
+   */
+  unheardAnswerMs: number;
   /** A quiet session with exactly one prompt leaves the view this long after its last activity. */
   oneShotHideMs: number;
   /** A quiet session with up to `fewPrompts` prompts leaves the view this long after its last activity. */
@@ -25,6 +32,7 @@ export const DEFAULT_CONFIG: StateConfig = {
   minDisplayMs: 1_500,
   doneLingerMs: 4_000,
   staleWorkingMs: 30 * 60_000,
+  unheardAnswerMs: 30_000,
   oneShotHideMs: 3 * 3_600_000,
   fewPromptsHideMs: 24 * 3_600_000,
   fewPrompts: 8,

@@ -265,6 +265,27 @@ describe("reduceSession", () => {
   });
 });
 
+describe("a wait answered while no hook was heard", () => {
+  const waiting = (): SessionState =>
+    run([ev("prompt", T0), ev("tool.start", T0 + 1, { tool: "Write", category: "edit", toolUseId: "u1" }), ev("permission.request", T0 + 2, { tool: "Write", category: "edit" })]);
+
+  it("goes idle from the transcript's last write when that write came well after the session was last heard from", () => {
+    const answeredAt = T0 + 2 + DEFAULT_CONFIG.unheardAnswerMs;
+    const s = run([ev("history", answeredAt + 3_600_000, { prompts: 1, lastActiveAt: answeredAt })], waiting());
+    expect(s).toMatchObject({ state: "idle", since: answeredAt, activity: null, waitingOn: null, waitingAgent: null, inFlight: [], lastActiveAt: answeredAt, lastEventAt: T0 + 2 });
+  });
+
+  it("keeps waiting when the last write is only the request's own trailing write", () => {
+    const s = run([ev("history", T0 + 3_600_000, { prompts: 1, lastActiveAt: T0 + 2 + DEFAULT_CONFIG.unheardAnswerMs - 1 })], waiting());
+    expect(s).toMatchObject({ state: "waiting", waitingOn: "u1" });
+  });
+
+  it("leaves a working session to the stale timer, however late the write", () => {
+    const working = run([ev("prompt", T0), ev("tool.start", T0 + 1, { tool: "Bash", category: "run", toolUseId: "u1" })]);
+    expect(run([ev("history", T0 + 3_600_000, { prompts: 1, lastActiveAt: T0 + 3_000_000 })], working).state).toBe("working");
+  });
+});
+
 describe("presence", () => {
   it("an alive presence leaves a working session's state and lastEventAt as they were", () => {
     const working = run([ev("prompt", T0), ev("tool.start", T0 + 10, { tool: "Bash", category: "run", toolUseId: "u1" })]);

@@ -102,7 +102,7 @@ Variants, with their extra fields:
 | `subagent.stop` | `agentId`, `agentType` | SubagentStop |
 | `status` | `contextPct?: number`, `costUsd?: number`, `rateLimit5h?: number`, `rateLimit7d?: number`, `model?: string` | status line command |
 | `presence` | `alive: boolean`, `lastActiveAt?: number` | `redactPresence()` over one agents-list entry, one per known session. `lastActiveAt`, on a live presence only, is when the session last did anything |
-| `history` | `prompts: number`, `lastActiveAt: number` | The agent's read of the session's transcript, once per session per run: its typed prompt count, which raises the session's and never lowers it, and its last write, which becomes the session's `lastActiveAt`. Creates no session |
+| `history` | `prompts: number`, `lastActiveAt: number` | The agent's read of the session's transcript, once per session per run: its typed prompt count, which raises the session's and never lowers it, and its last write, which becomes the session's `lastActiveAt`. Creates no session. Changes no state, except that it ends a wait the transcript shows was answered unheard (§5.2) |
 
 `tool` is the built-in tool name, or `"mcp"` for any MCP tool (open question 5 in the PRD).
 `category` is derived by `categories.ts`: `read`, `edit`, `run`, `web`, `spawn`, `other`.
@@ -222,6 +222,7 @@ Two tool calls can be in flight at once, so `inFlight` is a list and not a singl
 | working or waiting | `stop` with subagent tasks | working, activity `spawn`; any wait ends |
 | idle | `tick` past `asleepAfterMs` | asleep |
 | working | `tick` past `staleWorkingMs` since `lastEventAt` | idle. The Stop never came: a user interrupt, a lost hook. Generous (30 minutes), since one tool call can run for minutes |
+| waiting | `history` whose `lastActiveAt` is at least `unheardAnswerMs` (30 seconds) after the session's own | idle, `since` the transcript's last write; the wait ends and `inFlight` empties. The prompt was answered while no hook reached the agent: it was down, or the answer (such as Escape) fired none. A transcript trails its hook by about 0.1 s, so 30 seconds clears that write and any late append |
 | idle / asleep | `prompt` | working |
 | any | `session.end`, or `presence.alive === false` | done |
 
