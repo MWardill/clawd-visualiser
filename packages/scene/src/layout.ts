@@ -24,6 +24,8 @@ export const NAME_ROW = 15;
 export const STATUS_ROW = 17;
 export const CONTEXT_ROW = 19;
 export const CONTEXT_W = 18;
+/** The caption row inside the seat: what the session is working on, when the detail level says. */
+export const CAPTION_ROW = 21;
 
 export type XY = { x: number; y: number };
 export type Rect = { x: number; y: number; w: number; h: number };

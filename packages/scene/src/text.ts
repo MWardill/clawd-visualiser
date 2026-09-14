@@ -1,5 +1,5 @@
 // Strings for nameplates and titles, and the one place text is put on the canvas.
-import type { Activity, SessionPhase } from "@clawd/core";
+import type { Activity, SessionPhase, Subject } from "@clawd/core";
 import { PALETTE, type PixelContext } from "./engine";
 
 export const STATE_COLOURS: Record<SessionPhase, string> = {
@@ -10,6 +10,17 @@ export const STATE_COLOURS: Record<SessionPhase, string> = {
   done: PALETTE.state.pink,
 };
 
+/** Caption colours by activity, matching the ticker's. */
+export const ACTIVITY_COLOURS: Record<Activity, string> = {
+  read: PALETTE.state.blue,
+  edit: PALETTE.state.green,
+  run: PALETTE.state.amber,
+  web: PALETTE.state.pink,
+  spawn: PALETTE.clawd.body,
+  think: PALETTE.night.text,
+  other: PALETTE.night.text,
+};
+
 /** `mm:ss` for a duration; negatives read as zero. */
 export function mmss(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
@@ -18,15 +29,21 @@ export function mmss(ms: number): string {
 
 export type Nameplate = { name: string; subs: string; status: string; colour: string };
 
-/** Two lines under a Clawd: the name with its subagent count, then state, activity and time in state. */
-export function nameplate(a: { label: string; state: SessionPhase; activity: Activity | null; subagents: number; since: number }, now: number): Nameplate {
+/** Two lines under a Clawd: the name (the session's own when the detail level gives one) with its subagent count, then state, activity and time in state. */
+export function nameplate(a: { label: string; name?: string | null; state: SessionPhase; activity: Activity | null; subagents: number; since: number }, now: number): Nameplate {
   const activity = a.state === "working" && a.activity ? `·${a.activity}` : "";
   return {
-    name: a.label.toLowerCase(),
+    name: (a.name ?? a.label).toLowerCase(),
     subs: a.subagents > 0 ? ` ×${a.subagents}` : "",
     status: `${a.state}${activity} ${mmss(now - a.since)}`,
     colour: STATE_COLOURS[a.state],
   };
+}
+
+/** The caption under a working Clawd: a file's last two segments, anything else as it is, cut with an ellipsis to `max` characters. */
+export function caption(subject: Subject, max: number): string {
+  const text = subject.kind === "file" ? subject.text.split("/").filter((s) => s.length > 0).slice(-2).join("/") : subject.text;
+  return text.length > max ? `${text.slice(0, Math.max(0, max - 1))}…` : text;
 }
 
 /** Longest label a pane title shows; a pane is 52 cells wide and longer names would cross its border. */

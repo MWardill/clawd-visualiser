@@ -125,4 +125,22 @@ describe("mountPanesScene", () => {
     h.scene.setPaused(false);
     expect(h.frames).toHaveLength(1);
   });
+
+  it("captions a working Clawd with its subject and leaves an idle one without", () => {
+    const h = harness();
+    const working = { ...SNAPSHOT.sessions[0]!, state: "working" as const, activity: "edit" as const, detail: { name: "Fix Login", subject: { kind: "file" as const, text: "src/lib/feed/agent.ts" } } };
+    h.scene.setSnapshot({ ...SNAPSHOT, sessions: [working] });
+    h.setNow(T0 + 5000);
+    h.frame(0);
+    h.frame(100);
+    expect(h.texts.some((t) => t.text === "fix login")).toBe(true);
+    const cap = h.texts.find((t) => t.text === "feed/agent.ts");
+    expect(cap?.col).toBe(PALETTE.state.green);
+    h.reset();
+    h.scene.setSnapshot({ ...SNAPSHOT, sessions: [{ ...working, state: "idle", activity: null }] });
+    h.setNow(T0 + 10_000);
+    h.frame(200);
+    h.frame(300);
+    expect(h.texts.some((t) => t.text === "feed/agent.ts")).toBe(false);
+  });
 });

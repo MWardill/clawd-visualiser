@@ -126,4 +126,12 @@ describe("reconcile", () => {
     tick(w, T0 + 200 + TIMING.miniOut);
     expect(a.subs.every((m) => m.move === null && !m.leaving)).toBe(true);
   });
+
+  it("copies the name and subject from the session's detail, and clears them when a later snapshot has none", () => {
+    const detailed = session({ alias: "agent-1", detail: { name: "Fix login", subject: { kind: "file", text: "src/app.ts" } } });
+    const w = reconcile(emptyWorld(), snap([detailed]), T0);
+    expect(w.actors[0]).toMatchObject({ name: "Fix login", subject: { kind: "file", text: "src/app.ts" } });
+    reconcile(w, snap([session({ alias: "agent-1" })]), T0 + 1);
+    expect(w.actors[0]).toMatchObject({ name: null, subject: null });
+  });
 });

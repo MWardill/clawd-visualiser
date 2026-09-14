@@ -4,10 +4,10 @@ import type { Snapshot } from "@clawd/core";
 import { emptyWorld, reconcile, seatsUsed, tick, type Actor, type ScenePane, type World } from "./actors";
 import { createAtmosphere, drawNight, type Atmosphere } from "./atmosphere";
 import { CLAWD_BODY, PALETTE, createEngine, type EyeVariant, type PixelContext } from "./engine";
-import { CELL, CONTEXT_ROW, CONTEXT_W, NAME_ROW, SEAT_H, SEAT_W, SPRITE_DX, SPRITE_DY, STATUS_ROW, layoutPanes, type PaneRect } from "./layout";
+import { CAPTION_ROW, CELL, CONTEXT_ROW, CONTEXT_W, NAME_ROW, SEAT_H, SEAT_W, SPRITE_DX, SPRITE_DY, STATUS_ROW, layoutPanes, type PaneRect } from "./layout";
 import { poseFor } from "./poses";
 import { drawBox, drawClawdWalking, drawClawdWave, drawExclaim, drawMini, drawSparkle, drawSweat, drawZzz } from "./sprites";
-import { drawText, nameplate, paneTitle } from "./text";
+import { ACTIVITY_COLOURS, caption, drawText, nameplate, paneTitle } from "./text";
 
 export type PanesSceneOptions = {
   /** CSS pixels per cell. Default 6. */
@@ -167,6 +167,11 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
         drawText(ctx, PX, np.name, cx, sy + NAME_ROW, PALETTE.night.textBright, { size: textPx, font, bold: true, align: "center" });
       }
       drawText(ctx, PX, np.status, cx, sy + STATUS_ROW, np.colour, { size: textPx, font, align: "center" });
+      if (a.subject && (a.state === "working" || a.state === "waiting")) {
+        const max = Math.max(4, Math.floor((SEAT_W * PX) / (textPx * GLYPH_W)) - 1);
+        const col = a.activity ? ACTIVITY_COLOURS[a.activity] : PALETTE.night.text;
+        drawText(ctx, PX, caption(a.subject, max), cx, sy + CAPTION_ROW, col, { size: textPx, font, align: "center" });
+      }
       if (a.contextPct !== null) {
         const filled = Math.round((CONTEXT_W * a.contextPct) / 100);
         const bx = sx + SPRITE_DX + Math.floor((CLAWD_BODY.width - CONTEXT_W) / 2);
