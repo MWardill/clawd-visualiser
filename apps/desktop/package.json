@@ -7,7 +7,8 @@
   "scripts": {
     "bundle": "node build/bundle.mjs",
     "dev": "node build/bundle.mjs && electron .",
-    "test": "vitest run --passWithNoTests"
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "^22.20.2",
