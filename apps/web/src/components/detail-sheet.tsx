@@ -96,7 +96,7 @@ function DetailBody({ alias, session, canFocus, subscribeTicker, backfill, focus
             </SheetDescription>
             {session?.detail ? (
               <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                {session.detail.dir ? <span className="truncate">{session.detail.dir}</span> : null}
+                {session.detail.dir ? <span className="min-w-0 truncate">{session.detail.dir}</span> : null}
                 {session.detail.permissionMode ? <Badge variant="outline">{session.detail.permissionMode}</Badge> : null}
                 {session.detail.shells ? <span>{session.detail.shells} background shells</span> : null}
               </div>
