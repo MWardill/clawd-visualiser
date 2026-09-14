@@ -78,7 +78,7 @@ function DetailBody({ alias, session, canFocus, subscribeTicker, backfill, focus
         <div className="flex items-center gap-3">
           <ClawdIdle scale={1} />
           <div className="min-w-0">
-            <SheetTitle className="font-bold text-clawd">{session ? (session.detail?.name ?? session.label.toLowerCase()) : alias}</SheetTitle>
+            <SheetTitle className="truncate font-bold text-clawd">{session ? (session.detail?.name ?? session.label.toLowerCase()) : alias}</SheetTitle>
             <SheetDescription className="flex flex-wrap items-center gap-2">
               {session ? (
                 <>
