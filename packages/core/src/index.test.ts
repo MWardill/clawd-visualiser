@@ -74,6 +74,7 @@ describe("@clawd/core public API", () => {
       "stripDetail",
       "tickFleet",
       "tickSession",
+      "toCloudSnapshot",
       "toTickerEvents",
     ]);
   });
