@@ -7,18 +7,20 @@ maintainer is learning Electron as it is built.
 
 ## 1. Scope
 
-One Windows application, installed per user, that contains the agent and the visualiser. Launching
-it starts the agent inside the app's main process, opens the panes scene in a window and sits in
-the tray. Nothing else has to be started. Teammates install it from a GitHub release. The cloud
-deployment of `apps/web` is unchanged: the same source with a different build flag.
+One Windows application that contains the agent and the visualiser, shipped as a folder in a zip
+and run from wherever it is unzipped. Launching it starts the agent inside the app's main process,
+opens the panes scene in a window and sits in the tray. Nothing else has to be started and nothing
+is installed. Teammates unzip it and run it. The cloud deployment of `apps/web` is unchanged: the
+same source with a different build flag.
 
 In scope: package layout, startup and shutdown, the in-process agent supervisor, the static UI over
 a custom scheme, the agent's origin changes, hooks that run under the app's own binary, the
-settings window, tray and login item, packaging, updates and release, tests, staging.
+settings window, tray and login item, packaging, tests, staging.
 
-Out of scope: macOS and Linux builds (focus is Windows-only already; nothing is built or tested
-elsewhere), code signing beyond a configured slot, the detail levels themselves (the detail levels
-design, `2026-09-14-detail-levels-design.md`, which the settings window exposes), remote viewing (M6).
+Out of scope: an installer, in-app updates and a release workflow (§11 records why and the route
+if they are wanted later); macOS and Linux builds (focus is Windows-only already; nothing is built
+or tested elsewhere); code signing; the detail levels themselves (the detail levels design,
+`2026-09-14-detail-levels-design.md`, which the settings window exposes); remote viewing (M6).
 
 ## 2. Decisions
 
@@ -26,24 +28,24 @@ design, `2026-09-14-detail-levels-design.md`, which the settings window exposes)
 | --- | --- | --- |
 | Where the agent runs | In the main process, by calling `startAgent()` | One process, one click. A supervisor (§5) handles faults. Chosen over a utility process for fewer moving parts. |
 | How the UI is served | Next static export over `app://clawd/` through `protocol.handle` | No Next server and no extra port. A sandboxed renderer with no preload. |
-| Bundling | esbuild for main, preload and the settings page; electron-builder for the installer | One bundle carries the agent and core, so the package has a single runtime dependency (electron-updater). |
+| Bundling | esbuild for main, preload and the settings page; electron-builder for the package | One bundle carries the agent and core, so the package has no runtime dependencies. |
 | The hooks' Node | The app binary with `ELECTRON_RUN_AS_NODE=1` | Teammates need no Node install. Hooks run through bash on Windows (spike-hooks.md), so an environment prefix works. |
-| Installer | NSIS, per user, one click | No admin rights. A fixed install path, so hook commands survive updates. |
-| Updates | electron-updater against GitHub Releases | The repository lives on GitHub; no infrastructure. Applied only when asked. |
+| Distribution | An unpacked folder, zipped: electron-builder's `dir` and `zip` targets | Nothing to install, sign or learn beyond packaging. A moved folder is repaired at the next launch (§8). electron-builder's `portable` target is ruled out: it unpacks to a fresh temp directory on every run, so a hook command could never point at the exe. |
+| Updates | Manual: unzip the new version over the old folder | No outbound connection from the app and no updater to learn. |
 | Settings UI | Plain HTML in the desktop package with a preload bridge | The Next app keeps zero desktop-specific code. |
 
 ## 3. Package layout
 
 ```
 apps/desktop/
-  package.json            @clawd/desktop. dependencies: electron-updater. devDependencies: electron,
-                          electron-builder, esbuild, vitest, typescript, @clawd/agent, @clawd/core
+  package.json            @clawd/desktop. No dependencies. devDependencies: electron, electron-builder,
+                          esbuild, vitest, typescript, @clawd/agent, @clawd/core
   electron-builder.yml
   build/
     bundle.mjs            esbuild: main, preload, settings page script; copies the Next export
     icons.mjs             renders the canonical Clawd matrix to PNG and ICO, dependency-free
   src/
-    main.ts               entry: lock, scheme, agent host, tray, window, updater
+    main.ts               entry: lock, scheme, agent host, tray, window
     args.ts               --hidden, --dev-url; pure
     paths.ts              home, logs, desktop.json, renderer directory
     log.ts                dated file sink for the agent's Logger (codes only)
@@ -52,7 +54,6 @@ apps/desktop/
     window.ts             BrowserWindow, bounds persistence, hide on close
     tray.ts               icon, badge, tooltip, menu
     login.ts              setLoginItemSettings wrapper
-    updater.ts            electron-updater wiring and its state
     hooks.ts              hook status (missing, current, stale), repair, the runtime prefix
     settings/
       preload.ts          the contextBridge API
@@ -72,7 +73,8 @@ command, tooltip text, argument parsing) is a pure module with tests, as in the 
 2. Before `ready`: `protocol.registerSchemesAsPrivileged([{ scheme: "app", privileges: { standard:
    true, secure: true, supportFetchAPI: true } }])`.
 3. On `ready`: register the scheme handler (§7), start the agent host (§5), create the tray (§10),
-   create the window unless `--hidden`, start the updater (§11).
+   re-apply the login item and repair the hooks if the exe has moved (§8, §10), and create the
+   window unless `--hidden`.
 4. Closing the window hides it. Quit (tray menu or Ctrl+Q) sets a quitting flag, hides the window,
    awaits `host.stop()` and calls `app.exit(0)`. `will-quit` is held until the stop resolves, capped
    at five seconds.
@@ -145,12 +147,12 @@ attached.
 
 ## 8. Hooks under the app's binary
 
-- The runtime prefix when packaged is `ELECTRON_RUN_AS_NODE=1
-  "C:/Users/<user>/AppData/Local/Programs/Clawd Visualiser/Clawd Visualiser.exe"`. In development it
-  is the same with `node_modules/electron/dist/electron.exe`. Forward slashes and quotes as today;
-  `isOurHook` still matches on the script name.
-- The written SessionStart command hook reads `ELECTRON_RUN_AS_NODE=1 ".../Clawd Visualiser.exe"
-  "C:/Users/<user>/.clawd/bin/clawd-hook.mjs"`; the status line likewise.
+- The runtime prefix is `ELECTRON_RUN_AS_NODE=1 "<exe>"` where `<exe>` is `process.execPath`: the
+  unzipped folder's `Clawd Visualiser.exe` when packaged, `node_modules/electron/dist/electron.exe`
+  in development. Forward slashes and quotes as today; `isOurHook` still matches on the script name.
+- The written SessionStart command hook reads `ELECTRON_RUN_AS_NODE=1 "C:/Users/<user>/Apps/Clawd
+  Visualiser/Clawd Visualiser.exe" "C:/Users/<user>/.clawd/bin/clawd-hook.mjs"`, for a folder
+  unzipped there; the status line likewise.
 - Electron as Node skips Chromium. Startup is around 100 ms against Node's 40 ms, inside the two
   second hook timeout and the scripts' own guards. Stage 5 measures it on the machine. If the
   status line's refresh feels slow, the fallback is to ship `node.exe` as an extra resource and
@@ -158,10 +160,13 @@ attached.
 - The `runAsNode` fuse stays enabled (`electronFuses.runAsNode: true`). Turning it off would break
   every installed hook.
 - On launch, `hooks.ts` reads the settings file. `current`: nothing. `stale` (our hook present with
-  a different command, as after the install directory moved): rewrite through `installHooks()`
-  with the usual backup, logged as `desktop.hooksRepaired`. `missing`: nothing; the settings
-  window offers to install.
-- Uninstall from the app is the CLI's uninstall.
+  a different command, as after the folder moved or a new version was unzipped elsewhere): rewrite
+  through `installHooks()` with the usual backup, logged as `desktop.hooksRepaired`. `missing`:
+  nothing; the settings window offers to install. Until the app is launched from its new place the
+  hooks fail quietly, as hooks always do, and events for that interval are missed.
+- Uninstall from the app is the CLI's uninstall. Deleting the folder without it leaves the hooks
+  pointing at nothing; they keep failing quietly, and the CLI's uninstall or a fresh install repairs
+  the settings file.
 
 ## 9. Settings window
 
@@ -170,11 +175,11 @@ A second window, 560 by 720, loading `app://settings/`, with `preload.ts` exposi
 ```ts
 type SettingsState = {
   agent: { mode: "starting" | "own" | "attached" | "restarting" | "failed"; port: number; version: string; sessions: number; waiting: number };
+  app: { version: string; exe: string };
   allowlist: string[];
   hooks: "missing" | "current" | "stale";
   detail: "none" | "hints" | "paths";
   openAtLogin: boolean;
-  update: { current: string; state: "idle" | "checking" | "available" | "downloading" | "ready" | "error"; latest?: string };
   logDir: string;
 };
 
@@ -187,8 +192,6 @@ type ClawdSettingsApi = {
   setDetail(level: SettingsState["detail"]): Promise<SettingsState>;
   setOpenAtLogin(on: boolean): Promise<SettingsState>;
   retryAgent(): Promise<SettingsState>;
-  checkForUpdates(): Promise<SettingsState>;
-  restartToUpdate(): Promise<void>;
   openLogs(): Promise<void>;
   onState(cb: (s: SettingsState) => void): () => void;
 };
@@ -196,43 +199,46 @@ type ClawdSettingsApi = {
 
 Main validates every argument with zod. Folder edits and level changes save the config and restart
 the agent in process, so the README's "restart the agent after changing the allowlist" happens for
-the user. Sections, top to bottom: agent, watched folders, hooks, detail level, start on login,
-updates. Text only, no framework; JetBrains Mono on black, matching the app. The detail section
-is present only once the detail levels design has landed.
+the user. Sections, top to bottom: agent, this app (version and where it runs from), watched
+folders, hooks, detail level, start on login. Text only, no framework; JetBrains Mono on black,
+matching the app. The detail section is present only once the detail levels design has landed.
 
 ## 10. Tray, login item, logging
 
 - Tray icon: the canonical Clawd at 16 and 32 px, rendered from the matrix by `build/icons.mjs`,
   plus a variant with an amber dot for waiting above zero. Tooltip: `Clawd Visualiser · 3 sessions ·
   1 waiting`, with `· agent attached` or `· agent failed` appended in those states. Menu: Open,
-  Settings, Start on login (checkbox), Check for updates, Quit, and Restart to update when one is
-  ready. Clicking the icon opens the window.
+  Settings, Start on login (checkbox), Quit. Clicking the icon opens the window.
 - Login item: `app.setLoginItemSettings({ openAtLogin, args: ["--hidden"] })`. Turned on the first
   time the packaged app runs (a flag in `desktop.json`). The settings toggle and the tray checkbox
-  read `getLoginItemSettings()`.
+  read `getLoginItemSettings()`. On every launch, when it is on, `login.ts` applies it again so the
+  registered path follows a moved folder.
 - Logs: `~/.clawd/logs/desktop-YYYY-MM-DD.log`, one JSON line per entry, written by the agent's
   `createLogger` with a file sink, so the codes-only rule holds for the desktop. New codes:
   `desktop.started`, `desktop.attached`, `desktop.takeover`, `desktop.agentFault`,
-  `desktop.agentFailed`, `desktop.hooksRepaired`, `desktop.update`. Retention follows
+  `desktop.agentFailed`, `desktop.hooksRepaired`, `desktop.loginItemReapplied`. Retention follows
   `logRetentionDays`.
 
-## 11. Packaging, updates, release
+## 11. Packaging and distribution
 
 - electron-builder: `appId: io.github.mwardill.clawd-visualiser`, `productName: Clawd Visualiser`,
-  NSIS with `oneClick: true` and `perMachine: false`, `files: ["dist/**"]`, asar on, fuses
-  `runAsNode: true`, `enableCookieEncryption: true`, `onlyLoadAppFromAsar: true`. Install path
-  `%LOCALAPPDATA%\Programs\Clawd Visualiser`.
-- Version: `apps/desktop/package.json`. The tag `desktop-v<version>` must match or the workflow fails.
-- Updates: `autoUpdater` with the GitHub provider, `autoDownload: true`, `autoInstallOnAppQuit:
-  false`. Checked 30 s after start and every six hours. When a download is ready the tray and the
-  settings window offer Restart to update. Nothing restarts on its own, so sessions are never
-  disturbed.
-- Release: `.github/workflows/desktop-release.yml` on `push` of tags `desktop-v*`, on
-  `windows-latest`, with pnpm: `pnpm --filter @clawd/desktop build`, then `electron-builder --win
-  --publish always` with `GITHUB_TOKEN`. It creates a draft release the maintainer publishes.
-- Signing: `win.certificateFile` and `certificatePassword` from repository secrets when present.
-  Without them the installer is unsigned and SmartScreen warns on first run. Risk: an enterprise
-  policy may block unsigned installers; a certificate is the fix, not a code change.
+  `win.target: ["dir", "zip"]`, `files: ["dist/**"]`, asar on, fuses `runAsNode: true`,
+  `enableCookieEncryption: true`, `onlyLoadAppFromAsar: true`. The artifact is
+  `Clawd-Visualiser-<version>-win-x64.zip`, holding one folder with `Clawd Visualiser.exe` and its
+  resources.
+- `pnpm --filter @clawd/desktop package` runs the bundle (§3) and electron-builder. The zip is
+  shared by hand or attached to a GitHub release by the maintainer; nothing is automated.
+- Version: `apps/desktop/package.json`, shown in the settings window and the tray tooltip on hover.
+- Updating: quit the app, unzip the new version over the folder, launch. The hooks and the login
+  item point at the same path, so nothing is repaired. Unzipping to a new place is the moved-folder
+  case in §8 and §10.
+- Signing: none. SmartScreen warns once for an exe extracted from a downloaded zip. An enterprise
+  policy that blocks unsigned executables in user-writable directories blocks this too; a
+  certificate is the fix, not a code change.
+- Ruled out, with the route if wanted later. The `portable` target unpacks to a temp directory per
+  run and cannot host the hooks. An NSIS per-user installer would pin the path under the user's
+  local programs folder and enable electron-updater against GitHub Releases; that is a separate
+  spec, not a change to anything here.
 
 ## 12. Stages
 
@@ -243,7 +249,7 @@ is present only once the detail levels design has landed.
 | 3 Packaged UI | The static export, the `app://` handler, CSP, the desktop origin, the private-network header, the smoke test | Custom protocols, origins, CSP | The app shows the scene with no dev server running |
 | 4 Tray | Tray, badge, tooltip, hide on close, the single-instance lock, `--hidden`, the login item | `Tray`, `Menu`, the single-instance lock, login items | Closing the window keeps the agent up; the app returns hidden at login |
 | 5 Settings | The settings window, preload, IPC, the folder picker, hook install and repair with the runtime prefix | Preload, `contextBridge`, `ipcMain`, dialogs, process-model security | A fresh machine is set up from the app alone |
-| 6 Ship | Icons, electron-builder, fuses, the updater, the release workflow | Packaging, asar, fuses, auto-update, signing | A teammate installs from a GitHub release and receives the next tag as an update |
+| 6 Package | Icons, electron-builder with the `dir` and `zip` targets, fuses | Packaging, asar, fuses, `process.execPath` in a packaged app | A teammate unzips the folder, runs the exe, and sets up hooks from the settings window; moving the folder and relaunching repairs the hooks and the login item |
 
 Each stage has its own plan and branch and is merged before the next starts. Stage 5's detail
 section lands with whichever of stage 5 and the detail levels design is later.
@@ -258,12 +264,13 @@ section lands with whichever of stage 5 and the detail levels design is later.
   split, `hookStatus`, the runtime prefix in the written command.
 - A manual checklist per stage, kept in that stage's plan: the "done when" column above, plus for
   stage 3 the event stream connecting from `app://clawd` in the packaged app, for stage 5 the hook
-  and status line latency under the Electron binary, and for stage 6 install, update and uninstall
-  on a second Windows account.
+  and status line latency under the Electron binary, and for stage 6 unzip and run on a second
+  Windows account, move the folder and relaunch, remove the hooks from settings, delete the folder.
 
 ## 14. Documents
 
 PRD: the architecture gains the desktop app as a fourth component; a Deployment note; milestone
 M8 Desktop with the six stages; a decision log row for 14 September 2026 (agent in the main
-process; static UI over a custom scheme; hooks under the app binary). README: an Install section
-pointing at releases. Agent README: the runtime prefix and the built-in origins.
+process; static UI over a custom scheme; hooks under the app binary; a zipped folder, no installer,
+`portable` ruled out). README: a Run section pointing at the zip. Agent README: the runtime prefix
+and the built-in origins.
