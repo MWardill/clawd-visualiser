@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { ActivitySchema, SessionPhaseSchema } from "./snapshot";
+import { TickerDetailSchema } from "./detail";
 
 export const TickerKindSchema = z.enum([
   "session.start",
@@ -28,6 +29,7 @@ export const TickerEventSchema = z
     state: SessionPhaseSchema.optional(),
     contextPct: z.number().min(0).max(100).optional(),
     reason: z.string().optional(),
+    detail: TickerDetailSchema.optional(),
   })
   .strict();
 export type TickerEvent = z.infer<typeof TickerEventSchema>;

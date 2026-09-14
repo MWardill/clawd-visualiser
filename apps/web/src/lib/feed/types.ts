@@ -1,11 +1,11 @@
-import type { Snapshot, TickerEvent } from "@clawd/core";
+import type { DetailLevel, Snapshot, TickerEvent } from "@clawd/core";
 
 export type SimulatedReason = "no-agent" | "lost-agent" | "forced";
 
 export type FeedStatus =
   | { mode: "probing" }
-  /** `rejected` counts stream messages that failed schema validation and were dropped. */
-  | { mode: "live"; agentUrl: string; connected: boolean; rejected: number }
+  /** `rejected` counts stream messages that failed schema validation and were dropped. `detail` is the agent's level. */
+  | { mode: "live"; agentUrl: string; connected: boolean; rejected: number; detail: DetailLevel }
   | { mode: "simulated"; reason: SimulatedReason };
 
 export type FeedListener = {

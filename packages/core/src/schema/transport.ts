@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { DetailLevelSchema } from "./detail";
 import { TickerEventSchema } from "./ticker";
 
 /** Where the web app looks for a local agent unless NEXT_PUBLIC_AGENT_URL says otherwise. */
@@ -19,7 +20,10 @@ export const STREAM_EVENTS = { snapshot: "snapshot", ticker: "ticker" } as const
 export const StreamTickerMessageSchema = z.object({ alias: z.string().min(1), event: TickerEventSchema }).strict();
 export type StreamTickerMessage = z.infer<typeof StreamTickerMessageSchema>;
 
-export const HealthSchema = z.object({ ok: z.literal(true), version: z.string(), sessions: z.number().int().nonnegative() }).strict();
+/** `detailLevel` is the agent's local view level (detail levels design §2); absent means `none`, so it is never sent as `"none"`. */
+export const HealthSchema = z
+  .object({ ok: z.literal(true), version: z.string(), sessions: z.number().int().nonnegative(), detailLevel: DetailLevelSchema.exclude(["none"]).optional() })
+  .strict();
 export type Health = z.infer<typeof HealthSchema>;
 
 /** The stream sends a full snapshot at most this often. */

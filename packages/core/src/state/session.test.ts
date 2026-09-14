@@ -286,6 +286,35 @@ describe("a wait answered while no hook was heard", () => {
   });
 });
 
+describe("presence", () => {
+  it("an alive presence leaves a working session's state and lastEventAt as they were", () => {
+    const working = run([ev("prompt", T0), ev("tool.start", T0 + 10, { tool: "Bash", category: "run", toolUseId: "u1" })]);
+    const s = run([ev("presence", T0 + 5_000, { alive: true })], working);
+    expect(s).toEqual(working);
+    expect(s.lastEventAt).toBe(T0 + 10);
+  });
+
+  it("an alive presence still folds its detail in", () => {
+    const working = run([ev("prompt", T0)]);
+    const s = run([ev("presence", T0 + 5_000, { alive: true, detail: { name: "x" } })], working);
+    expect(s.detail.name).toBe("x");
+    expect(s).toEqual({ ...working, detail: { name: "x" } });
+  });
+
+  it("a gone presence ends the session and sets lastEventAt to its time, as session.end does", () => {
+    const s = run([ev("prompt", T0), ev("presence", T0 + 5_000, { alive: false })]);
+    expect(s.state).toBe("done");
+    expect(s.lastEventAt).toBe(T0 + 5_000);
+  });
+
+  it("a working session that only receives presences still goes stale", () => {
+    let s = run([ev("prompt", T0)]);
+    for (let t = T0 + 60_000; t < T0 + DEFAULT_CONFIG.staleWorkingMs; t += 60_000) s = run([ev("presence", t, { alive: true })], s);
+    s = tickSession(s, T0 + DEFAULT_CONFIG.staleWorkingMs, DEFAULT_CONFIG);
+    expect(s.state).toBe("idle");
+  });
+});
+
 describe("prompts and activity", () => {
   it("starts with no prompts, last active when it went idle", () => {
     expect(newSession("s1", "k1", T0)).toMatchObject({ prompts: 0, lastActiveAt: T0 });
@@ -312,5 +341,25 @@ describe("prompts and activity", () => {
     const seen = run([ev("presence", T0, { alive: true })], newSession("s1", "k1", T0));
     expect(seen.lastActiveAt).toBe(T0);
     expect(run([ev("history", T0 + 5, { prompts: 3, lastActiveAt: T0 - 50 * 3_600_000 })], seen).lastActiveAt).toBe(T0 - 50 * 3_600_000);
+  });
+});
+
+describe("detail", () => {
+  it("starts empty and folds each event's detail in, without touching the rest of the state", () => {
+    expect(newSession("s1", "k1", T0).detail).toEqual({});
+    const plain = run([ev("prompt", T0 + 10), ev("tool.start", T0 + 20, { tool: "Bash", category: "run", toolUseId: "u1" })]);
+    const detailed = run([
+      ev("prompt", T0 + 10, { detail: { permissionMode: "acceptEdits", dir: "C:/mw/visualiser" } }),
+      ev("tool.start", T0 + 20, { tool: "Bash", category: "run", toolUseId: "u1", detail: { program: "git", permissionMode: "acceptEdits" } }),
+    ]);
+    expect(detailed.detail).toEqual({ permissionMode: "acceptEdits", dir: "C:/mw/visualiser", subject: { kind: "program", text: "git" } });
+    expect({ ...detailed, detail: {} }).toEqual({ ...plain, detail: {} });
+  });
+
+  it("leaves a done session and a history event alone", () => {
+    const done = run([ev("session.end", T0, { reason: "x" })]);
+    expect(run([ev("prompt", T0 + 1, { detail: { name: "late" } })], done)).toBe(done);
+    const s = run([ev("prompt", T0)]);
+    expect(run([ev("history", T0 + 1, { prompts: 3, lastActiveAt: T0 })], s).detail).toEqual({});
   });
 });

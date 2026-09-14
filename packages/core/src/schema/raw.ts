@@ -5,7 +5,8 @@ import { z } from "zod";
  * fields ingest reads are named, and every schema parses in zod's default strip mode, so parsing
  * is itself the first redaction step: anything we never named is gone before ingest sees it.
  * Fields on the forbidden list are deliberately absent from these schemas, except `cwd`, which
- * ingest reads only to hash and to check against the allowlist.
+ * ingest reads only to hash and to check against the allowlist. The `*Detail` schemas at the
+ * bottom name more, and are used only above level none.
  */
 const envelope = { session_id: z.string().min(1), cwd: z.string().min(1) };
 
@@ -55,3 +56,29 @@ const StartedAtSchema = z
 
 export const RawAgentEntrySchema = z.object({ sessionId: z.string().min(1), cwd: z.string().min(1), startedAt: StartedAtSchema });
 export type RawAgentEntry = z.infer<typeof RawAgentEntrySchema>;
+
+/**
+ * The detail fields, named only above level none (detail levels design §5). Still strip mode:
+ * `prompt`, `pattern`, `query` and everything else in the tool input never become values. A tool
+ * input that is not an object reads as empty rather than failing the event.
+ */
+const ToolInputDetailSchema = z
+  .object({
+    file_path: z.string().optional().catch(undefined),
+    notebook_path: z.string().optional().catch(undefined),
+    path: z.string().optional().catch(undefined),
+    command: z.string().optional().catch(undefined),
+    url: z.string().optional().catch(undefined),
+    subagent_type: z.string().optional().catch(undefined),
+    description: z.string().optional().catch(undefined),
+  })
+  .catch({});
+
+export const RawHookDetailSchema = RawHookSchema.extend({ tool_input: ToolInputDetailSchema.optional(), permission_mode: z.string().optional().catch(undefined) });
+export type RawHookDetail = z.infer<typeof RawHookDetailSchema>;
+
+export const RawStatusLineDetailSchema = RawStatusLineSchema.extend({ session_name: z.string().nullish().catch(undefined) });
+export type RawStatusLineDetail = z.infer<typeof RawStatusLineDetailSchema>;
+
+export const RawAgentEntryDetailSchema = RawAgentEntrySchema.extend({ name: z.string().optional().catch(undefined) });
+export type RawAgentEntryDetail = z.infer<typeof RawAgentEntryDetailSchema>;

@@ -95,4 +95,20 @@ describe("event log", () => {
   it("reads nothing back from a missing directory", async () => {
     expect(await createEventLog(join(await tempDir(), "absent"), { now: () => DAY1, retentionDays: 7, log: vi.fn() }).readRecent()).toEqual([]);
   });
+
+  it("strips detail before writing and refuses a stored line that carries one", async () => {
+    const dir = await tempDir();
+    const logger = vi.fn();
+    const log = createEventLog(dir, { now: () => DAY1, retentionDays: 7, log: logger, sensitive: () => ["C:/work/repo"] });
+    log.append({ ...prompt(DAY1), detail: { dir: "C:/work/repo", name: "Fix login" } });
+    await log.flush();
+    const text = await readFile(join(dir, logFileName(DAY1)), "utf8");
+    expect(text).not.toContain("detail");
+    expect(text).not.toContain("C:/work/repo");
+    expect(parseFixture(text).events).toEqual([prompt(DAY1)]);
+    expect(logger).not.toHaveBeenCalled();
+    await appendFile(join(dir, logFileName(DAY1)), JSON.stringify({ ...prompt(DAY1 + 1), detail: { dir: "C:/work/repo" } }) + "\n");
+    expect(await log.readRecent()).toEqual([prompt(DAY1)]);
+    expect(logger).toHaveBeenCalledWith("privacy.blocked");
+  });
 });

@@ -78,7 +78,7 @@ function DetailBody({ alias, session, canFocus, subscribeTicker, backfill, focus
         <div className="flex items-center gap-3">
           <ClawdIdle scale={1} />
           <div className="min-w-0">
-            <SheetTitle className="font-bold text-clawd">{session ? session.label.toLowerCase() : alias}</SheetTitle>
+            <SheetTitle className="truncate font-bold text-clawd">{session ? (session.detail?.name ?? session.label.toLowerCase()) : alias}</SheetTitle>
             <SheetDescription className="flex flex-wrap items-center gap-2">
               {session ? (
                 <>
@@ -94,6 +94,13 @@ function DetailBody({ alias, session, canFocus, subscribeTicker, backfill, focus
                 <span>session ended</span>
               )}
             </SheetDescription>
+            {session?.detail ? (
+              <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+                {session.detail.dir ? <span className="min-w-0 truncate">{session.detail.dir}</span> : null}
+                {session.detail.permissionMode ? <Badge variant="outline">{session.detail.permissionMode}</Badge> : null}
+                {session.detail.shells ? <span>{session.detail.shells} background shells</span> : null}
+              </div>
+            ) : null}
           </div>
         </div>
         <div className="mt-2 flex items-center gap-3">

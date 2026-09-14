@@ -8,7 +8,7 @@ const T0 = 1_700_000_000_000;
 
 function actor(over: Partial<Actor> = {}): Actor {
   return {
-    alias: "agent-1", label: "Otter", pane: "pane-1", seat: 0, state: "working", activity: "edit", subagents: 0, contextPct: null,
+    alias: "agent-1", label: "Otter", pane: "pane-1", seat: 0, state: "working", activity: "edit", subagents: 0, contextPct: null, name: null, subject: null,
     since: T0, phase: "seated", phaseAt: T0, pos: seatOrigin(0), move: null, blinkAt: T0 + 5000, sparkleUntil: 0, glanceUntil: 0, subs: [],
     ...over,
   };
@@ -22,6 +22,7 @@ describe("poseFor", () => {
     expect(poseFor(actor(), T0, 10).particle).toBeNull();
     expect(ACTIVITY_COLOURS.read).toBe(PALETTE.state.blue);
     expect(ACTIVITY_COLOURS.run).toBe(PALETTE.state.amber);
+    expect(ACTIVITY_COLOURS.edit).toBe(PALETTE.state.green);
   });
 
   it("hops, shows the exclamation mark and sweats after ten seconds while waiting", () => {

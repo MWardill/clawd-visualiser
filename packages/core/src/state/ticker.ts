@@ -1,5 +1,7 @@
+import type { TickerDetail } from "../schema/detail";
 import type { RedactedEvent } from "../schema/events";
 import { TickerEventSchema, type TickerEvent } from "../schema/ticker";
+import { subjectOf } from "./detail";
 import type { SessionState } from "./session";
 
 /**
@@ -18,6 +20,14 @@ export function toTickerEvents(e: RedactedEvent, before: SessionState | null, af
   return lines.map((l) => TickerEventSchema.parse(l));
 }
 
+/** The subject and permission mode a tool or permission line carries, when the event has either. */
+function lineDetail(e: RedactedEvent): { detail: TickerDetail } | Record<string, never> {
+  const subject = subjectOf(e);
+  const permissionMode = e.detail?.permissionMode;
+  if (subject === undefined && permissionMode === undefined) return {};
+  return { detail: { ...(subject === undefined ? {} : { subject }), ...(permissionMode === undefined ? {} : { permissionMode }) } };
+}
+
 function ownLine(e: RedactedEvent, t: string): TickerEvent | null {
   switch (e.kind) {
     case "session.start":
@@ -27,11 +37,11 @@ function ownLine(e: RedactedEvent, t: string): TickerEvent | null {
     case "prompt":
       return { t, kind: "prompt" };
     case "tool.start":
-      return { t, kind: "tool.start", tool: e.tool, activity: e.category };
+      return { t, kind: "tool.start", tool: e.tool, activity: e.category, ...lineDetail(e) };
     case "tool.end":
-      return { t, kind: "tool.end", tool: e.tool, activity: e.category, durationMs: e.durationMs };
+      return { t, kind: "tool.end", tool: e.tool, activity: e.category, durationMs: e.durationMs, ...lineDetail(e) };
     case "permission.request":
-      return { t, kind: "permission", tool: e.tool };
+      return { t, kind: "permission", tool: e.tool, ...lineDetail(e) };
     case "permission.denied":
       return { t, kind: "permission", ...(e.tool ? { tool: e.tool } : {}), reason: "denied" };
     case "stop":

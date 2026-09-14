@@ -36,6 +36,19 @@ pnpm --filter @clawd/agent start
 Restart the agent after changing the allowlist. If Node moves (a version manager, an upgrade), run
 install again so the hook commands point at it.
 
+## Detail levels
+
+By default the agent keeps only states, categories, tool names and timings. `agent detail hints`
+adds the program a shell command runs, the extension of a file being read or edited, the hostname
+of a fetch, the subagent type, the permission mode and the background shell count. `agent detail
+paths` adds the file or directory a tool touches (relative to the working directory), the working
+directory, the session's name and an Agent call's short description. `agent detail none` turns it back off. Restart the agent after
+changing it.
+
+Whatever the level, the event log on disk and any cloud snapshot are level none, and prompts,
+the rest of a command, tool output and assistant text are never read. Design:
+`docs/superpowers/specs/2026-09-14-detail-levels-design.md`.
+
 ## Endpoints
 
 | Route | What it returns |
@@ -44,7 +57,7 @@ install again so the hook commands point at it.
 | `GET /api/stream` | SSE: `snapshot` events (at most four a second) and `ticker` events |
 | `GET /api/ticker/:alias` | the last 200 ticker lines for a session |
 | `POST /api/command` | `{"type":"focus","alias":"agent-1"}` raises that session's window (Windows); `202` |
-| `GET /api/health` | `{ ok, version, sessions }` |
+| `GET /api/health` | `{ ok, version, sessions, detailLevel }`, `detailLevel` present only above level none |
 
 Browsers may call these only from an origin in `corsOrigins`. `/ingest/hook` and `/ingest/status`
 are for the hook scripts and need the token from `config.json`.
@@ -55,17 +68,21 @@ are for the hook scripts and need the token from `config.json`.
 
 | File | What it holds |
 | --- | --- |
-| `config.json` | port, allowlist, token, CORS origins, poll interval, the wrapped status line |
+| `config.json` | port, allowlist, token, CORS origins, poll interval, the wrapped status line, the detail level |
 | `aliases.json` | session and pane aliases, so names survive a restart |
 | `logs/events-YYYY-MM-DD.jsonl` | the redacted event log, kept seven days; replayable with core's fixture loader |
 | `bin/*.mjs` | the hook scripts the settings point at |
 
 ## Privacy
 
-Raw payloads live in memory for one request. Prompts, tool input and output, assistant text,
-transcript paths, session names and working directories never reach the log, the alias file, any
-response or the stream; every outgoing body is checked before it is written, and operational logs
-carry codes and numbers only. `src/agent.e2e.test.ts` proves it with canary payloads.
+Raw payloads live in memory for one request. Prompts, tool output, assistant text and transcript
+paths never reach any sink: the log, the alias file, any response or the stream. Tool input is
+never passed on whole: at the hints and paths levels only the values listed under Detail levels,
+and at paths an Agent call's description, are taken from it, and those values, with the session's
+name and working directory at paths, reach responses and the stream only inside `detail`, never the
+event log, the alias file or stdout. Every outgoing body is checked before it is written, outside
+its `detail` object, and operational logs carry a timestamp, a code and numbers only.
+`src/agent.e2e.test.ts` proves it with canary payloads.
 
 To run the same check over the raw spike recordings, which never leave your machine:
 

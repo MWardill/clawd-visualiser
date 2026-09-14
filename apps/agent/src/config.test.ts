@@ -11,6 +11,7 @@ import {
   defaultHome,
   defaultSettingsPath,
   defaultTranscriptsDir,
+  detailLevel,
   loadOrCreateConfig,
   readConfig,
   saveConfig,
@@ -54,6 +55,16 @@ describe("config", () => {
     expect(a.token).toMatch(/^[0-9a-f]{64}$/);
     expect(defaultConfig().token).not.toBe(a.token);
     expect(AgentConfigSchema.parse(a)).toEqual(a);
+  });
+
+  it("takes a detail level, defaults it to none, and refuses any other value", () => {
+    expect(defaultConfig().detail).toBe("none");
+    expect(detailLevel({ detail: "paths" })).toBe("paths");
+    expect(detailLevel({})).toBe("none");
+    expect(AgentConfigSchema.parse({ ...defaultConfig(), detail: "hints" }).detail).toBe("hints");
+    const { detail: _detail, ...without } = defaultConfig();
+    expect(AgentConfigSchema.parse(without).detail).toBeUndefined();
+    expect(() => AgentConfigSchema.parse({ ...defaultConfig(), detail: "content" })).toThrow();
   });
 
   it("reads null when there is no file", async () => {

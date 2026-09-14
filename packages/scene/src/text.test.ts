@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PALETTE } from "./engine";
 import { fakeContext } from "./testing/fake-context";
-import { STATE_COLOURS, TITLE_MAX, drawText, mmss, nameplate, paneTitle } from "./text";
+import { STATE_COLOURS, TITLE_MAX, caption, drawText, mmss, nameplate, paneTitle } from "./text";
 
 const T0 = 1_700_000_000_000;
 
@@ -19,6 +19,20 @@ describe("text", () => {
     const idle = nameplate({ label: "Heron", state: "idle", activity: null, subagents: 0, since: T0 }, T0);
     expect(idle).toEqual({ name: "heron", subs: "", status: "idle 00:00", colour: STATE_COLOURS.idle });
     expect(nameplate({ label: "Lynx", state: "waiting", activity: "edit", subagents: 0, since: T0 }, T0).status).toBe("waiting 00:00");
+  });
+
+  it("shows the session's real name on the nameplate when it has one", () => {
+    expect(nameplate({ label: "Otter", name: "Fix Login", state: "working", activity: "edit", subagents: 0, since: T0 }, T0).name).toBe("fix login");
+    expect(nameplate({ label: "Otter", name: null, state: "working", activity: "edit", subagents: 0, since: T0 }, T0).name).toBe("otter");
+  });
+
+  it("captions a file by its last two segments and cuts anything to the width", () => {
+    expect(caption({ kind: "file", text: "src/lib/feed/agent.ts" }, 40)).toBe("feed/agent.ts");
+    expect(caption({ kind: "file", text: "app.ts" }, 40)).toBe("app.ts");
+    expect(caption({ kind: "file", text: "ts" }, 40)).toBe("ts");
+    expect(caption({ kind: "program", text: "git" }, 40)).toBe("git");
+    expect(caption({ kind: "host", text: "example.com" }, 8)).toBe("example…");
+    expect(caption({ kind: "agent", text: "Find the login form" }, 1)).toBe("…");
   });
 
   it("titles a pane with a dash and the lower-case label", () => {

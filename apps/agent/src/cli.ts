@@ -1,5 +1,7 @@
+import { DetailLevelSchema } from "@clawd/core";
 import { parseArgs } from "node:util";
 import { ConfigError } from "./config";
+import { setDetail } from "./detail";
 import { install, uninstall, type Print } from "./install/installer";
 
 export type CliEnv = {
@@ -20,6 +22,7 @@ export const USAGE = [
   "usage: agent serve",
   "       agent install --allow <dir> [--allow <dir> ...] [--port <n>] [--settings <path>] [--dry-run]",
   "       agent uninstall [--settings <path>]",
+  "       agent detail <none|hints|paths>",
 ].join("\n");
 
 function usage(env: CliEnv): number {
@@ -63,6 +66,11 @@ export async function runCli(argv: readonly string[], env: CliEnv): Promise<numb
       case "uninstall": {
         const { values } = parseArgs({ args: rest, options: { settings: { type: "string" } }, strict: true, allowPositionals: false });
         return await uninstall({ home: env.home, settingsPath: values.settings ?? env.settingsPath, now: env.now, print: env.print });
+      }
+      case "detail": {
+        const level = DetailLevelSchema.safeParse(rest[0]);
+        if (rest.length !== 1 || !level.success) return usage(env);
+        return await setDetail({ home: env.home, level: level.data, print: env.print });
       }
       default:
         return usage(env);

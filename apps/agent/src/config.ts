@@ -1,3 +1,4 @@
+import { DetailLevelSchema, type DetailLevel } from "@clawd/core";
 import { randomBytes } from "node:crypto";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -50,6 +51,8 @@ export const AgentConfigSchema = z
     logRetentionDays: z.number().int().min(1),
     wrappedStatusLine: WrappedStatusLineSchema.optional(),
     paneLabels: z.enum(["folder", "generated"]).optional(),
+    /** How much of each session's activity the local view may show (detail levels design §2). Absent means none. */
+    detail: DetailLevelSchema.optional(),
   })
   .strict();
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
@@ -57,6 +60,11 @@ export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 /** Whether panes are named after their directory's last segment: yes, unless `paneLabels` is "generated". */
 export function usesFolderPaneLabels(config: Pick<AgentConfig, "paneLabels">): boolean {
   return config.paneLabels !== "generated";
+}
+
+/** The configured detail level; none unless set. */
+export function detailLevel(config: Pick<AgentConfig, "detail">): DetailLevel {
+  return config.detail ?? "none";
 }
 
 export function defaultConfig(token: string = randomBytes(32).toString("hex")): AgentConfig {
@@ -70,6 +78,7 @@ export function defaultConfig(token: string = randomBytes(32).toString("hex")): 
     claudeCommand: "claude",
     logRetentionDays: 7,
     paneLabels: "folder",
+    detail: "none",
   };
 }
 

@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { stripDetail } from "../schema/detail";
 import { RawHookSchema } from "../schema/raw";
 import { FORBIDDEN_KEYS, containsForbidden, redact, redactPresence } from "./redact";
 
@@ -180,5 +181,71 @@ describe("redactPresence", () => {
       expect(event).not.toHaveProperty("lastActiveAt");
     }
     expect(redactPresence(entry, false, ctx, ctx.now)).not.toHaveProperty("lastActiveAt");
+  });
+});
+
+describe("redact at a detail level", () => {
+  const hints = { ...ctx, detail: "hints" as const };
+  const paths = { ...ctx, detail: "paths" as const };
+  const write = { ...common, hook_event_name: "PreToolUse", tool_name: "Write", tool_input: { file_path: "C:\\mw\\visualiser\\src\\app.ts", content: "secret body" }, tool_use_id: "toolu_10" };
+  const fetch = { ...common, hook_event_name: "PreToolUse", tool_name: "WebFetch", tool_input: { url: "https://example.com/private?token=secret", prompt: "secret" }, tool_use_id: "toolu_11" };
+  const agent = { ...common, hook_event_name: "PreToolUse", tool_name: "Agent", tool_input: { subagent_type: "Explore", description: "Find the login form", prompt: "secret" }, tool_use_id: "toolu_12" };
+  const shellStop = { ...common, hook_event_name: "Stop", last_assistant_message: "secret", background_tasks: [{ id: "b", type: "shell", status: "running", command: "secret", description: "secret" }] };
+  const entry = { pid: 4242, cwd, kind: "interactive", startedAt: 1_757_671_200_000, sessionId: "e82c9e2a", name: "Run whoami bash command" };
+
+  it("adds nothing at none, whether the level is absent or explicit", () => {
+    for (const payload of [...Object.values(raw), write, fetch, agent, shellStop]) {
+      const absent = redact(payload, ctx);
+      const explicit = redact(payload, { ...ctx, detail: "none" });
+      if (absent) expect(absent).not.toHaveProperty("detail");
+      if (explicit) expect(explicit).not.toHaveProperty("detail");
+    }
+    expect(redactPresence(entry, true, ctx)).not.toHaveProperty("detail");
+  });
+
+  it("adds hints from the shape of the input and the permission mode", () => {
+    expect(redact(raw.preTool, hints)).toMatchObject({ kind: "tool.start", detail: { program: "whoami", permissionMode: "default" } });
+    expect(redact(write, hints)).toMatchObject({ detail: { ext: "ts", permissionMode: "default" } });
+    expect(redact(fetch, hints)).toMatchObject({ detail: { host: "example.com" } });
+    expect(redact(agent, hints)).toMatchObject({ detail: { agent: "Explore" } });
+    expect(redact(agent, hints)?.detail).not.toHaveProperty("description");
+    expect(redact(shellStop, hints)).toMatchObject({ kind: "stop", backgroundTasks: 0, detail: { shells: 1 } });
+    expect(redact(raw.sessionStart, hints)).toMatchObject({ detail: { permissionMode: "default" } });
+    expect(redact(raw.statusLine, hints)).not.toHaveProperty("detail");
+    expect(redactPresence(entry, true, hints)).not.toHaveProperty("detail");
+  });
+
+  it("adds paths, the directory, the session name and an Agent description at paths", () => {
+    expect(redact(write, paths)).toMatchObject({ detail: { ext: "ts", file: "src/app.ts", dir: "C:/mw/visualiser" } });
+    expect(redact(agent, paths)).toMatchObject({ detail: { agent: "Explore", description: "Find the login form", dir: "C:/mw/visualiser" } });
+    expect(redact(raw.statusLine, paths)).toMatchObject({ kind: "status", detail: { dir: "C:/mw/visualiser", name: "Run whoami bash command" } });
+    expect(redactPresence(entry, true, paths)).toMatchObject({ kind: "presence", detail: { dir: "C:/mw/visualiser", name: "Run whoami bash command" } });
+  });
+
+  it("keeps the event when permission_mode or session_name has the wrong type", () => {
+    const badMode = { ...raw.preTool, permission_mode: 42 };
+    const badName = { ...raw.statusLine, session_name: 42 };
+    for (const level of [hints, paths]) {
+      expect(redact(badMode, level)).toMatchObject({ kind: "tool.start" });
+      expect(redact(badName, level)).toMatchObject({ kind: "status", contextPct: 5 });
+    }
+    expect(redact(badMode, paths)).toMatchObject({ detail: { program: "whoami", dir: "C:/mw/visualiser" } });
+    expect(redact(badMode, paths)?.detail).not.toHaveProperty("permissionMode");
+    expect(redact(badName, paths)).toMatchObject({ detail: { dir: "C:/mw/visualiser" } });
+    expect(redact(badName, paths)?.detail).not.toHaveProperty("name");
+  });
+
+  it("never lets content through at any level, and keeps paths only inside detail", () => {
+    const content = ["e82c9e2a.jsonl", "secret body", "token=secret", "Find the login form", "MWardill", "Which colour?", "Blue it is"];
+    for (const level of [hints, paths]) {
+      for (const payload of [...Object.values(raw), write, fetch, shellStop]) {
+        const event = redact(payload, level);
+        if (!event) continue;
+        expect(containsForbidden(stripDetail(event), [...content, cwd, "C:/mw/visualiser"]), JSON.stringify(event)).toBeNull();
+        expect(JSON.stringify(event)).not.toContain("secret");
+      }
+    }
+    expect(containsForbidden(redact(write, paths), ["C:/mw/visualiser"])).toBe("C:/mw/visualiser");
+    expect(containsForbidden(redact(write, hints), ["C:/mw/visualiser", "app.ts"])).toBeNull();
   });
 });

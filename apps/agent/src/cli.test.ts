@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
 import { USAGE, runCli, type CliEnv } from "./cli";
+import { agentPaths, readConfig } from "./config";
 import { useTempDirs } from "./testing/tmp";
 
 const HOOKS = fileURLToPath(new URL("../hooks/", import.meta.url));
@@ -61,5 +62,15 @@ describe("runCli", () => {
     await writeFile(join(t.e.home, "config.json"), '{"version":2}');
     expect(await runCli(["install", "--allow", "work"], t.e)).toBe(1);
     expect(t.err.join("\n")).toContain("invalid");
+  });
+
+  it("sets the detail level in the config and refuses an unknown one", async () => {
+    const t = await env();
+    expect(await runCli(["detail", "paths"], t.e)).toBe(0);
+    expect((await readConfig(agentPaths(t.e.home)))?.detail).toBe("paths");
+    expect(t.out.at(-1)).toContain("restart the agent");
+    expect(await runCli(["detail", "content"], t.e)).toBe(2);
+    expect(await runCli(["detail"], t.e)).toBe(2);
+    expect(await runCli(["detail", "hints", "extra"], t.e)).toBe(2);
   });
 });

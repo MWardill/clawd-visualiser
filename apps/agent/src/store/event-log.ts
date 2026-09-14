@@ -1,4 +1,4 @@
-import { RedactedEventSchema, containsForbidden, type RedactedEvent } from "@clawd/core";
+import { RedactedEventSchema, containsDetail, containsForbidden, stripDetail, type RedactedEvent } from "@clawd/core";
 import { appendFile, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { isErrno } from "../json-file";
@@ -38,7 +38,8 @@ export function createEventLog(
 
   return {
     append(e) {
-      const parsed = RedactedEventSchema.safeParse(e);
+      // The log is level none whatever the agent's setting: detail never touches the disk.
+      const parsed = RedactedEventSchema.safeParse(stripDetail(e));
       if (!parsed.success || containsForbidden(parsed.data, deps.sensitive?.() ?? []) !== null) {
         deps.log("privacy.blocked");
         return;
@@ -100,7 +101,13 @@ export function createEventLog(
             continue;
           }
           const parsed = RedactedEventSchema.safeParse(value);
-          if (parsed.success) events.push(parsed.data);
+          if (!parsed.success) continue;
+          // A line with detail did not come from this log; it is not replayed.
+          if (containsDetail(parsed.data)) {
+            deps.log("privacy.blocked");
+            continue;
+          }
+          events.push(parsed.data);
         }
       }
       return events;

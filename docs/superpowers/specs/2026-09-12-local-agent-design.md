@@ -36,7 +36,8 @@ These bind every module and every test.
    echoed in a response, or kept on an object that outlives the request.
 2. **Nothing but redacted values reaches a sink.** The sinks are the event log, `aliases.json`, the
    HTTP responses, the SSE stream and stdout. Each outgoing wire payload is validated against its
-   core schema and checked with `containsForbidden()` before it is written. The strict schemas
+   core schema and checked with `containsForbidden(stripDetail(payload), …)` before it is written:
+   outside a `detail` object nothing forbidden may appear at any level. The strict schemas
    already reject forbidden key names, so the check also passes the live working directories from
    the latest presence poll (rule 4) as `extraStrings`: that is what would catch a path smuggled
    through a label or a tool name.
@@ -44,8 +45,9 @@ These bind every module and every test.
    a record of numbers and booleans. There is no parameter a string could travel through, so an
    error message that quotes a payload cannot be logged. Errors are reduced to a code.
 4. **Presence details for focus stay in memory.** The poller keeps each listed session's `pid` and
-   `cwd` from the latest poll so focus can find the window. They are never serialised, logged or
-   exposed on any endpoint, and are replaced on the next poll.
+   `cwd` from the latest poll so focus can find the window. These copies are never serialised,
+   logged or exposed on any endpoint, and are replaced on the next poll. At the paths level the
+   working directory does reach endpoints, but only inside `detail`, where ingest puts it (rule 9).
 5. **Only modelled hook events are registered.** `MessageDisplay` carries assistant text deltas and
    `Notification` carries messages; neither changes state, so the installer does not subscribe to
    them. This narrows the PRD's "http hooks for every event" on purpose: content the agent would
@@ -60,7 +62,20 @@ These bind every module and every test.
    `"generated"` (§7.2), redaction keeps the working directory's last segment as `paneName`, for the
    pane's label (core design §4). The schema refuses separators, so no parent directory can follow
    it, and the sinks still reject the live working directories in full. Test sessions run in
-   `C:/work/CANARY-parent/repo`, so the canary check still covers the rest of the path.
+   `C:/work/LOCALONLY-parent/repo`; the `CANARY` marker is content that must never appear, and
+   `LOCALONLY` marks paths and names that may appear only inside `detail` at the paths level.
+9. **Detail is bounded by the level.** `config.detail` (`none`, `hints`, `paths`; absent means
+   `none`) decides what ingest keeps in an event's `detail` object (detail levels design §2). At
+   `none` no event carries the key, so that level's wire format is unchanged. `prompt`,
+   `tool_input.prompt`, `.pattern`, `.query`, `tool_response`, `last_assistant_message` and the
+   transcript paths are never read at any level.
+10. **The log and the cloud are level none.** `eventLog.append` writes `stripDetail(e)` and
+    `readRecent` refuses a line carrying `detail`. A cloud publisher may send only
+    `toCloudSnapshot(s)`.
+11. **Four invariants under test.** Level none is today; nothing forbidden outside `detail` at any
+    level; the log and the cloud strip; hints validate against the strict hints schema, whose
+    strings refuse separators. `packages/core/src/ingest/levels.test.ts` and
+    `apps/agent/src/agent.e2e.test.ts` (run at every level) prove them with the two marker families.
 
 ## 3. Package layout
 
@@ -299,7 +314,9 @@ function reconcile(input: {
   ended: ReadonlySet<string>;
   now: number; allowlist: readonly string[]; graceMs: number;
   lastWriteAt?: ReadonlyMap<string, number>;   // transcript write times of first-sight sessions (§6.4)
-}): RedactedEvent[];
+  detail?: DetailLevel;                         // the agent's detail level (§2 rule 9)
+  sent?: ReadonlyMap<string, { dir?: string; name?: string }>;  // the previous successful poll's `sent`
+}): { events: RedactedEvent[]; sent: Map<string, { dir?: string; name?: string }> };
 ```
 
 Pure. For each entry, read `sessionId` leniently; an entry without one is skipped.
@@ -311,8 +328,20 @@ Pure. For each entry, read `sessionId` leniently; an entry without one is skippe
   `startedAt` and the session's transcript's last write (§6.4), so a session quiet for longer than
   the asleep threshold is asleep on the next tick, not ten minutes after the agent noticed it.
   With pane names on, it also carries the directory's name (privacy rule 8).
-- **Alive, known.** No event. A presence event refreshes `lastEventAt`, which would defeat the
-  stale-working timer and churn `updatedAt` every poll.
+- **Alive, known.** Below `paths`, no event. At `paths`, a known session's listed name and
+  directory are passed on when they change: a session in the fleet, not in the ended set and not
+  `done`, gets `redactPresence(entry, true, ctx)` when the entry's `dir` or `name` differs from what
+  it was last sent, an absent field counting as a value. That reaches the sessions a first-sight
+  presence never does: one whose first hook came before the list showed it, one restored from the
+  level-none log, and one named after it was first seen. What each session was last sent is the
+  `sent` map, which the poller keeps from one successful poll to the next. Every alive presence at
+  `paths`, first-sight ones included, records its `dir` and `name` there, and an id the poll does
+  not list, or lists as ended or `done`, is dropped from it, so a session that returns is sent its
+  name again. It is compared with that and never with the fleet's detail: a status line may name the
+  session slightly differently, and the two sources would flap, writing a presence every poll. An
+  alive presence changes no state and leaves `lastEventAt` alone (core design §5.2), so it neither
+  holds off the stale-working timer nor moves `updatedAt`. It goes to the event log stripped to level
+  none, a bare presence line, and adds no ticker line.
 - **Gone.** A fleet session that is not `done` and is absent from this poll gets a dead presence
   event when `now − max(firstSeenAt, lastListedAt, lastEventAt) > graceMs` (15 s), built from
   fleet state: `{ v: 1, t: now, sessionId, paneKey, kind: "presence", alive: false }`, validated
@@ -439,7 +468,7 @@ Bound to `127.0.0.1` only. Each request passes three guards before routing:
 | `GET /api/stream` | SSE (§8.1) |
 | `GET /api/ticker/:alias` | `200`, a JSON array of up to 200 `TickerEvent`s, oldest first; `404` for an unknown alias |
 | `POST /api/command` | `content-type: application/json` required (`415`); body at most 4 KiB (`413`); `CommandSchema` (`400`); `focus` for an unknown alias `404`; otherwise `202` with an empty body, and the command runs after the response |
-| `GET /api/health` | `200`, `{ ok: true, version: AGENT_VERSION, sessions }` validated by `HealthSchema`, where `sessions` is the fleet size |
+| `GET /api/health` | `200`, `{ ok: true, version: AGENT_VERSION, sessions, detailLevel }` validated by `HealthSchema`, where `sessions` is the fleet size and `detailLevel` is the agent's detail level, present only above level none (§2, rule 9) |
 | anything else | `404`, or `405` for a known path with the wrong method |
 
 Every JSON response body passes `containsForbidden()` before it is written; a hit sends `500` and
