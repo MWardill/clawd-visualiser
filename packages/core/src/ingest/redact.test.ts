@@ -222,6 +222,19 @@ describe("redact at a detail level", () => {
     expect(redactPresence(entry, true, paths)).toMatchObject({ kind: "presence", detail: { dir: "C:/mw/visualiser", name: "Run whoami bash command" } });
   });
 
+  it("keeps the event when permission_mode or session_name has the wrong type", () => {
+    const badMode = { ...raw.preTool, permission_mode: 42 };
+    const badName = { ...raw.statusLine, session_name: 42 };
+    for (const level of [hints, paths]) {
+      expect(redact(badMode, level)).toMatchObject({ kind: "tool.start" });
+      expect(redact(badName, level)).toMatchObject({ kind: "status", contextPct: 5 });
+    }
+    expect(redact(badMode, paths)).toMatchObject({ detail: { program: "whoami", dir: "C:/mw/visualiser" } });
+    expect(redact(badMode, paths)?.detail).not.toHaveProperty("permissionMode");
+    expect(redact(badName, paths)).toMatchObject({ detail: { dir: "C:/mw/visualiser" } });
+    expect(redact(badName, paths)?.detail).not.toHaveProperty("name");
+  });
+
   it("never lets content through at any level, and keeps paths only inside detail", () => {
     const content = ["e82c9e2a.jsonl", "secret body", "token=secret", "Find the login form", "MWardill", "Which colour?", "Blue it is"];
     for (const level of [hints, paths]) {

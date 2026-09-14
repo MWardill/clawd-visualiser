@@ -74,10 +74,10 @@ const ToolInputDetailSchema = z
   })
   .catch({});
 
-export const RawHookDetailSchema = RawHookSchema.extend({ tool_input: ToolInputDetailSchema.optional(), permission_mode: z.string().optional() });
+export const RawHookDetailSchema = RawHookSchema.extend({ tool_input: ToolInputDetailSchema.optional(), permission_mode: z.string().optional().catch(undefined) });
 export type RawHookDetail = z.infer<typeof RawHookDetailSchema>;
 
-export const RawStatusLineDetailSchema = RawStatusLineSchema.extend({ session_name: z.string().nullish() });
+export const RawStatusLineDetailSchema = RawStatusLineSchema.extend({ session_name: z.string().nullish().catch(undefined) });
 export type RawStatusLineDetail = z.infer<typeof RawStatusLineDetailSchema>;
 
 export const RawAgentEntryDetailSchema = RawAgentEntrySchema.extend({ name: z.string().optional().catch(undefined) });
