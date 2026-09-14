@@ -149,7 +149,11 @@ export function createAgentServer(deps: ServerDeps): Server {
 
     if (path === ENDPOINTS.snapshot) return onlyGet(() => send(res, 200, deps.host.snapshot(), cors));
     if (path === ENDPOINTS.health) {
-      return onlyGet(() => send(res, 200, HealthSchema.parse({ ok: true, version: AGENT_VERSION, sessions: deps.host.sessionCount(), detail: detailLevel(deps.config) }), cors));
+      return onlyGet(() => {
+        const level = detailLevel(deps.config);
+        const body = { ok: true, version: AGENT_VERSION, sessions: deps.host.sessionCount(), ...(level === "none" ? {} : { detailLevel: level }) };
+        send(res, 200, HealthSchema.parse(body), cors);
+      });
     }
     if (path === ENDPOINTS.stream) return onlyGet(() => deps.stream.connect(req, res, cors));
     if (path === ENDPOINTS.command) {

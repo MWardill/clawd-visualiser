@@ -75,8 +75,9 @@ TickerDetailSchema = z.object({ subject?: SubjectSchema, permissionMode? }).stri
   sessions. `label` stays the generated alias label at every level; the UI prefers `detail.name`.
 - `toTickerEvents` puts the event's subject and `permissionMode` on `tool.start`, `tool.end` and
   `permission` lines.
-- `Health` gains `detail: DetailLevel`. `probeHealth` returns the parsed `Health` rather than a
-  boolean, so the web app's policy can keep the level for the source badge.
+- `Health` gains `detailLevel: DetailLevel`, optional, present only above level `none`. `probeHealth`
+  returns the parsed `Health` rather than a boolean, so the web app's policy can keep the level for
+  the source badge.
 
 ## 4. Projection and invariants
 

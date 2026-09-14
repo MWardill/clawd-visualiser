@@ -57,7 +57,7 @@ the rest of a command, tool output and assistant text are never read. Design:
 | `GET /api/stream` | SSE: `snapshot` events (at most four a second) and `ticker` events |
 | `GET /api/ticker/:alias` | the last 200 ticker lines for a session |
 | `POST /api/command` | `{"type":"focus","alias":"agent-1"}` raises that session's window (Windows); `202` |
-| `GET /api/health` | `{ ok, version, sessions, detail }` |
+| `GET /api/health` | `{ ok, version, sessions, detailLevel }`, `detailLevel` present only above level none |
 
 Browsers may call these only from an origin in `corsOrigins`. `/ingest/hook` and `/ingest/status`
 are for the hook scripts and need the token from `config.json`.

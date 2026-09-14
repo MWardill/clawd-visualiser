@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { CommandSchema, SnapshotSchema, TickerEventSchema } from "./index";
-import { DEFAULT_AGENT_URL, ENDPOINTS, STREAM_EVENTS, StreamTickerMessageSchema } from "./transport";
+import { DEFAULT_AGENT_URL, ENDPOINTS, HealthSchema, STREAM_EVENTS, StreamTickerMessageSchema } from "./transport";
 
 const validSnapshot = {
   version: 1,
@@ -57,6 +57,14 @@ describe("wire schemas", () => {
   it("accepts a pane that does not report collision yet", () => {
     const parsed = SnapshotSchema.parse({ ...validSnapshot, panes: [{ pane: "pane-1", label: "Oak" }] });
     expect(parsed.panes[0]).toEqual({ pane: "pane-1", label: "Oak" });
+  });
+
+  it("accepts a detailLevel of hints or paths on Health, and refuses none or the old detail key", () => {
+    expect(HealthSchema.parse({ ok: true, version: "0.1.0", sessions: 0, detailLevel: "hints" }).detailLevel).toBe("hints");
+    expect(HealthSchema.parse({ ok: true, version: "0.1.0", sessions: 0, detailLevel: "paths" }).detailLevel).toBe("paths");
+    expect(HealthSchema.parse({ ok: true, version: "0.1.0", sessions: 0 }).detailLevel).toBeUndefined();
+    expect(() => HealthSchema.parse({ ok: true, version: "0.1.0", sessions: 0, detailLevel: "none" })).toThrow();
+    expect(() => HealthSchema.parse({ ok: true, version: "0.1.0", sessions: 0, detail: "paths" })).toThrow();
   });
 
   it("carries detail on sessions, panes and ticker lines, and rejects a raw key inside it", () => {

@@ -454,7 +454,7 @@ Bound to `127.0.0.1` only. Each request passes three guards before routing:
 | `GET /api/stream` | SSE (§8.1) |
 | `GET /api/ticker/:alias` | `200`, a JSON array of up to 200 `TickerEvent`s, oldest first; `404` for an unknown alias |
 | `POST /api/command` | `content-type: application/json` required (`415`); body at most 4 KiB (`413`); `CommandSchema` (`400`); `focus` for an unknown alias `404`; otherwise `202` with an empty body, and the command runs after the response |
-| `GET /api/health` | `200`, `{ ok: true, version: AGENT_VERSION, sessions, detail }` validated by `HealthSchema`, where `sessions` is the fleet size and `detail` is the agent's detail level (§2, rule 9) |
+| `GET /api/health` | `200`, `{ ok: true, version: AGENT_VERSION, sessions, detailLevel }` validated by `HealthSchema`, where `sessions` is the fleet size and `detailLevel` is the agent's detail level, present only above level none (§2, rule 9) |
 | anything else | `404`, or `405` for a known path with the wrong method |
 
 Every JSON response body passes `containsForbidden()` before it is written; a hit sends `500` and

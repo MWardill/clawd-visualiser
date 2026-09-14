@@ -109,6 +109,7 @@ describe("agent end to end", () => {
     const responses = sinks[0]![1];
     expect(responses.includes(LOCAL_ONLY), "local-only strings in responses").toBe(level === "paths");
     expect(responses.includes('"detail":{'), "detail objects in responses").toBe(level !== "none");
+    if (level === "none") expect(responses.includes('"detail'), "no detail text in responses at level none").toBe(false);
     expect(responses.includes("LOCALONLY listed name"), "agents-list name in responses").toBe(level === "paths");
     const parsed = SnapshotSchema.parse(JSON.parse(snapshot.body));
     if (level === "paths") {

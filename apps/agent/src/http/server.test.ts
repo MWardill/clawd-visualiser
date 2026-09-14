@@ -155,7 +155,7 @@ describe("api routes", () => {
     const { port } = await start();
     await hook(port, rawHook("UserPromptSubmit", "s1"));
     const reply = await send(port, { path: "/api/health" });
-    expect(HealthSchema.parse(JSON.parse(reply.body))).toEqual({ ok: true, version: AGENT_VERSION, sessions: 1, detail: "none" });
+    expect(HealthSchema.parse(JSON.parse(reply.body))).toEqual({ ok: true, version: AGENT_VERSION, sessions: 1 });
   });
 
   it("serves a session's ticker backfill and 404 for an unknown alias", async () => {
@@ -245,7 +245,7 @@ describe("api routes", () => {
 describe("detail level", () => {
   it("reports the level in health and lets detail through the sink check", async () => {
     const { port } = await start({ config: { allowlist: [ALLOWED_ROOT], token: TOKEN, corsOrigins: [WEB], detail: "paths" }, sensitive: () => [SESSION_CWD] });
-    expect(HealthSchema.parse(JSON.parse((await send(port, { path: "/api/health" })).body)).detail).toBe("paths");
+    expect(HealthSchema.parse(JSON.parse((await send(port, { path: "/api/health" })).body)).detailLevel).toBe("paths");
     await hook(port, rawHook("PreToolUse", "s1", { tool_name: "Write", tool_use_id: "t1" }));
     await waitFor(async () => (await send(port, { path: "/api/snapshot" })).body.includes(LOCAL_ONLY));
     const snapshot = SnapshotSchema.parse(JSON.parse((await send(port, { path: "/api/snapshot" })).body));
@@ -255,7 +255,9 @@ describe("detail level", () => {
 
   it("defaults to none: no detail key and no local string in any response", async () => {
     const { port } = await start({ sensitive: () => [SESSION_CWD] });
-    expect(HealthSchema.parse(JSON.parse((await send(port, { path: "/api/health" })).body)).detail).toBe("none");
+    const health = await send(port, { path: "/api/health" });
+    expect(HealthSchema.parse(JSON.parse(health.body))).not.toHaveProperty("detailLevel");
+    expect(health.body).not.toContain("detail");
     await hook(port, rawHook("PreToolUse", "s1", { tool_name: "Write", tool_use_id: "t1" }));
     await waitFor(async () => (await send(port, { path: "/api/snapshot" })).body.includes("agent-1"));
     const body = (await send(port, { path: "/api/snapshot" })).body;
