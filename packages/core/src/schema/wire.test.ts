@@ -58,4 +58,15 @@ describe("wire schemas", () => {
     const parsed = SnapshotSchema.parse({ ...validSnapshot, panes: [{ pane: "pane-1", label: "Oak" }] });
     expect(parsed.panes[0]).toEqual({ pane: "pane-1", label: "Oak" });
   });
+
+  it("carries detail on sessions, panes and ticker lines, and rejects a raw key inside it", () => {
+    const session = { ...validSnapshot.sessions[0], detail: { name: "Fix login", dir: "C:/mw/visualiser", permissionMode: "plan", shells: 1, subject: { kind: "file", text: "src/app.ts" } } };
+    const pane = { pane: "pane-1", label: "Oak", detail: { dir: "C:/mw/visualiser" } };
+    const parsed = SnapshotSchema.parse({ ...validSnapshot, panes: [pane], sessions: [session] });
+    expect(parsed.sessions[0]?.detail?.subject).toEqual({ kind: "file", text: "src/app.ts" });
+    expect(parsed.panes[0]?.detail).toEqual({ dir: "C:/mw/visualiser" });
+    expect(() => SnapshotSchema.parse({ ...validSnapshot, sessions: [{ ...validSnapshot.sessions[0], detail: { cwd: "C:/mw" } }] })).toThrow();
+    expect(TickerEventSchema.parse({ t: "2026-09-12T10:00:00.000Z", kind: "tool.start", tool: "Bash", activity: "run", detail: { subject: { kind: "program", text: "git" } } }).detail?.subject?.text).toBe("git");
+    expect(() => TickerEventSchema.parse({ t: "2026-09-12T10:00:00.000Z", kind: "tool.start", detail: { file: "x" } })).toThrow();
+  });
 });

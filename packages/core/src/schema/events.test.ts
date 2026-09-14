@@ -58,4 +58,11 @@ describe("RedactedEventSchema", () => {
   it("derives the activity enum from the tool categories plus think", () => {
     expect(ActivitySchema.options).toEqual([...ToolCategorySchema.options, "think"]);
   });
+
+  it("carries detail on any kind, bounded by the paths schema", () => {
+    expect(RedactedEventSchema.parse({ ...base, kind: "tool.start", tool: "Bash", category: "run", toolUseId: "toolu_1", detail: { program: "git", permissionMode: "default" } })).toMatchObject({ detail: { program: "git" } });
+    expect(RedactedEventSchema.parse({ ...base, kind: "presence", alive: true, detail: { dir: "C:/mw/visualiser", name: "Fix login" } })).toMatchObject({ detail: { name: "Fix login" } });
+    expect(() => RedactedEventSchema.parse({ ...base, kind: "prompt", detail: { prompt: "secret" } })).toThrow();
+    expect(() => RedactedEventSchema.parse({ ...base, kind: "prompt", detail: { program: "a/b" } })).toThrow();
+  });
 });
