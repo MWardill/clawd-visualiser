@@ -352,7 +352,7 @@ web app.
 | `GET /api/stream` | SSE. `event: snapshot` with a full `Snapshot` on connect and whenever it changes, debounced to at most four a second. `event: ticker` with `{ alias, event: TickerEvent }`. Heartbeat comment every 15 s. |
 | `GET /api/ticker/:alias` | last 200 `TickerEvent`s for a session, for the detail pane's backfill |
 | `POST /api/command` | a `Command`; `202` when accepted |
-| `GET /api/health` | `{ ok: true, version, sessions }` |
+| `GET /api/health` | `{ ok: true, version, sessions, detail }` |
 
 Default agent address `http://127.0.0.1:4750`, overridable by the web app through
 `NEXT_PUBLIC_AGENT_URL`. The agent sends CORS headers for the web app's origin. When the web app
