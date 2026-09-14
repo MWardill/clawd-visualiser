@@ -148,6 +148,7 @@ describe("api routes", () => {
     expect(reply.headers["cache-control"]).toBe("no-store");
     expect(SnapshotSchema.parse(JSON.parse(reply.body)).sessions).toHaveLength(1);
     expect(reply.body).not.toContain(CANARY);
+    expect(reply.body).not.toContain(LOCAL_ONLY);
   });
 
   it("serves health", async () => {
@@ -177,6 +178,7 @@ describe("api routes", () => {
     await hook(port, rawHook("UserPromptSubmit", "s1"));
     await stream.waitFor((text) => text.includes("event: ticker"));
     expect(stream.text()).not.toContain(CANARY);
+    expect(stream.text()).not.toContain(LOCAL_ONLY);
     stream.close();
   });
 

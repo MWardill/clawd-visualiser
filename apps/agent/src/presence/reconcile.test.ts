@@ -23,12 +23,14 @@ describe("reconcile", () => {
     const events = reconcile(input({ entries: [rawAgentEntry("s1")] }));
     expect(events).toEqual([{ v: 1, t: T0 + 60_000, sessionId: "s1", paneKey: KEY, kind: "presence", alive: true, lastActiveAt: T0 }]);
     expect(JSON.stringify(events)).not.toContain(CANARY);
+    expect(JSON.stringify(events)).not.toContain(LOCAL_ONLY);
   });
 
   it("keeps the directory's last segment on a first-sight presence when pane names are on, and nothing more of the path", () => {
     const [named] = reconcile(input({ entries: [rawAgentEntry("s1")], paneNames: true }));
     expect(named).toMatchObject({ kind: "presence", paneName: "repo" });
     expect(JSON.stringify(named)).not.toContain(CANARY);
+    expect(JSON.stringify(named)).not.toContain(LOCAL_ONLY);
     expect(reconcile(input({ entries: [rawAgentEntry("s1")] }))[0]).not.toHaveProperty("paneName");
   });
 

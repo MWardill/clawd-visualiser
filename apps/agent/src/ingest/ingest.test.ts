@@ -1,6 +1,6 @@
 import { containsForbidden } from "@clawd/core";
 import { describe, expect, it } from "vitest";
-import { ALLOWED_ROOT, CANARY, OUTSIDE_CWD, rawHook, rawSessionScript, rawStatus } from "../testing/raw";
+import { ALLOWED_ROOT, CANARY, LOCAL_ONLY, OUTSIDE_CWD, rawHook, rawSessionScript, rawStatus } from "../testing/raw";
 import { ingestHook, ingestStatus, parseJson } from "./ingest";
 
 const ctx = { now: 1_757_671_200_000, allowlist: [ALLOWED_ROOT] };
@@ -25,6 +25,7 @@ describe("ingestHook", () => {
       "session.end",
     ]);
     expect(JSON.stringify(events)).not.toContain(CANARY);
+    expect(JSON.stringify(events)).not.toContain(LOCAL_ONLY);
     expect(containsForbidden(events)).toBeNull();
   });
 
@@ -67,6 +68,7 @@ describe("ingestStatus", () => {
     const e = ingestStatus(rawStatus("s1"), ctx);
     expect(e).toMatchObject({ kind: "status", contextPct: 42, costUsd: 1.25, rateLimit5h: 10, rateLimit7d: 20, model: "Opus 5" });
     expect(JSON.stringify(e)).not.toContain(CANARY);
+    expect(JSON.stringify(e)).not.toContain(LOCAL_ONLY);
     expect(containsForbidden(e)).toBeNull();
   });
 
