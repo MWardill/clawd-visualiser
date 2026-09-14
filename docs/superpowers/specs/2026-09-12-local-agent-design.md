@@ -36,7 +36,8 @@ These bind every module and every test.
    echoed in a response, or kept on an object that outlives the request.
 2. **Nothing but redacted values reaches a sink.** The sinks are the event log, `aliases.json`, the
    HTTP responses, the SSE stream and stdout. Each outgoing wire payload is validated against its
-   core schema and checked with `containsForbidden()` before it is written. The strict schemas
+   core schema and checked with `containsForbidden(stripDetail(payload), …)` before it is written:
+   outside a `detail` object nothing forbidden may appear at any level. The strict schemas
    already reject forbidden key names, so the check also passes the live working directories from
    the latest presence poll (rule 4) as `extraStrings`: that is what would catch a path smuggled
    through a label or a tool name.
@@ -60,7 +61,20 @@ These bind every module and every test.
    `"generated"` (§7.2), redaction keeps the working directory's last segment as `paneName`, for the
    pane's label (core design §4). The schema refuses separators, so no parent directory can follow
    it, and the sinks still reject the live working directories in full. Test sessions run in
-   `C:/work/CANARY-parent/repo`, so the canary check still covers the rest of the path.
+   `C:/work/LOCALONLY-parent/repo`; the `CANARY` marker is content that must never appear, and
+   `LOCALONLY` marks paths and names that may appear only inside `detail` at the paths level.
+9. **Detail is bounded by the level.** `config.detail` (`none`, `hints`, `paths`; absent means
+   `none`) decides what ingest keeps in an event's `detail` object (detail levels design §2). At
+   `none` no event carries the key, so that level's wire format is unchanged. `prompt`,
+   `tool_input.prompt`, `.pattern`, `.query`, `tool_response`, `last_assistant_message` and the
+   transcript paths are never read at any level.
+10. **The log and the cloud are level none.** `eventLog.append` writes `stripDetail(e)` and
+    `readRecent` refuses a line carrying `detail`. A cloud publisher may send only
+    `toCloudSnapshot(s)`.
+11. **Four invariants under test.** Level none is today; nothing forbidden outside `detail` at any
+    level; the log and the cloud strip; hints validate against the strict hints schema, whose
+    strings refuse separators. `packages/core/src/ingest/levels.test.ts` and
+    `apps/agent/src/agent.e2e.test.ts` (run at every level) prove them with the two marker families.
 
 ## 3. Package layout
 
