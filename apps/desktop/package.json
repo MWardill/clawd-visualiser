@@ -6,6 +6,7 @@
   "main": "dist/main.cjs",
   "scripts": {
     "bundle": "node build/bundle.mjs",
+    "renderer": "node build/renderer.mjs",
     "dev": "node build/bundle.mjs && electron .",
     "test": "vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit"
