@@ -1,4 +1,4 @@
-import { SnapshotSchema, paneKey, parseFixture } from "@clawd/core";
+import { SnapshotSchema, paneKey, parseFixture, type Snapshot } from "@clawd/core";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -64,6 +64,20 @@ describe("startAgent", () => {
     const logged: unknown[] = [];
     for (const name of await readdir(paths.logs)) logged.push(...parseFixture(await readFile(join(paths.logs, name), "utf8")).events);
     expect(logged).toHaveLength(3);
+  });
+
+  it("hands each changed snapshot to onSnapshot, as the stream gets it", async () => {
+    const home = await tempDir();
+    const config = { ...defaultConfig(), allowlist: [ALLOWED_ROOT] };
+    await saveConfig(agentPaths(home), config);
+    const seen: Snapshot[] = [];
+    const agent = await startAgent({ home, port: 0, exec: async () => ({ ok: true, stdout: "[]" }), log: silentLogger, platform: "linux", transcriptsDir: await tempDir(), onSnapshot: (s) => seen.push(s) });
+    try {
+      await send(agent.port, { method: "POST", path: "/ingest/hook", headers: { "content-type": "application/json", "x-clawd-token": config.token }, body: JSON.stringify(rawHook("UserPromptSubmit", "s1")) });
+      await waitFor(() => seen.some((s) => s.sessions.length === 1));
+    } finally {
+      await agent.stop();
+    }
   });
 
   it("rejects with a PortInUseError naming the port when it is already in use", async () => {
