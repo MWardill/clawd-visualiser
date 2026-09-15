@@ -251,9 +251,58 @@ matching the app. The detail section is present only once the detail levels desi
 | 4 Tray | Tray, badge, tooltip, hide on close, the single-instance lock, `--hidden`, the login item | `Tray`, `Menu`, the single-instance lock, login items | Closing the window keeps the agent up; the app returns hidden at login |
 | 5 Settings | The settings window, preload, IPC, the folder picker, hook install and repair with the runtime prefix | Preload, `contextBridge`, `ipcMain`, dialogs, process-model security | A fresh machine is set up from the app alone |
 | 6 Package | Icons, electron-builder with the `dir` and `zip` targets, fuses | Packaging, asar, fuses, `process.execPath` in a packaged app | A teammate unzips the folder, runs the exe, and sets up hooks from the settings window; moving the folder and relaunching repairs the hooks and the login item |
+| Post-dev Hardening | The fixes and checks deferred from the stage reviews (§12.1) | None new | Each item in §12.1 is fixed, or dropped with a reason in the decision log |
 
 Each stage has its own plan and branch and is merged before the next starts. Stage 5's detail
 section lands with whichever of stage 5 and the detail levels design is later.
+
+### 12.1 Post-dev hardening
+
+Found in the reviews of stage 3 (15 September 2026), and left out of that stage because none of
+them breaks the app on the default port. A later stage that touches the same code may take an item
+early; otherwise they are done after stage 6.
+
+- **Attaching to an agent that refuses the page.** The health probe (`agent-client.ts`) sends no
+  `Origin`, so the host attaches to any agent that answers, including one started before stage 3
+  that refuses `app://clawd` with 403. The title then says `agent attached` while the page stays
+  simulated. Probe with `Origin: app://clawd`, treat a 403 as an incompatible agent, log a code
+  for it, and say so in the title and the tray tooltip. Until then, the desktop README warns the
+  maintainer to restart such an agent.
+- **Windows device names in `app://` paths.** The scheme mapper accepts segments such as `CON.txt`,
+  `NUL.js` or `COM1.json`. On Windows 11 they are ordinary missing files; on Windows 10 they are
+  devices, and reading `CON` can hang the request. Refuse any segment whose name before the first
+  dot is a reserved device name, with tests, before teammates on Windows 10 run the app.
+- **One source for the agent's port.** The first page's CSP is written before the host knows the
+  agent's port, so it names `DEFAULT_PORT` for the life of that page, and the export's agent URL
+  is fixed at build time. Neither matters on 4750. Before any stage lets the port vary, feed the
+  CSP and the page's agent URL from the same configured port, or reload the window once it is known.
+- **`connect-src 'self'`.** The policy does not let the page fetch its own `app://` files, and today
+  nothing does: the web app has one route and no client navigation. Add `'self'`, with a test, in
+  the change that adds `next/link` or router calls.
+- **A handler that can reject.** `createSchemeHandler` calls `port()` outside its `try`, so a
+  throwing port getter rejects the request. Main's getter cannot throw. Build the policy inside the
+  guard with a fallback port, and add a test with a rejecting `readFile`.
+- **The 404 body.** Unknown paths get a plain-text `not found` rather than the export's `404.html`.
+  Harmless with one route; serve `404.html` once there are more.
+- **`args.ts` depends on `scheme.ts`.** It imports `./scheme` only for `APP_URL`, which pulls core,
+  zod and `fs` into the pure argument parser. Move the URL to a small constants module, or pass the
+  fallback in.
+- **The export build.** `build/renderer.mjs` exits without a message when the Next build cannot be
+  spawned, and a stale `apps/web/out/index.html` would pass its check. Print the spawn error, and
+  remove `apps/web/out` before building.
+- **Dev URLs in a packaged app.** `--dev-url` and `CLAWD_DESKTOP_URL` are honoured when packaged,
+  while §7 means production to load `app://clawd/`. Ignore both when `app.isPackaged`, or record
+  that they stay as a support tool.
+- **The built-in `http://localhost:3000` origin.** It can no longer be removed through the config,
+  so any local dev server on port 3000 can read the redacted stream and send focus commands, as
+  default configs already allowed. Accept that in the decision log, or add an opt-out.
+- **zod's eval probe.** zod tests for `Function("")` on every page load, which the CSP reports as
+  an eval violation. It is harmless. Set `z.config({ jitless: true })` for the desktop target, or
+  note it as expected in the desktop README.
+- **Checks still owed from stage 3.** `pnpm --filter @clawd/desktop start` on the default port with
+  no dev server, opening a session's detail sheet with no `Refused to` lines in DevTools; hot reload
+  in the `dev` loop; a real Claude Code prompt setting a Clawd working in the packaged UI. Stage 3's
+  smoke test ran on port 4751 because other processes held 4750 and 3000.
 
 ## 13. Tests
 
