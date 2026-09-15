@@ -24,6 +24,11 @@ does not know the `app://clawd` origin and refuses the page: the app still attac
 title says `agent attached`, but the page stays simulated. Restart that agent, or stop it and let
 the app run its own.
 
+The app lives in the tray. Closing the window hides it and the agent keeps running; click the tray
+icon to bring it back, and quit from the tray menu or with Ctrl+Q. Only one copy runs: starting it
+again shows the running copy's window. `--hidden` starts it with only the tray icon, as the login
+item does. The window's position and the login choice are kept in `~/.clawd/desktop.json`.
+
 For work on the page, the dev loop loads the Next dev server instead, with hot reload:
 
 ```
@@ -141,3 +146,40 @@ Two ways to run it follow from this: `start` builds the export and loads `app://
 loads the Next dev server for hot reload. What stage 3 leaves in place: launching the app is enough;
 no dev server and no CLI agent are needed. Closing the window still stops the agent and quits, until
 stage 4's tray.
+
+### Stage 4: the tray
+
+Until now the window was the app: close it and everything stopped. Now the process, the agent and an
+icon by the clock are the app, and the window is a view you open and put away.
+
+**The tray.** `new Tray(image)` puts an icon in the notification area, with a tooltip and a context
+menu built with `Menu.buildFromTemplate`. A tray that nothing references any more can be garbage
+collected and vanish, so main keeps it in a variable for the life of the app. The icons are PNGs
+drawn from the canonical Clawd sprite by `build/icons.mjs` and checked in under `resources/tray`;
+`tray@2x.png` beside `tray.png` is picked up automatically on a display scaled to 200%. While any
+session waits, the icon is the variant with an amber dot.
+
+**Close and quit are now different things.** Electron's default is to quit when the last window
+closes. The app listens for `window-all-closed` and does nothing, and the window's `close` handler
+calls `event.preventDefault()` and hides the window instead. Quitting (the tray's Quit, Ctrl+Q, or
+Ctrl+C in the terminal) goes through `app.quit()`, which fires `before-quit` first; main sets a
+`quitting` flag there, so the window's `close` is let through, and then stage 2's `will-quit`
+handler stops the agent. Windows signing out fires the window's `query-session-end`, which sets the
+same flag, so the app never holds a sign-out up.
+
+**One copy.** `app.requestSingleInstanceLock()` is the first thing main does. The first launch
+gets the lock. Any later launch does not, exits at once, and Electron passes its command line to
+the first copy as a `second-instance` event, which shows the window unless the line has `--hidden`.
+This also ends stage 2's "a second copy attaches to the first copy's agent".
+
+**The login item.** `app.setLoginItemSettings({ openAtLogin, path, args })` writes a value under the
+current user's `Run` registry key; Windows starts that command line at sign-in. The value is named
+by the app's AppUserModelId, which main sets to `io.github.mwardill.clawd-visualiser`. In
+development the command is Electron's `electron.exe` with this folder and `--hidden`; packaged, it
+is the app's own exe. `getLoginItemSettings({ path, args })` only reports a value holding exactly
+that command, so after the folder moves Windows has no entry for the new path. `desktop.json`
+remembers that the user wanted one, and the next launch writes it again
+(`desktop.loginItemReapplied`). The packaged app turns the login item on at its first run.
+
+What stage 4 leaves in place: the tray menu is Open, Start on login and Quit; Settings joins it with
+the settings window in stage 5.

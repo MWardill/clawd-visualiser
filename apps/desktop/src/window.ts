@@ -1,4 +1,5 @@
 import { BrowserWindow } from "electron";
+import type { Bounds } from "./desktop-state";
 import { sameOrigin } from "./navigation";
 
 export const WINDOW_SIZE = { width: 1280, height: 800 } as const;
@@ -8,12 +9,12 @@ export const BACKGROUND = "#0a0b10";
 /**
  * The one visualiser window. The renderer is sandboxed with no Node access and no preload: a web
  * page that talks to the agent over HTTP, as a browser tab does. It may not open windows and may
- * not navigate away from the origin it was loaded from.
+ * not navigate away from the origin it was loaded from. `bounds` puts it back where it was; without
+ * them it opens at the default size, centred.
  */
-export function createMainWindow(url: string, title: string): BrowserWindow {
+export function createMainWindow(url: string, title: string, bounds: Bounds | null): BrowserWindow {
   const win = new BrowserWindow({
-    width: WINDOW_SIZE.width,
-    height: WINDOW_SIZE.height,
+    ...(bounds ?? WINDOW_SIZE),
     backgroundColor: BACKGROUND,
     autoHideMenuBar: true,
     title,
