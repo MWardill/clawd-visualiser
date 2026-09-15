@@ -25,9 +25,10 @@ pnpm dev
 pnpm --filter @clawd/desktop dev
 ```
 
-`--dev-url <url>` or `CLAWD_DESKTOP_URL` point the window elsewhere, for example
-`pnpm --filter @clawd/desktop dev --dev-url "http://localhost:3000/?source=simulated"`. A change
-under `src/` needs the command run again.
+`--dev-url <url>` points the window elsewhere, for example
+`pnpm --filter @clawd/desktop dev --dev-url "http://localhost:3000/?source=simulated"`; the last
+`--dev-url` wins. `CLAWD_DESKTOP_URL` applies only when no flag is given, as with `npx electron .`.
+A change under `src/` needs the command run again.
 
 ```
 pnpm --filter @clawd/desktop test
@@ -109,8 +110,10 @@ main maps the path to a file, and the answer is a standard `Response`.
 `protocol.registerSchemesAsPrivileged` runs before `ready`. `standard` makes `app://clawd/` behave
 like `http`: the export's root-relative links, such as `/_next/static/...`, resolve under it, and
 the page gets a real origin. `secure` makes the page a secure context, as `https` would.
-`supportFetchAPI` lets the page `fetch` its own files, which Next's router does. `scheme.ts` refuses
-any path that decodes to somewhere outside the export, and serves only the file types in its table.
+`supportFetchAPI` lets `fetch` reach `app://` URLs at all; the policy below still limits `fetch` to
+the agent, and nothing needs more today, since the page has one route and never fetches its own
+files. `scheme.ts` refuses any path that decodes to somewhere outside the export, and serves only
+the file types in its table.
 
 **Origins.** The page's origin is `app://clawd`, and Chromium sends it in the `Origin` header when the
 page calls the agent. The agent refuses origins it does not know, so `app://clawd` is now one of its

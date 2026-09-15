@@ -17,7 +17,8 @@ const home = defaultHome();
 
 // A custom scheme is declared before `ready`, with what it may do. `standard` makes app://clawd/
 // behave like http: relative and root-relative URLs resolve under it and the page's origin is
-// app://clawd. `secure` makes the page a secure context. `supportFetchAPI` lets it fetch its own files.
+// app://clawd. `secure` makes the page a secure context. `supportFetchAPI` lets fetch reach the scheme,
+// though the CSP's connect-src currently allows fetch to the agent only.
 protocol.registerSchemesAsPrivileged([{ scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 
 // The agent's own logger, writing to a dated file: codes and numbers only. In development the
