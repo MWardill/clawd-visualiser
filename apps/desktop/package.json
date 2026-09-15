@@ -11,6 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@clawd/agent": "workspace:*",
+    "@clawd/core": "workspace:*",
     "@types/node": "^22.20.2",
     "electron": "^44.3.0",
     "esbuild": "^0.28.2",

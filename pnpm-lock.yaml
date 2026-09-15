@@ -190,6 +190,12 @@ importers:
 
   apps/desktop:
     devDependencies:
+      '@clawd/agent':
+        specifier: workspace:*
+        version: link:../agent
+      '@clawd/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@types/node':
         specifier: ^22.20.2
         version: 22.20.2
