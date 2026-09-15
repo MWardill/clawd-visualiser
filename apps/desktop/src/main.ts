@@ -87,10 +87,6 @@ function run(): void {
       event.preventDefault();
       created.hide();
     });
-    // Windows is signing out or shutting down: let the window close rather than hold the session up.
-    created.on("query-session-end", () => {
-      quitting = true;
-    });
     created.webContents.on("before-input-event", (event, input) => {
       if (!isQuitShortcut(input)) return;
       event.preventDefault();
@@ -132,20 +128,17 @@ function run(): void {
     tray?.setContextMenu(Menu.buildFromTemplate(trayMenuTemplate(openAtLogin(), { open: showWindow, setOpenAtLogin, quit: () => app.quit() })));
   }
 
-  // A second launch. One started at login while the app already runs passes --hidden and changes nothing.
-  app.on("second-instance", (_event, argv) => {
-    if (parseArgs(argv).hidden) return;
-    void app.whenReady().then(showWindow);
-  });
-
   // `ready` fires once Electron has initialised; no window or tray can be made before it.
-  void app.whenReady().then(async () => {
+  const started = app.whenReady().then(async () => {
     // Every app:// request is answered from the export beside main.cjs, under a CSP that lets the
     // page reach only the agent in use.
     protocol.handle(APP_SCHEME, createSchemeHandler({ rendererDir: join(__dirname, "renderer"), port: () => host.state().port ?? DEFAULT_PORT }));
     log("desktop.started", { packaged: app.isPackaged });
     host.start();
     await store.load();
+
+    // Quitting began while desktop.json was loading: build nothing more.
+    if (quitting) return;
 
     // The tray has to stay referenced for as long as the app runs; `tray` in this closure is that reference.
     trayFile = trayIconFile(0);
@@ -163,6 +156,13 @@ function run(): void {
     if (action === "reapply") log("desktop.loginItemReapplied");
 
     if (!args.hidden) showWindow();
+  });
+
+  // A second launch. One started at login while the app already runs passes --hidden and changes
+  // nothing; otherwise it shows the window once startup has loaded desktop.json and made the tray.
+  app.on("second-instance", (_event, argv) => {
+    if (parseArgs(argv).hidden) return;
+    void started.then(showWindow);
   });
 
   // The tray keeps the app running with no window open. Without a listener here, Electron would quit

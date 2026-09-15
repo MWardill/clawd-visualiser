@@ -164,13 +164,16 @@ closes. The app listens for `window-all-closed` and does nothing, and the window
 calls `event.preventDefault()` and hides the window instead. Quitting (the tray's Quit, Ctrl+Q, or
 Ctrl+C in the terminal) goes through `app.quit()`, which fires `before-quit` first; main sets a
 `quitting` flag there, so the window's `close` is let through, and then stage 2's `will-quit`
-handler stops the agent. Windows signing out fires the window's `query-session-end`, which sets the
-same flag, so the app never holds a sign-out up.
+handler stops the agent. Ctrl+Q is caught with the window's `webContents.on("before-input-event")`,
+which sees each key press before the page does, and only while the window has focus. Signing out of
+Windows is different: Electron lets the session end without firing `before-quit` or `will-quit`, so
+the agent does not get its clean stop, and bounds changed since the window last closed are not saved.
 
-**One copy.** `app.requestSingleInstanceLock()` is the first thing main does. The first launch
-gets the lock. Any later launch does not, exits at once, and Electron passes its command line to
-the first copy as a `second-instance` event, which shows the window unless the line has `--hidden`.
-This also ends stage 2's "a second copy attaches to the first copy's agent".
+**One copy.** Taking it with `app.requestSingleInstanceLock()` is the first thing `main.ts` does,
+before it registers the scheme, starts the agent or writes a log line. The first launch gets the
+lock. Any later launch does not, exits at once, and Electron passes its command line to the first
+copy as a `second-instance` event, which shows the window unless the line has `--hidden`. This
+also ends stage 2's "a second copy attaches to the first copy's agent".
 
 **The login item.** `app.setLoginItemSettings({ openAtLogin, path, args })` writes a value under the
 current user's `Run` registry key; Windows starts that command line at sign-in. The value is named
