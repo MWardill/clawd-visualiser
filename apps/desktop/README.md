@@ -156,8 +156,10 @@ icon by the clock are the app, and the window is a view you open and put away.
 menu built with `Menu.buildFromTemplate`. A tray that nothing references any more can be garbage
 collected and vanish, so main keeps it in a variable for the life of the app. The icons are PNGs
 drawn from the canonical Clawd sprite by `build/icons.mjs` and checked in under `resources/tray`;
-`tray@2x.png` beside `tray.png` is picked up automatically on a display scaled to 200%. While any
-session waits, the icon is the variant with an amber dot.
+`tray@2x.png` beside `tray.png` is picked up automatically on a display scaled to 200%. At 125% and
+150%, the common laptop settings, Windows resamples the nearer image instead, which softens the
+pixel art; stage 6's icon file fixes that. While any session waits, the icon is the variant with an
+amber dot.
 
 **Close and quit are now different things.** Electron's default is to quit when the last window
 closes. The app listens for `window-all-closed` and does nothing, and the window's `close` handler
@@ -172,8 +174,8 @@ the agent does not get its clean stop, and bounds changed since the window last 
 **One copy.** Taking it with `app.requestSingleInstanceLock()` is the first thing `main.ts` does,
 before it registers the scheme, starts the agent or writes a log line. The first launch gets the
 lock. Any later launch does not, exits at once, and Electron passes its command line to the first
-copy as a `second-instance` event, which shows the window unless the line has `--hidden`. This
-also ends stage 2's "a second copy attaches to the first copy's agent".
+copy as a `second-instance` event, which shows the window unless the line has `--hidden`. Before
+this stage a second copy of the app attached to the first copy's agent; now it never gets that far.
 
 **The login item.** `app.setLoginItemSettings({ openAtLogin, path, args })` writes a value under the
 current user's `Run` registry key; Windows starts that command line at sign-in. The value is named
@@ -182,7 +184,9 @@ development the command is Electron's `electron.exe` with this folder and `--hid
 is the app's own exe. `getLoginItemSettings({ path, args })` only reports a value holding exactly
 that command, so after the folder moves Windows has no entry for the new path. `desktop.json`
 remembers that the user wanted one, and the next launch writes it again
-(`desktop.loginItemReapplied`). The packaged app turns the login item on at its first run.
+(`desktop.loginItemReapplied`). In development, ticking Start on login registers this repository's
+`electron.exe`, so untick it when you are done. The packaged app turns the login item on at its
+first run.
 
 What stage 4 leaves in place: the tray menu is Open, Start on login and Quit; Settings joins it with
 the settings window in stage 5.

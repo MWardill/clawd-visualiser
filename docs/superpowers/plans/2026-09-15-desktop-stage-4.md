@@ -710,6 +710,8 @@ git commit -m "feat(desktop): desktop.json remembers the window's bounds and the
 
 ### Task 3: The login item's target and the decision at launch
 
+> **Erratum, found running Task 5.** Electron 44 quotes each login item argument itself, so a path the code has already quoted arrives with literal quote marks, and the development login item fails to start the app. Commit `0ab9acc` passes the path unquoted: `args: [appPath, "--hidden"]`, with the test expecting `["C:\\repo\\apps\\desktop", "--hidden"]` and a second case for a path with a space. The code below is as first planned; `apps/desktop/src/login.ts` is current.
+
 **Files:**
 - Modify: `apps/agent/src/log.ts:16`
 - Create: `apps/desktop/src/login.ts`
@@ -998,6 +1000,8 @@ git commit -m "feat(desktop): the tray menu and the Ctrl+Q shortcut as data"
 
 ### Task 5: Wire the tray into the main process, run the app, and write the stage note
 
+> **Erratum, found in review.** Commit `081cb88` removed the window's `query-session-end` handler: at sign-out Windows sends no close, and a cancelled sign-out left `quitting` stuck. The same commit made the ready handler `const started = app.whenReady().then(...)`, has `second-instance` wait on `started`, and returns early after `await store.load()` when quitting. The final review's commit adds `if (quitting) return;` at the top of `showWindow()` and ignores a failed `started` in `second-instance`. The code below is as first planned; `apps/desktop/src/main.ts` is current.
+
 **Files:**
 - Modify: `apps/desktop/src/window.ts`
 - Modify: `apps/desktop/src/main.ts`
@@ -1272,7 +1276,7 @@ Check each:
   Get-Content "$HOME\.clawd\desktop.json"
   ```
 
-  The value holds Electron's `electron.exe`, the quoted `apps\desktop` path and `--hidden`; `desktop.json` has `"openAtLogin": true`; reopening the tray menu shows the box ticked. Quit, then run the command from the registry value exactly as printed: the app starts with only the tray icon, as it would at sign-in.
+  The value holds Electron's `electron.exe`, the quoted `apps\desktop` path and `--hidden`; `desktop.json` has `"openAtLogin": true`; reopening the tray menu shows the box ticked. Quit, then press Win+R, paste the command from the registry value exactly as printed, and press Enter (PowerShell would only echo the quoted text): the app starts with only the tray icon, as it would at sign-in.
 - **Re-applied after a move.** With Start on login ticked, delete the value, standing in for a moved folder: `reg delete HKCU\Software\Microsoft\Windows\CurrentVersion\Run /v io.github.mwardill.clawd-visualiser /f`. Quit and start the app. The value is back, and the log has `desktop.loginItemReapplied`.
 - **Off.** Untick Start on login. The `reg query` above reports that the value cannot be found, and `desktop.json` has `"openAtLogin": false`. Leave it off, so development Electron does not start at every sign-in.
 - **The dev loop.** Quit. With `pnpm dev` running, `pnpm --filter @clawd/desktop dev` opens the window on `http://localhost:3000` with the tray, and closing the window hides it there too.

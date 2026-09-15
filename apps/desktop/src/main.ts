@@ -71,6 +71,8 @@ function run(): void {
 
   /** Shows the window, making it the first time; from the tray, a second launch, or startup. */
   function showWindow(): void {
+    // Quitting has begun: neither a second launch nor startup may bring a window back while the app exits.
+    if (quitting) return;
     if (win !== null) {
       if (win.isMinimized()) win.restore();
       win.show();
@@ -162,7 +164,8 @@ function run(): void {
   // nothing; otherwise it shows the window once startup has loaded desktop.json and made the tray.
   app.on("second-instance", (_event, argv) => {
     if (parseArgs(argv).hidden) return;
-    void started.then(showWindow);
+    // A startup that failed was already reported once, through `started`, so it is not reported again here.
+    void started.then(showWindow, () => {});
   });
 
   // The tray keeps the app running with no window open. Without a listener here, Electron would quit
