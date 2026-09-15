@@ -1,0 +1,22 @@
+{
+  "name": "@clawd/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The desktop app: the agent and the visualiser in one window and the tray, run from a folder.",
+  "main": "dist/main.cjs",
+  "scripts": {
+    "bundle": "node build/bundle.mjs",
+    "dev": "node build/bundle.mjs && electron .",
+    "test": "vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@clawd/agent": "workspace:*",
+    "@clawd/core": "workspace:*",
+    "@types/node": "^22.20.2",
+    "electron": "^44.3.0",
+    "esbuild": "^0.28.2",
+    "typescript": "^5",
+    "vitest": "^5"
+  }
+}

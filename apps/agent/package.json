@@ -4,6 +4,11 @@
   "private": true,
   "description": "The local agent: receives Claude Code hooks, redacts at ingest, keeps the fleet and serves snapshots on 127.0.0.1.",
   "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
   "scripts": {
     "start": "tsx src/main.ts serve",
     "agent": "tsx src/main.ts",

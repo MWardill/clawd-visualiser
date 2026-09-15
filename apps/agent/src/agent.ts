@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG, type StateConfig } from "@clawd/core";
+import { DEFAULT_CONFIG, type Snapshot, type StateConfig } from "@clawd/core";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { agentPaths, defaultTranscriptsDir, detailLevel, loadOrCreateConfig, usesFolderPaneLabels } from "./config";
@@ -26,6 +26,8 @@ export type AgentOptions = {
   tickMs?: number;
   /** Claude Code's transcripts folder, read to date sessions and count their typed prompts. */
   transcriptsDir?: string;
+  /** Each changed snapshot, as the stream receives it. The desktop app counts sessions from it. */
+  onSnapshot?: (s: Snapshot) => void;
 };
 
 export type RunningAgent = { port: number; stop(): Promise<void> };
@@ -102,6 +104,8 @@ export async function startAgent(opts: AgentOptions): Promise<RunningAgent> {
     snapshot: (s) => stream.snapshot(s),
     aliases: (map) => aliasStore.save(map),
   });
+  // One more listener, so a throwing callback is caught and logged by the host like any other.
+  if (opts.onSnapshot) host.on({ snapshot: opts.onSnapshot });
   const focus = createFocus({ poller, run: opts.runFocus ?? powershellFocus, platform: opts.platform ?? process.platform, log });
   const counts = newIngestCounts();
   const server = createAgentServer({
