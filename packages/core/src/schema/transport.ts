@@ -5,6 +5,9 @@ import { TickerEventSchema } from "./ticker";
 /** Where the web app looks for a local agent unless NEXT_PUBLIC_AGENT_URL says otherwise. */
 export const DEFAULT_AGENT_URL = "http://127.0.0.1:4750";
 
+/** The desktop app's page origin: its static export is served over app://clawd/ (desktop design §6, §7). */
+export const DESKTOP_ORIGIN = "app://clawd";
+
 export const ENDPOINTS = {
   snapshot: "/api/snapshot",
   stream: "/api/stream",

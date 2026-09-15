@@ -1,3 +1,4 @@
+import { DESKTOP_ORIGIN } from "@clawd/core";
 import { timingSafeEqual } from "node:crypto";
 
 /** Only loopback names on our own port: a rebound DNS name pointing at 127.0.0.1 is refused. */
@@ -12,6 +13,14 @@ export type OriginCheck = { kind: "none" } | { kind: "allowed"; origin: string }
 export function checkOrigin(origin: string | undefined, allowed: readonly string[]): OriginCheck {
   if (origin === undefined) return { kind: "none" };
   return allowed.includes(origin) ? { kind: "allowed", origin } : { kind: "denied" };
+}
+
+/** Origins every agent accepts with no configuration: the web app's dev server and the desktop app's page. */
+export const BUILTIN_ORIGINS: readonly string[] = ["http://localhost:3000", "http://127.0.0.1:3000", DESKTOP_ORIGIN];
+
+/** The built-in origins, then those the config adds. A config that still lists a built-in one is harmless. */
+export function allowedOrigins(configured: readonly string[]): string[] {
+  return [...BUILTIN_ORIGINS, ...configured];
 }
 
 /** Constant-time comparison of the hook token header. */

@@ -4,25 +4,37 @@ The desktop app: the agent and the visualiser in one window and the tray, run fr
 Built in stages, one Electron idea at a time. Design:
 `docs/superpowers/specs/2026-09-14-desktop-app-design.md`.
 
-## Run (development)
+## Run
 
-Start the web app, then the desktop app. The agent runs inside the desktop app:
+Build the web app into the desktop app and open it. Nothing else needs to be running:
+
+```
+pnpm --filter @clawd/desktop start
+```
+
+`start` builds the web app as a static export, copies it to `dist/renderer`, bundles `src/main.ts`
+into `dist/main.cjs` and opens the window on `app://clawd/`. The agent runs inside the app. If an
+agent is already serving its port (the CLI's `pnpm --filter @clawd/agent start`), the app attaches
+to it instead and starts its own when that one stops; the window title says which. The app's log is
+`~/.clawd/logs/desktop-YYYY-MM-DD.log`, and in development the same lines print to the terminal.
+
+The export talks to the agent at `http://127.0.0.1:4750`, unless `NEXT_PUBLIC_AGENT_URL` was set
+when it was built. An agent started before stage 3, such as a CLI agent left running from earlier,
+does not know the `app://clawd` origin and refuses the page: the app still attaches to it and the
+title says `agent attached`, but the page stays simulated. Restart that agent, or stop it and let
+the app run its own.
+
+For work on the page, the dev loop loads the Next dev server instead, with hot reload:
 
 ```
 pnpm dev
 pnpm --filter @clawd/desktop dev
 ```
 
-If an agent is already serving its port (the CLI's `pnpm --filter @clawd/agent start`), the app
-attaches to it instead and starts its own when that one stops; the window title says which. The
-app's log is `~/.clawd/logs/desktop-YYYY-MM-DD.log`, and in development the same lines print to the
-terminal.
-
-The window loads `http://localhost:3000` by default. `--dev-url <url>` or `CLAWD_DESKTOP_URL`
-point it elsewhere, for example `--dev-url "http://localhost:3000/?source=simulated"`.
-
-Renderer changes hot-reload through Next. A change under `src/` needs the dev command run again:
-it bundles `src/main.ts` into `dist/main.cjs` and starts Electron on it.
+`--dev-url <url>` points the window elsewhere, for example
+`pnpm --filter @clawd/desktop dev --dev-url "http://localhost:3000/?source=simulated"`; the last
+`--dev-url` wins. `CLAWD_DESKTOP_URL` applies only when no flag is given, as with `npx electron .`.
+A change under `src/` needs the command run again.
 
 ```
 pnpm --filter @clawd/desktop test
@@ -92,3 +104,40 @@ older than the config's `logRetentionDays` are removed when a new day's file ope
 
 What stage 2 leaves in place: launching the app is enough for live sessions; the Next dev server is
 still needed for the page, until stage 3 bundles it. Closing the window stops the agent and quits.
+
+### Stage 3: the packaged UI
+
+A web page usually comes from a server. This one comes from files on disk: the web app's static
+export, copied to `dist/renderer`. `protocol.handle("app", handler)` lets the main process answer
+every request for an `app://` URL itself, so there is no server and no extra port. Chromium asks,
+main maps the path to a file, and the answer is a standard `Response`.
+
+**Declaring the scheme.** Chromium has to know a scheme's rules before it starts, so
+`protocol.registerSchemesAsPrivileged` runs before `ready`. `standard` makes `app://clawd/` behave
+like `http`: the export's root-relative links, such as `/_next/static/...`, resolve under it, and
+the page gets a real origin. `secure` makes the page a secure context, as `https` would.
+`supportFetchAPI` lets `fetch` reach `app://` URLs at all; the policy below still limits `fetch` to
+the agent, and nothing needs more today, since the page has one route and never fetches its own
+files. `scheme.ts` refuses any path that decodes to somewhere outside the export, and serves only
+the file types in its table.
+
+**Origins.** The page's origin is `app://clawd`, and Chromium sends it in the `Origin` header when the
+page calls the agent. The agent refuses origins it does not know, so `app://clawd` is now one of its
+built-ins beside the Next dev server's, for the CLI's agent too. One trap: Node's
+`new URL("app://clawd").origin` is the string `"null"` for any custom scheme, which is why
+`navigation.ts` compares scheme and host by hand.
+
+**Content Security Policy.** Because main writes every response, it also sets the page's security
+policy in a header. The policy lets the page load its own scripts, styles and fonts, and reach only
+the agent's port; `fetch("https://example.com")` from DevTools is refused. Inline scripts are
+allowed because Next's export writes two into `index.html`.
+
+**Private network checks.** Chromium treats a page calling a loopback address as reaching into a
+more private network, and may send a preflight first or ask for a permission. The agent already
+answers that preflight. On Electron 44 that was enough: the event stream connected with nothing
+added in main.
+
+Two ways to run it follow from this: `start` builds the export and loads `app://clawd/`, and `dev`
+loads the Next dev server for hot reload. What stage 3 leaves in place: launching the app is enough;
+no dev server and no CLI agent are needed. Closing the window still stops the agent and quits, until
+stage 4's tray.

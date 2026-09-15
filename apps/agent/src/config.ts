@@ -73,7 +73,8 @@ export function defaultConfig(token: string = randomBytes(32).toString("hex")): 
     port: DEFAULT_PORT,
     allowlist: [],
     token,
-    corsOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"],
+    // Added to the built-in origins (http/guards.ts), which need no entry here.
+    corsOrigins: [],
     pollIntervalMs: 10_000,
     claudeCommand: "claude",
     logRetentionDays: 7,

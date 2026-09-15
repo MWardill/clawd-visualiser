@@ -1,17 +1,25 @@
 // The main process: the one Node program in the app. It owns the lifecycle and the windows and,
 // from stage 2, runs the agent itself; Chromium draws, in a sandboxed renderer process per window.
-import { agentPaths, createLogger, defaultHome, startAgent } from "@clawd/agent";
-import { app, type BrowserWindow } from "electron";
+import { DEFAULT_PORT, agentPaths, createLogger, defaultHome, startAgent } from "@clawd/agent";
+import { app, protocol, type BrowserWindow } from "electron";
+import { join } from "node:path";
 import { fetchCounts, probeHealth } from "./agent-client";
 import { createAgentHost, statusText } from "./agent-host";
-import { ownArgs, parseArgs, resolveDevUrl } from "./args";
+import { ownArgs, parseArgs, resolveRendererUrl } from "./args";
 import { createFileSink, readRetentionDays } from "./log";
 import { createQuitHandler } from "./quit";
+import { APP_SCHEME, createSchemeHandler } from "./scheme";
 import { createMainWindow } from "./window";
 
 const args = parseArgs(ownArgs(process.argv, app.isPackaged));
-const url = resolveDevUrl(args, process.env);
+const url = resolveRendererUrl(args, process.env);
 const home = defaultHome();
+
+// A custom scheme is declared before `ready`, with what it may do. `standard` makes app://clawd/
+// behave like http: relative and root-relative URLs resolve under it and the page's origin is
+// app://clawd. `secure` makes the page a secure context. `supportFetchAPI` lets fetch reach the scheme,
+// though the CSP's connect-src currently allows fetch to the agent only.
+protocol.registerSchemesAsPrivileged([{ scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 
 // The agent's own logger, writing to a dated file: codes and numbers only. In development the
 // lines also reach the terminal that ran the dev command.
@@ -40,6 +48,9 @@ process.on("unhandledRejection", () => host.fault());
 
 // `ready` fires once Electron has initialised; no window can be made before it.
 void app.whenReady().then(() => {
+  // Every app:// request is answered from the export beside main.cjs, under a CSP that lets the
+  // page reach only the agent in use.
+  protocol.handle(APP_SCHEME, createSchemeHandler({ rendererDir: join(__dirname, "renderer"), port: () => host.state().port ?? DEFAULT_PORT }));
   log("desktop.started", { packaged: app.isPackaged });
   host.start();
   win = createMainWindow(url, statusText(host.state()));
@@ -48,7 +59,7 @@ void app.whenReady().then(() => {
   });
 });
 
-// Stage 2 still quits when the window closes; stage 4 hides it instead and keeps the tray.
+// Stage 3 still quits when the window closes; stage 4 hides it instead and keeps the tray.
 app.on("window-all-closed", () => app.quit());
 
 // `will-quit` comes after every window has closed. The handler holds it until the agent has stopped
