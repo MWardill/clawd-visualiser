@@ -15,10 +15,17 @@ describe("loginItemTarget", () => {
     });
   });
 
-  it("in development, starts Electron on the app's folder, quoted, then hidden", () => {
+  it("in development, starts Electron on the app's folder, then hidden", () => {
     expect(loginItemTarget(false, "C:\\repo\\node_modules\\electron\\dist\\electron.exe", "C:\\repo\\apps\\desktop")).toEqual({
       path: "C:\\repo\\node_modules\\electron\\dist\\electron.exe",
-      args: ['"C:\\repo\\apps\\desktop"', "--hidden"],
+      args: ["C:\\repo\\apps\\desktop", "--hidden"],
+    });
+  });
+
+  it("in development, passes a path with a space through untouched", () => {
+    expect(loginItemTarget(false, "C:\\x\\electron.exe", "C:\\My Apps\\desktop")).toEqual({
+      path: "C:\\x\\electron.exe",
+      args: ["C:\\My Apps\\desktop", "--hidden"],
     });
   });
 });

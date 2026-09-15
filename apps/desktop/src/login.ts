@@ -11,10 +11,11 @@ export type LoginItemTarget = { path: string; args: string[] };
 
 /**
  * What the Run key entry launches. Packaged, the exe itself. In development the exe is Electron's,
- * so the app's folder comes first, quoted as Windows needs, just as `electron .` passes it.
+ * so the app's folder comes first, just as `electron .` passes it. Electron quotes each argument
+ * itself when it writes the Run value, so a path containing spaces still arrives whole.
  */
 export function loginItemTarget(packaged: boolean, execPath: string, appPath: string): LoginItemTarget {
-  return { path: execPath, args: packaged ? ["--hidden"] : [`"${appPath}"`, "--hidden"] };
+  return { path: execPath, args: packaged ? ["--hidden"] : [appPath, "--hidden"] };
 }
 
 export type LoginOnLaunch = "none" | "enableFirstRun" | "reapply";
