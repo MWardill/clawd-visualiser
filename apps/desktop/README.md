@@ -18,6 +18,12 @@ agent is already serving its port (the CLI's `pnpm --filter @clawd/agent start`)
 to it instead and starts its own when that one stops; the window title says which. The app's log is
 `~/.clawd/logs/desktop-YYYY-MM-DD.log`, and in development the same lines print to the terminal.
 
+The export talks to the agent at `http://127.0.0.1:4750`, unless `NEXT_PUBLIC_AGENT_URL` was set
+when it was built. An agent started before stage 3, such as a CLI agent left running from earlier,
+does not know the `app://clawd` origin and refuses the page: the app still attaches to it and the
+title says `agent attached`, but the page stays simulated. Restart that agent, or stop it and let
+the app run its own.
+
 For work on the page, the dev loop loads the Next dev server instead, with hot reload:
 
 ```
@@ -128,7 +134,8 @@ allowed because Next's export writes two into `index.html`.
 
 **Private network checks.** Chromium treats a page calling a loopback address as reaching into a
 more private network, and may send a preflight first or ask for a permission. The agent already
-answers that preflight. On Electron 44 that was enough: the event stream connected with nothing added in main.
+answers that preflight. On Electron 44 that was enough: the event stream connected with nothing
+added in main.
 
 Two ways to run it follow from this: `start` builds the export and loads `app://clawd/`, and `dev`
 loads the Next dev server for hot reload. What stage 3 leaves in place: launching the app is enough;

@@ -86,7 +86,7 @@ export type SchemeDeps = {
   readFile?(path: string): Promise<Uint8Array>;
 };
 
-/** The protocol.handle callback. Never rejects: anything it cannot serve is a 404. */
+/** The protocol.handle callback. Anything it cannot map, type or read is answered with a 404. */
 export function createSchemeHandler(deps: SchemeDeps): (request: { url: string }) => Promise<Response> {
   const read = deps.readFile ?? ((path: string) => readFile(path));
   return async (request) => {

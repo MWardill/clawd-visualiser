@@ -124,8 +124,9 @@ attached.
 - One `BrowserWindow`: 1280 by 800, black background, `autoHideMenuBar`, `webPreferences: {
   sandbox: true, contextIsolation: true, nodeIntegration: false }`, no preload. Bounds persist in
   `~/.clawd/desktop.json`.
-- Production loads `app://clawd/`. Development loads `--dev-url`, else `CLAWD_DESKTOP_URL`, else
-  `http://localhost:3000`.
+- The window loads `--dev-url`, else `CLAWD_DESKTOP_URL`, else `app://clawd/`. The desktop
+  package's `dev` script passes `--dev-url http://localhost:3000` for the hot-reload loop, and
+  `start` loads the export (changed in the stage 3 plan, so the export runs before packaging).
 - The scheme handler maps `app://clawd/<path>` to `<renderer dir>/<path>` and `/` to `index.html`.
   The mapper is pure: it decodes, normalises, refuses `..` and absolute paths, and returns null for
   anything outside the renderer directory. MIME comes from a fixed table (html, js, css, json, png,
