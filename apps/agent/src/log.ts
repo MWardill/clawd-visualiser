@@ -14,6 +14,7 @@ export type LogCode =
   | "desktop.agentFault"
   | "desktop.agentFailed"
   | "desktop.stopTimedOut"
+  | "desktop.loginItemReapplied"
   | "ingest.counts"
   | "ingest.failed"
   | "presence.failed"
