@@ -14,6 +14,7 @@ describe("@clawd/core public API", () => {
       "CommandSchema",
       "DEFAULT_AGENT_URL",
       "DEFAULT_CONFIG",
+      "DESKTOP_ORIGIN",
       "DETAIL_KEY",
       "DETAIL_LEVELS",
       "DetailLevelSchema",

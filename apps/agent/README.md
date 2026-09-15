@@ -59,7 +59,8 @@ the rest of a command, tool output and assistant text are never read. Design:
 | `POST /api/command` | `{"type":"focus","alias":"agent-1"}` raises that session's window (Windows); `202` |
 | `GET /api/health` | `{ ok, version, sessions, detailLevel }`, `detailLevel` present only above level none |
 
-Browsers may call these only from an origin in `corsOrigins`. `/ingest/hook` and `/ingest/status`
+Browsers may call these only from a built-in origin (`http://localhost:3000`, `http://127.0.0.1:3000`
+and the desktop app's `app://clawd`) or one added to `corsOrigins`. `/ingest/hook` and `/ingest/status`
 are for the hook scripts and need the token from `config.json`.
 
 ## Files
@@ -68,7 +69,7 @@ are for the hook scripts and need the token from `config.json`.
 
 | File | What it holds |
 | --- | --- |
-| `config.json` | port, allowlist, token, CORS origins, poll interval, the wrapped status line, the detail level |
+| `config.json` | port, allowlist, token, extra CORS origins, poll interval, the wrapped status line, the detail level |
 | `aliases.json` | session and pane aliases, so names survive a restart |
 | `logs/events-YYYY-MM-DD.jsonl` | the redacted event log, kept seven days; replayable with core's fixture loader |
 | `bin/*.mjs` | the hook scripts the settings point at |

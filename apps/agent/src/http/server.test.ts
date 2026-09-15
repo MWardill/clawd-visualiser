@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG, HealthSchema, SnapshotSchema, emptyAliasMap, type Snapshot } from "@clawd/core";
+import { DEFAULT_CONFIG, DESKTOP_ORIGIN, HealthSchema, SnapshotSchema, emptyAliasMap, type Snapshot } from "@clawd/core";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -119,6 +119,16 @@ describe("guards", () => {
     expect((await send(port, { path: "/api/stream", headers: { origin: "https://evil.example" } })).status).toBe(403);
     const none = await send(port, { path: "/api/health" });
     expect(none.headers["access-control-allow-origin"]).toBeUndefined();
+  });
+
+  it("allows the built-in origins, the desktop app's among them, with no origins configured", async () => {
+    const { port } = await start({ config: { allowlist: [ALLOWED_ROOT], token: TOKEN, corsOrigins: [] } });
+    for (const origin of [DESKTOP_ORIGIN, "http://localhost:3000", "http://127.0.0.1:3000"]) {
+      const reply = await send(port, { path: "/api/health", headers: { origin } });
+      expect(reply.status).toBe(200);
+      expect(reply.headers["access-control-allow-origin"]).toBe(origin);
+    }
+    expect((await send(port, { path: "/api/stream", headers: { origin: "app://other" } })).status).toBe(403);
   });
 
   it("answers an allowed preflight, including private network access", async () => {

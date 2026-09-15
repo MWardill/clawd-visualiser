@@ -6,7 +6,7 @@ import { readBody } from "../ingest/body";
 import { ingestHook, ingestStatus, parseJson } from "../ingest/ingest";
 import type { Logger } from "../log";
 import { AGENT_VERSION } from "../version";
-import { checkOrigin, hostAllowed, tokenMatches } from "./guards";
+import { allowedOrigins, checkOrigin, hostAllowed, tokenMatches } from "./guards";
 import type { StreamHub } from "./sse";
 
 export const HOOK_BODY_LIMIT = 8 * 1024 * 1024;
@@ -130,7 +130,7 @@ export function createAgentServer(deps: ServerDeps): Server {
   }
 
   async function handleApi(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
-    const origin = checkOrigin(req.headers.origin, deps.config.corsOrigins);
+    const origin = checkOrigin(req.headers.origin, allowedOrigins(deps.config.corsOrigins));
     if (origin.kind === "denied") return refuse(req, res, 403, { error: "origin not allowed" });
     const cors: Headers = origin.kind === "allowed" ? { "access-control-allow-origin": origin.origin, vary: "Origin" } : {};
 

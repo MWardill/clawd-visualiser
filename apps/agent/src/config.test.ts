@@ -49,9 +49,9 @@ describe("paths", () => {
 describe("config", () => {
   const tempDir = useTempDirs();
 
-  it("defaults to port 4750, an empty allowlist, local web origins and a fresh 64-hex token", () => {
+  it("defaults to port 4750, an empty allowlist, no extra origins and a fresh 64-hex token", () => {
     const a = defaultConfig();
-    expect(a).toMatchObject({ version: 1, port: DEFAULT_PORT, allowlist: [], corsOrigins: ["http://localhost:3000", "http://127.0.0.1:3000"], pollIntervalMs: 10_000, claudeCommand: "claude", logRetentionDays: 7 });
+    expect(a).toMatchObject({ version: 1, port: DEFAULT_PORT, allowlist: [], corsOrigins: [], pollIntervalMs: 10_000, claudeCommand: "claude", logRetentionDays: 7 });
     expect(a.token).toMatch(/^[0-9a-f]{64}$/);
     expect(defaultConfig().token).not.toBe(a.token);
     expect(AgentConfigSchema.parse(a)).toEqual(a);
