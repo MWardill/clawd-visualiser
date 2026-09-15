@@ -1,0 +1,88 @@
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, describe, expect, it } from "vitest";
+import { createDesktopStore, desktopStatePath, parseDesktopState } from "./desktop-state";
+
+const made: string[] = [];
+afterEach(async () => {
+  await Promise.all(made.splice(0).map((dir) => rm(dir, { recursive: true, force: true })));
+});
+async function tempDir(): Promise<string> {
+  const dir = await mkdtemp(join(tmpdir(), "clawd-desktop-state-"));
+  made.push(dir);
+  return dir;
+}
+
+const BOUNDS = { x: 100, y: 80, width: 1280, height: 800 };
+
+describe("desktopStatePath", () => {
+  it("is desktop.json in the home directory", () => {
+    expect(desktopStatePath(join("C:", "home"))).toBe(join("C:", "home", "desktop.json"));
+  });
+});
+
+describe("parseDesktopState", () => {
+  it("keeps valid bounds and a boolean openAtLogin from a version 1 file", () => {
+    expect(parseDesktopState({ version: 1, bounds: BOUNDS, openAtLogin: false })).toEqual({ bounds: BOUNDS, openAtLogin: false });
+    expect(parseDesktopState({ version: 1 })).toEqual({});
+  });
+
+  it("drops each invalid field on its own, and everything from another version or a non-object", () => {
+    expect(parseDesktopState({ version: 1, bounds: { ...BOUNDS, x: "100" }, openAtLogin: true })).toEqual({ openAtLogin: true });
+    expect(parseDesktopState({ version: 1, bounds: { ...BOUNDS, width: 0 }, openAtLogin: "yes" })).toEqual({});
+    expect(parseDesktopState({ version: 1, bounds: { ...BOUNDS, height: 10.5 } })).toEqual({});
+    expect(parseDesktopState({ version: 2, bounds: BOUNDS })).toEqual({});
+    expect(parseDesktopState(null)).toEqual({});
+    expect(parseDesktopState([BOUNDS])).toEqual({});
+  });
+});
+
+describe("createDesktopStore", () => {
+  it("reads nothing remembered from a missing or damaged file", async () => {
+    const dir = await tempDir();
+    const missing = createDesktopStore(join(dir, "desktop.json"));
+    await missing.load();
+    expect(missing.get()).toEqual({});
+
+    await writeFile(join(dir, "desktop.json"), "{ not json");
+    const damaged = createDesktopStore(join(dir, "desktop.json"));
+    await damaged.load();
+    expect(damaged.get()).toEqual({});
+  });
+
+  it("loads what was saved, merges each update and writes the whole file as version 1", async () => {
+    const path = join(await tempDir(), "desktop.json");
+    await writeFile(path, JSON.stringify({ version: 1, bounds: BOUNDS }));
+    const store = createDesktopStore(path);
+    await store.load();
+    expect(store.get()).toEqual({ bounds: BOUNDS });
+
+    store.update({ openAtLogin: true });
+    store.update({ bounds: { ...BOUNDS, x: 200 } });
+    await store.flush();
+    expect(store.get()).toEqual({ bounds: { ...BOUNDS, x: 200 }, openAtLogin: true });
+    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ version: 1, bounds: { ...BOUNDS, x: 200 }, openAtLogin: true });
+  });
+
+  it("lets an update made before the load finishes win over the file", async () => {
+    const path = join(await tempDir(), "desktop.json");
+    await writeFile(path, JSON.stringify({ version: 1, bounds: BOUNDS, openAtLogin: false }));
+    const store = createDesktopStore(path);
+    const loading = store.load();
+    store.update({ openAtLogin: true });
+    await loading;
+    await store.flush();
+    expect(store.get()).toEqual({ bounds: BOUNDS, openAtLogin: true });
+  });
+
+  it("never rejects a flush, even when the file cannot be written", async () => {
+    const inTheWay = join(await tempDir(), "a-file");
+    await writeFile(inTheWay, "");
+    const store = createDesktopStore(join(inTheWay, "desktop.json"));
+    await store.load();
+    store.update({ openAtLogin: true });
+    await expect(store.flush()).resolves.toBeUndefined();
+    expect(store.get()).toEqual({ openAtLogin: true });
+  });
+});
