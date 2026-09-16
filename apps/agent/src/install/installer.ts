@@ -20,8 +20,8 @@ export type InstallRequest = {
   hooksDir: string;
   /** The directory the command was typed in, for relative --allow values. */
   cwd: string;
-  /** Absolute path of the Node binary the hook commands will run. */
-  node: string;
+  /** The command prefix the written hooks run. */
+  runtime: string;
   now: () => number;
   print: Print;
   probe?: (port: number) => Promise<boolean>;
@@ -92,50 +92,141 @@ const STATUS_DONE: Record<InstallResult["statusLine"], string> = {
   kept: "kept the Clawd status line already installed",
 };
 
-export async function install(req: InstallRequest): Promise<number> {
+export type AllowlistRequest = {
+  home: string;
+  /** Directories to add, resolved against `cwd`. */
+  add?: readonly string[];
+  /** A directory to remove, compared after normalising. */
+  remove?: string;
+  cwd: string;
+  port?: number;
+};
+export type AllowlistResult = { ok: true; allowlist: string[] } | { ok: false; message: string };
+
+/** Drop a directory from an allowlist, comparing the way the agent does. */
+export function removeFromAllowlist(existing: readonly string[], dir: string): string[] {
+  return existing.filter((d) => normalisePath(d) !== normalisePath(dir));
+}
+
+/**
+ * Saves the allowlist, and the port when one is given. The agent reads the config at startup.
+ *
+ * An empty result is refused only when `add` is asking to add directories (via `mergeAllowlist`'s
+ * own guard); watching no folders at all is a legitimate thing to save here, e.g. the settings
+ * window removing the last one. `install()` is the one place a caller must have at least one
+ * folder, and it enforces that itself before calling this.
+ */
+export async function setAllowlist(req: AllowlistRequest): Promise<AllowlistResult> {
   const paths = agentPaths(req.home);
   const base: AgentConfig = (await readConfig(paths)) ?? defaultConfig();
-  const allow = mergeAllowlist(base.allowlist, req.allow, req.cwd);
-  if (!allow.ok) {
-    req.print(allow.message);
-    return 1;
-  }
+  const starting = req.remove === undefined ? base.allowlist : removeFromAllowlist(base.allowlist, req.remove);
+  const result: AllowlistResult = req.add !== undefined && req.add.length > 0 ? mergeAllowlist(starting, req.add, req.cwd) : { ok: true, allowlist: starting };
+  if (!result.ok) return result;
+  await saveConfig(paths, { ...base, port: req.port ?? base.port, allowlist: result.allowlist });
+  return result;
+}
+
+export type HooksRequest = {
+  home: string;
+  settingsPath: string;
+  /** The command prefix the written hooks run: a Node path, or the desktop's Electron prefix. */
+  runtime: string;
+  /** Where the hook scripts are copied from: apps/agent/hooks, or the app's dist/hooks. */
+  hooksDir: string;
+  port?: number;
+  dryRun?: boolean;
+  now: () => number;
+};
+export type HooksResult =
+  | {
+      ok: true;
+      statusLine: InstallResult["statusLine"];
+      events: readonly string[];
+      backup: string | null;
+      /** The allowlist as read at the top of this call, before it. A caller that has just saved a
+       * new allowlist should read the config again rather than trust this. */
+      allowlist: string[];
+      port: number;
+    }
+  | { ok: false; message: string };
+
+/**
+ * Copies the scripts to `<home>/bin` and writes Claude Code's settings file, backing up what was
+ * there. The config is saved first, so the token the new hooks carry is on disk before they exist.
+ */
+export async function installHooks(req: HooksRequest): Promise<HooksResult> {
+  const paths = agentPaths(req.home);
+  const base: AgentConfig = (await readConfig(paths)) ?? defaultConfig();
   const port = req.port ?? base.port;
   const read = await readSettings(req.settingsPath);
-  if (read.kind === "invalid") {
-    req.print(`${req.settingsPath} is not a JSON object; nothing was changed`);
-    return 1;
-  }
+  if (read.kind === "invalid") return { ok: false, message: `${req.settingsPath} is not a JSON object; nothing was changed` };
   let result: InstallResult;
   try {
-    result = applyInstall(read.kind === "ok" ? read.value : {}, { port, token: base.token, binDir: paths.bin, node: req.node });
+    result = applyInstall(read.kind === "ok" ? read.value : {}, { port, token: base.token, binDir: paths.bin, runtime: req.runtime });
   } catch (err) {
     if (!(err instanceof SettingsShapeError)) throw err;
-    req.print(`${req.settingsPath} has an unexpected shape at ${err.message}; nothing was changed`);
-    return 1;
+    return { ok: false, message: `${req.settingsPath} has an unexpected shape at ${err.message}; nothing was changed` };
   }
-
-  if (req.dryRun) {
-    req.print(`dry run: would add hooks to ${req.settingsPath} for ${result.events.join(", ")}`);
-    req.print(`dry run: would ${STATUS_WORDS[result.statusLine]}`);
-    req.print(`dry run: the allowlist would be ${allow.allowlist.join(", ")}`);
-    return 0;
-  }
+  if (req.dryRun === true) return { ok: true, statusLine: result.statusLine, events: result.events, backup: null, allowlist: base.allowlist, port };
 
   await mkdir(paths.bin, { recursive: true });
   for (const script of HOOK_SCRIPTS) await copyFile(join(req.hooksDir, script), join(paths.bin, script));
   const wrapped = result.statusLine === "wrapped" ? result.newlyWrapped : result.statusLine === "kept" ? base.wrappedStatusLine : undefined;
   const { wrappedStatusLine: _wrapped, ...baseWithoutWrapped } = base;
-  // The config goes first, so the token the new hooks carry is on disk before the hooks exist.
-  await saveConfig(paths, { ...baseWithoutWrapped, port, allowlist: allow.allowlist, ...(wrapped ? { wrappedStatusLine: wrapped } : {}) });
+  await saveConfig(paths, { ...baseWithoutWrapped, port, ...(wrapped ? { wrappedStatusLine: wrapped } : {}) });
   const saved = read.kind === "ok" ? await backup(req.settingsPath, req.now()) : null;
   await writeJsonAtomic(req.settingsPath, result.settings);
+  return { ok: true, statusLine: result.statusLine, events: result.events, backup: saved, allowlist: base.allowlist, port };
+}
 
-  req.print(`installed the Clawd hooks into ${req.settingsPath}; ${STATUS_DONE[result.statusLine]}`);
-  req.print(saved ? `backup of the previous settings: ${saved}` : "there were no previous settings to back up");
+/** The CLI's install: the check, then the allowlist, then the hooks, then the report the user reads. */
+export async function install(req: InstallRequest): Promise<number> {
+  const common = {
+    home: req.home,
+    settingsPath: req.settingsPath,
+    runtime: req.runtime,
+    hooksDir: req.hooksDir,
+    ...(req.port === undefined ? {} : { port: req.port }),
+    now: req.now,
+  };
+  // A dry run writes nothing, so this reads and validates the settings file before anything is saved.
+  const check = await installHooks({ ...common, dryRun: true });
+  if (!check.ok) {
+    req.print(check.message);
+    return 1;
+  }
+  // The command, unlike setAllowlist itself, still insists on at least one folder: an empty
+  // --allow with an empty (or absent) config means the user named nothing to watch. Check that
+  // here, before anything is saved, reusing mergeAllowlist's own empty-result message.
+  const existingAllowlist = (await readConfig(agentPaths(req.home)))?.allowlist ?? [];
+  const merged = mergeAllowlist(existingAllowlist, req.allow, req.cwd);
+  if (!merged.ok) {
+    req.print(merged.message);
+    return 1;
+  }
+  const allow = req.dryRun
+    ? merged
+    : await setAllowlist({ home: req.home, add: req.allow, cwd: req.cwd, ...(req.port === undefined ? {} : { port: req.port }) });
+  if (!allow.ok) {
+    req.print(allow.message);
+    return 1;
+  }
+  if (req.dryRun) {
+    req.print(`dry run: would add hooks to ${req.settingsPath} for ${check.events.join(", ")}`);
+    req.print(`dry run: would ${STATUS_WORDS[check.statusLine]}`);
+    req.print(`dry run: the allowlist would be ${allow.allowlist.join(", ")}`);
+    return 0;
+  }
+  const hooks = await installHooks(common);
+  if (!hooks.ok) {
+    req.print(hooks.message);
+    return 1;
+  }
+  req.print(`installed the Clawd hooks into ${req.settingsPath}; ${STATUS_DONE[hooks.statusLine]}`);
+  req.print(hooks.backup ? `backup of the previous settings: ${hooks.backup}` : "there were no previous settings to back up");
   req.print(`allowlist: ${allow.allowlist.join(", ")}`);
-  const running = await (req.probe ?? probeAgent)(port);
-  req.print(running ? `an agent is running on port ${port}; restart it to pick up these changes` : "start the agent with: pnpm --filter @clawd/agent start");
+  const running = await (req.probe ?? probeAgent)(hooks.port);
+  req.print(running ? `an agent is running on port ${hooks.port}; restart it to pick up these changes` : "start the agent with: pnpm --filter @clawd/agent start");
   return 0;
 }
 

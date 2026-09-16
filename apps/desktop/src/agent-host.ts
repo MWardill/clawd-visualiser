@@ -39,6 +39,8 @@ export type AgentHost = {
   fault(): void;
   /** From failed, starts again with the fault history cleared. */
   retry(): void;
+  /** The user changed the config: stop the agent the app owns and start one that reads it. */
+  restart(): void;
   /** Stops for good: cancels any wait and stops the agent the app owns. */
   stop(): Promise<void>;
 };
@@ -171,6 +173,17 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
       queue(async () => {
         if (stopped() || state.mode !== "failed") return;
         faults = [];
+        return attempt();
+      });
+    },
+    restart() {
+      queue(async () => {
+        if (stopped()) return;
+        begun = true;
+        if (timer !== null) clearTimeout(timer);
+        timer = null;
+        faults = [];
+        await release();
         return attempt();
       });
     },

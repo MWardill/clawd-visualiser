@@ -32,7 +32,9 @@ export class SettingsShapeError extends Error {
   override readonly name = "SettingsShapeError";
 }
 
-export type InstallOptions = { port: number; token: string; binDir: string; node: string };
+/** `runtime` is the whole command prefix that runs a script: a quoted Node path, or the desktop's Electron prefix. */
+export type InstallOptions = { port: number; token: string; binDir: string; runtime: string };
+export type HookStatus = "missing" | "current" | "stale";
 export type InstallResult = {
   settings: JsonObject;
   /** The user's status line, when this install wrapped it; null when there was none or it was already ours. */
@@ -47,8 +49,11 @@ export function isJsonObject(value: unknown): value is JsonObject {
 
 const forwardSlashes = (p: string): string => p.replace(/\\/g, "/");
 
+/** The CLI's prefix: the Node binary, quoted, with forward slashes. */
+export const nodeRuntime = (nodePath: string): string => `"${forwardSlashes(nodePath)}"`;
+
 function scriptCommand(opts: InstallOptions, script: string): string {
-  return `"${forwardSlashes(opts.node)}" "${forwardSlashes(opts.binDir).replace(/\/+$/, "")}/${script}"`;
+  return `${opts.runtime} "${forwardSlashes(opts.binDir).replace(/\/+$/, "")}/${script}"`;
 }
 
 export const hookCommand = (opts: InstallOptions): string => scriptCommand(opts, HOOK_SCRIPT);
@@ -63,6 +68,34 @@ export function isOurHook(hook: unknown): boolean {
 
 export function isOurStatusLine(value: unknown): boolean {
   return isJsonObject(value) && typeof value.command === "string" && value.command.includes(STATUS_SCRIPT);
+}
+
+/** Our SessionStart command hook, whatever command it holds, or null. */
+function ourHookCommand(settings: JsonObject): string | null {
+  const hooks = settings.hooks;
+  if (!isJsonObject(hooks)) return null;
+  const groups = hooks.SessionStart;
+  if (!Array.isArray(groups)) return null;
+  for (const group of groups) {
+    if (!isJsonObject(group) || !Array.isArray(group.hooks)) continue;
+    for (const hook of group.hooks) {
+      if (isJsonObject(hook) && hook.type === "command" && typeof hook.command === "string" && hook.command.includes(HOOK_SCRIPT)) return hook.command;
+    }
+  }
+  return null;
+}
+
+/**
+ * Whether the settings file already runs the commands we would write. `stale` is ours present but
+ * not matching what an install would write now: pointing somewhere else, which is what a moved
+ * folder or a new unzip leaves behind, or half-present, such as a status line removed by hand.
+ */
+export function hookStatus(settings: JsonObject | null, expected: { hook: string; status: string }): HookStatus {
+  if (settings === null) return "missing";
+  const hook = ourHookCommand(settings);
+  const line = isOurStatusLine(settings.statusLine) ? (settings.statusLine as { command: string }).command : null;
+  if (hook === null && line === null) return "missing";
+  return hook === expected.hook && line === expected.status ? "current" : "stale";
 }
 
 /** Remove our hooks; drop groups and events that only we filled. Anything else is left as found. */

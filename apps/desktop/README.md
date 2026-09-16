@@ -29,6 +29,10 @@ icon to bring it back, and quit from the tray menu or with Ctrl+Q. Only one copy
 again shows the running copy's window. `--hidden` starts it with only the tray icon, as the login
 item does. The window's position and the login choice are kept in `~/.clawd/desktop.json`.
 
+Settings opens from the tray. It watches folders, installs Claude Code's hooks under this app's own
+binary, sets the detail level and toggles start on login, so a machine can be set up from the app
+alone. `CLAWD_HOME` and `CLAUDE_CONFIG_DIR` point it at scratch folders while testing.
+
 For work on the page, the dev loop loads the Next dev server instead, with hot reload:
 
 ```
@@ -190,3 +194,37 @@ first run.
 
 What stage 4 leaves in place: the tray menu is Open, Start on login and Quit; Settings joins it with
 the settings window in stage 5.
+
+### Stage 5: the settings window
+
+Every window so far was a sandboxed page that could only reach the agent over HTTP. The settings
+window has to do things a page must never do by itself: open a folder picker, write Claude Code's
+settings file, change the login item.
+
+**The preload bridge.** A preload script runs before the page, in its own world: it cannot see the
+page's variables, and the page cannot see its. `contextBridge.exposeInMainWorld` publishes exactly
+the functions in `settings/preload.ts` as `window.clawd`, and each one is an `ipcRenderer.invoke`
+message. The page stays sandboxed with no Node access; `window.require` and `window.process` are
+undefined in it.
+
+**Main is the only privileged side.** `settings/ipc.ts` names one channel per call, validates every
+argument with zod, and answers with the whole new state, so the page never asks twice. An argument
+that does not validate changes nothing. Everything that touches the disk, the registry or the agent
+happens in main, over injected actions that are tested without Electron.
+
+**Hooks under the app's binary.** With `ELECTRON_RUN_AS_NODE=1` the app's own exe runs as plain Node,
+so Claude Code's hooks need no Node install: the written command is that prefix plus the script in
+`~/.clawd/bin`. The installer takes this prefix as a string now, and the agent also gained the hook
+status check, the quoting helper, the split into setting the allowlist and installing hooks, the
+removal helper, a relaxed rule about watching no folders, and new log codes. One hook run measured
+here, on a development build rather than a packaged one, with an empty payload on stdin, took 233 ms
+the first time and about 140 ms warm, well inside the two second timeout the installer writes. At
+launch the app compares the commands in the settings file with the ones it would write: ours pointing
+elsewhere are rewritten and logged as `desktop.hooksRepaired`, so a moved folder repairs itself;
+hooks that were never installed wait for this window.
+
+**Its own origin.** The page is served from `app://settings/`, beside the visualiser's `app://clawd/`,
+under a stricter policy: it may load only its own files and may open no connections at all, because
+it talks to main through the bridge.
+
+What stage 5 leaves in place: everything a teammate needs except packaging, which is stage 6.

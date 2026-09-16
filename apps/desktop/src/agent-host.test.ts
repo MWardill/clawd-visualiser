@@ -1,7 +1,7 @@
 import { ConfigError, PortInUseError, type RunningAgent } from "@clawd/agent";
 import type { Snapshot } from "@clawd/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ATTACHED_POLL_MS, FAULT_WINDOW_MS, createAgentHost, statusText, type AgentHostDeps, type HostState } from "./agent-host";
+import { ATTACHED_POLL_MS, BACKOFF_MS, FAULT_WINDOW_MS, createAgentHost, statusText, type AgentHostDeps, type HostState } from "./agent-host";
 import { snapshot } from "./testing/snapshot";
 
 /** Runs every queued promise callback. setImmediate is left real by the fake timers below. */
@@ -211,6 +211,64 @@ describe("createAgentHost", () => {
     });
     await stopping;
     expect(stopped).toBe(true);
+  });
+
+  it("restarts the agent it owns, so a changed config is read again", async () => {
+    const { host, agents, codes } = harness();
+    host.start();
+    await flush();
+    host.restart();
+    await flush();
+    expect(agents[0]?.stopped).toBe(true);
+    expect(agents).toHaveLength(2);
+    expect(host.state()).toMatchObject({ mode: "own", port: 4750 });
+    expect(codes).toEqual([]);
+  });
+
+  it("takes over from an attached agent on a restart, and starts nothing after stop", async () => {
+    const attached = harness({ fail: [new PortInUseError(4750)], probe: async () => true });
+    attached.host.start();
+    await flush();
+    const codesBeforeRestart = [...attached.codes];
+    const startsBeforeRestart = attached.starts();
+    attached.host.restart();
+    await flush();
+    expect(attached.host.state().mode).toBe("own");
+    expect(attached.codes).toEqual(codesBeforeRestart);
+    expect(attached.starts()).toBe(startsBeforeRestart + 1);
+
+    const afterStop = harness();
+    afterStop.host.start();
+    await flush();
+    await afterStop.host.stop();
+    afterStop.host.restart();
+    await flush();
+    expect(afterStop.starts()).toBe(1);
+  });
+
+  it("cancels a pending restart wait, so a backoff cannot start a second agent", async () => {
+    const { host, starts } = harness({ fail: [new Error("boom")] });
+    host.start();
+    await flush();
+    expect(host.state().mode).toBe("restarting");
+    host.restart();
+    await flush();
+    expect(starts()).toBe(2);
+    await advance(BACKOFF_MS[0] ?? 1_000);
+    expect(starts()).toBe(2);
+  });
+
+  it("starts again after the host has given up", async () => {
+    const boom = new Error("boom");
+    const { host, starts } = harness({ fail: Array.from({ length: 6 }, () => boom) });
+    host.start();
+    await flush();
+    for (const delay of BACKOFF_MS) await advance(delay);
+    expect(host.state().mode).toBe("failed");
+    host.restart();
+    await flush();
+    expect(host.state().mode).toBe("own");
+    expect(starts()).toBe(7);
   });
 });
 

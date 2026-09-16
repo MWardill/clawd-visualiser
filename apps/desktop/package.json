@@ -11,12 +11,13 @@
     "dev": "node build/bundle.mjs && electron . --dev-url http://localhost:3000",
     "start": "node build/renderer.mjs && node build/bundle.mjs && electron .",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.page.json"
   },
   "devDependencies": {
     "@clawd/agent": "workspace:*",
     "@clawd/core": "workspace:*",
     "@clawd/scene": "workspace:*",
+    "zod": "^4.6.2",
     "@types/node": "^22.20.2",
     "electron": "^44.3.0",
     "esbuild": "^0.28.2",

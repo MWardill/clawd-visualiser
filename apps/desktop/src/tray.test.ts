@@ -7,7 +7,15 @@ const click = (item: MenuItemConstructorOptions | undefined): void => (item?.cli
 
 function recorder() {
   const calls: string[] = [];
-  return { calls, actions: { open: () => void calls.push("open"), setOpenAtLogin: (on: boolean) => void calls.push(`login ${on}`), quit: () => void calls.push("quit") } };
+  return {
+    calls,
+    actions: {
+      open: () => void calls.push("open"),
+      settings: () => void calls.push("settings"),
+      setOpenAtLogin: (on: boolean) => void calls.push(`login ${on}`),
+      quit: () => void calls.push("quit"),
+    },
+  };
 }
 
 describe("trayIconFile", () => {
@@ -22,24 +30,25 @@ describe("trayIconFile", () => {
 });
 
 describe("trayMenuTemplate", () => {
-  it("is Open, Start on login as a checkbox, a separator, then Quit", () => {
+  it("is Open, Settings, Start on login as a checkbox, a separator, then Quit", () => {
     const { actions } = recorder();
     const menu = trayMenuTemplate(true, actions);
-    expect(menu.map((item) => item.label ?? item.type)).toEqual(["Open", "Start on login", "separator", "Quit"]);
-    expect(menu[1]).toMatchObject({ type: "checkbox", checked: true });
-    expect(trayMenuTemplate(false, actions)[1]).toMatchObject({ type: "checkbox", checked: false });
+    expect(menu.map((item) => item.label ?? item.type)).toEqual(["Open", "Settings", "Start on login", "separator", "Quit"]);
+    expect(menu[2]).toMatchObject({ type: "checkbox", checked: true });
+    expect(trayMenuTemplate(false, actions)[2]).toMatchObject({ type: "checkbox", checked: false });
   });
 
-  it("opens, flips the login choice from what the menu showed, and quits", () => {
+  it("opens, opens settings, flips the login choice from what the menu showed, and quits", () => {
     const on = recorder();
     const menu = trayMenuTemplate(true, on.actions);
     click(menu[0]);
     click(menu[1]);
-    click(menu[3]);
-    expect(on.calls).toEqual(["open", "login false", "quit"]);
+    click(menu[2]);
+    click(menu[4]);
+    expect(on.calls).toEqual(["open", "settings", "login false", "quit"]);
 
     const off = recorder();
-    click(trayMenuTemplate(false, off.actions)[1]);
+    click(trayMenuTemplate(false, off.actions)[2]);
     expect(off.calls).toEqual(["login true"]);
   });
 });

@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it, vi } from "vitest";
@@ -53,6 +53,10 @@ describe("runCli", () => {
     const custom = join(t.root, "custom", "settings.json");
     expect(await runCli(["install", "--allow", "work", "--port", "4799", "--settings", custom], t.e)).toBe(0);
     expect(existsSync(custom)).toBe(true);
+    const settings = JSON.parse(await readFile(custom, "utf8"));
+    const sessionStartCommand = settings.hooks.SessionStart[0].hooks.find((h: { type: string }) => h.type === "command").command as string;
+    expect(sessionStartCommand.startsWith('"')).toBe(true);
+    expect(sessionStartCommand).toContain(t.e.node.replace(/\\/g, "/"));
     expect(await runCli(["uninstall", "--settings", custom], t.e)).toBe(0);
   });
 

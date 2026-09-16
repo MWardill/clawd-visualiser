@@ -1,7 +1,25 @@
 import { describe, expect, it } from "vitest";
-import { HOOK_EVENTS, SettingsShapeError, applyInstall, applyUninstall, isOurHook, isOurStatusLine, type InstallOptions, type JsonObject } from "./settings";
+import {
+  HOOK_EVENTS,
+  SettingsShapeError,
+  applyInstall,
+  applyUninstall,
+  hookCommand,
+  hookStatus,
+  isOurHook,
+  isOurStatusLine,
+  nodeRuntime,
+  statusCommand,
+  type InstallOptions,
+  type JsonObject,
+} from "./settings";
 
-const OPTS: InstallOptions = { port: 4750, token: "t".repeat(64), binDir: "C:\\Users\\me\\.clawd\\bin\\", node: "C:\\Program Files\\nodejs\\node.exe" };
+const OPTS: InstallOptions = {
+  port: 4750,
+  token: "t".repeat(64),
+  binDir: "C:\\Users\\me\\.clawd\\bin\\",
+  runtime: nodeRuntime("C:\\Program Files\\nodejs\\node.exe"),
+};
 const HTTP = { type: "http", url: "http://127.0.0.1:4750/ingest/hook", headers: { "x-clawd-token": OPTS.token }, timeout: 2 };
 const HOOK_CMD = '"C:/Program Files/nodejs/node.exe" "C:/Users/me/.clawd/bin/clawd-hook.mjs"';
 const STATUS_CMD = '"C:/Program Files/nodejs/node.exe" "C:/Users/me/.clawd/bin/clawd-statusline.mjs"';
@@ -109,5 +127,38 @@ describe("recognising its own entries", () => {
     expect(isOurHook(null)).toBe(false);
     expect(isOurStatusLine({ type: "command", command: '"node" "C:/x/clawd-statusline.mjs"' })).toBe(true);
     expect(isOurStatusLine({ type: "command", command: "mine.sh" })).toBe(false);
+  });
+});
+
+describe("nodeRuntime", () => {
+  it("quotes the Node path with forward slashes, as the command needs", () => {
+    expect(nodeRuntime("C:\\Program Files\\nodejs\\node.exe")).toBe('"C:/Program Files/nodejs/node.exe"');
+  });
+});
+
+describe("hookStatus", () => {
+  const expected = { hook: '"node" "C:/h/bin/clawd-hook.mjs"', status: '"node" "C:/h/bin/clawd-statusline.mjs"' };
+  const withCommands = (hook: string, status: string): JsonObject => ({
+    hooks: { SessionStart: [{ hooks: [{ type: "command", command: hook, timeout: 2 }] }] },
+    statusLine: { type: "command", command: status },
+  });
+
+  it("is missing when nothing of ours is there", () => {
+    expect(hookStatus(null, expected)).toBe("missing");
+    expect(hookStatus({}, expected)).toBe("missing");
+    expect(hookStatus({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "other.mjs" }] }] } }, expected)).toBe("missing");
+  });
+
+  it("is current when both commands are the ones we would write", () => {
+    expect(hookStatus(withCommands(expected.hook, expected.status), expected)).toBe("current");
+  });
+
+  it("is stale when ours are there with another command, as after the folder moved", () => {
+    expect(hookStatus(withCommands('"D:/old/electron.exe" "C:/h/bin/clawd-hook.mjs"', expected.status), expected)).toBe("stale");
+    expect(hookStatus(withCommands(expected.hook, '"D:/old/electron.exe" "C:/h/bin/clawd-statusline.mjs"'), expected)).toBe("stale");
+  });
+
+  it("is stale when our hook is there but the status line was removed by hand, since an install would write it back", () => {
+    expect(hookStatus({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: expected.hook }] }] } }, expected)).toBe("stale");
   });
 });

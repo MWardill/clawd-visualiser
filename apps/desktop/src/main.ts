@@ -1,20 +1,40 @@
 // The main process: the one Node program in the app. It owns the lifecycle, the window and the tray,
 // and runs the agent itself; Chromium draws, in a sandboxed renderer process per window.
-import { DEFAULT_PORT, agentPaths, createLogger, defaultHome, startAgent } from "@clawd/agent";
-import { Menu, Tray, app, nativeImage, protocol, screen, type BrowserWindow, type NativeImage } from "electron";
+import {
+  AGENT_VERSION,
+  DEFAULT_PORT,
+  agentPaths,
+  createLogger,
+  defaultHome,
+  defaultSettingsPath,
+  installHooks,
+  readConfig,
+  readJsonFile,
+  setAllowlist,
+  setDetail,
+  startAgent,
+  uninstall,
+  type JsonObject,
+} from "@clawd/agent";
+import { Menu, Tray, app, dialog, ipcMain, nativeImage, protocol, screen, shell, type BrowserWindow, type NativeImage } from "electron";
 import { join } from "node:path";
 import { fetchCounts, probeHealth } from "./agent-client";
 import { createAgentHost, statusText, type HostState } from "./agent-host";
 import { ownArgs, parseArgs, resolveRendererUrl } from "./args";
 import { restoredBounds } from "./bounds";
 import { createDesktopStore, desktopStatePath } from "./desktop-state";
+import { expectedCommands, hookStatus, repairOnLaunch, runtimePrefix, type HookStatus } from "./hooks";
 import { isQuitShortcut } from "./keys";
 import { createFileSink, readRetentionDays } from "./log";
 import { APP_ID, loginItemTarget, loginOnLaunch } from "./login";
+import { distPaths } from "./paths";
 import { createQuitHandler } from "./quit";
 import { APP_SCHEME, createSchemeHandler } from "./scheme";
+import { settingsState, type SettingsState } from "./settings-state";
+import { createCoalescer } from "./settings/coalesce";
+import { CHANNELS, createHandlers } from "./settings/ipc";
 import { trayIconFile, trayMenuTemplate } from "./tray";
-import { createMainWindow } from "./window";
+import { createMainWindow, createSettingsWindow } from "./window";
 
 // One copy of the app per user. The first launch holds the lock; a second one hands its command
 // line to the first, through `second-instance`, and exits here before doing anything else.
@@ -46,12 +66,22 @@ function run(): void {
 
   const store = createDesktopStore(desktopStatePath(home));
   const login = loginItemTarget(app.isPackaged, process.execPath, app.getAppPath());
+  const dist = distPaths(__dirname);
+  const settingsPath = defaultSettingsPath();
+  const runtime = runtimePrefix(process.execPath);
 
   let win: BrowserWindow | null = null;
+  let settingsWin: BrowserWindow | null = null;
   let tray: Tray | null = null;
   let trayFile = "";
   // Set once quitting has begun, so that closing the window really closes it rather than hiding it.
   let quitting = false;
+
+  // The host's change callback fires on every snapshot the agent produces, and building the state
+  // reads two files and asks Electron for the login item synchronously, on the same event loop the
+  // agent runs on. A burst of snapshots is collapsed into one rebuild rather than one each.
+  const STATE_COALESCE_MS = 150;
+  const pushStateSoon = createCoalescer(STATE_COALESCE_MS, pushState);
 
   const host = createAgentHost({
     start: (onSnapshot) => startAgent({ home, log, onSnapshot }),
@@ -61,6 +91,7 @@ function run(): void {
     onChange: (state) => {
       if (win !== null && !win.isDestroyed()) win.setTitle(statusText(state));
       refreshTray(state);
+      pushStateSoon.ask();
     },
   });
 
@@ -102,7 +133,7 @@ function run(): void {
 
   /** Electron loads the @2x file beside the named one on a display scaled to 200%. */
   function trayImage(file: string): NativeImage {
-    return nativeImage.createFromPath(join(__dirname, "tray", file));
+    return nativeImage.createFromPath(join(dist.tray, file));
   }
 
   function refreshTray(state: HostState): void {
@@ -123,18 +154,71 @@ function run(): void {
     app.setLoginItemSettings({ ...login, openAtLogin: on });
     store.update({ openAtLogin: on });
     refreshMenu();
+    pushState();
   }
 
   /** The menu is rebuilt whenever the login checkbox could have changed. */
   function refreshMenu(): void {
-    tray?.setContextMenu(Menu.buildFromTemplate(trayMenuTemplate(openAtLogin(), { open: showWindow, setOpenAtLogin, quit: () => app.quit() })));
+    tray?.setContextMenu(
+      Menu.buildFromTemplate(trayMenuTemplate(openAtLogin(), { open: showWindow, settings: showSettings, setOpenAtLogin, quit: () => app.quit() })),
+    );
+  }
+
+  /** The agent's own installer options, which say what the hooks should run. */
+  async function hookOptions(): Promise<{ runtime: string; binDir: string; port: number; token: string } | null> {
+    const config = await readConfig(agentPaths(home)).catch(() => null);
+    if (config === null) return null;
+    return { runtime, binDir: agentPaths(home).bin, port: config.port, token: config.token };
+  }
+
+  async function currentHookStatus(): Promise<HookStatus> {
+    const opts = await hookOptions();
+    if (opts === null) return "missing";
+    const file = await readJsonFile(settingsPath).catch(() => ({ found: false }) as const);
+    const settings = file.found && file.ok ? (file.value as JsonObject) : null;
+    return hookStatus(settings, expectedCommands(opts));
+  }
+
+  async function currentState(): Promise<SettingsState> {
+    const config = await readConfig(agentPaths(home)).catch(() => null);
+    return settingsState({
+      host: host.state(),
+      agentVersion: AGENT_VERSION,
+      appVersion: app.getVersion(),
+      exe: process.execPath,
+      allowlist: config?.allowlist ?? [],
+      hooks: await currentHookStatus(),
+      detail: config?.detail ?? "none",
+      openAtLogin: openAtLogin(),
+      logDir: agentPaths(home).logs,
+    });
+  }
+
+  /** After a config change the agent reads it again, and the page hears about the new state. */
+  function pushState(): void {
+    if (settingsWin === null || settingsWin.isDestroyed()) return;
+    void currentState().then((state) => {
+      if (settingsWin !== null && !settingsWin.isDestroyed()) settingsWin.webContents.send(CHANNELS.state, state);
+    });
+  }
+
+  function showSettings(): void {
+    if (settingsWin !== null && !settingsWin.isDestroyed()) {
+      settingsWin.show();
+      settingsWin.focus();
+      return;
+    }
+    settingsWin = createSettingsWindow(join(dist.settings, "preload.js"));
+    settingsWin.on("closed", () => {
+      settingsWin = null;
+    });
   }
 
   // `ready` fires once Electron has initialised; no window or tray can be made before it.
   const started = app.whenReady().then(async () => {
     // Every app:// request is answered from the export beside main.cjs, under a CSP that lets the
     // page reach only the agent in use.
-    protocol.handle(APP_SCHEME, createSchemeHandler({ rendererDir: join(__dirname, "renderer"), port: () => host.state().port ?? DEFAULT_PORT }));
+    protocol.handle(APP_SCHEME, createSchemeHandler({ dirs: { clawd: dist.renderer, settings: dist.settings }, port: () => host.state().port ?? DEFAULT_PORT }));
     log("desktop.started", { packaged: app.isPackaged });
     host.start();
     await store.load();
@@ -146,8 +230,96 @@ function run(): void {
     trayFile = trayIconFile(0);
     tray = new Tray(trayImage(trayFile));
     tray.on("click", () => showWindow());
+
+    for (const [channel, handler] of Object.entries(
+      createHandlers(
+        {
+          getState: currentState,
+          // Each of these can throw: creating the folder, copying the scripts, saving the config and
+          // writing the settings file are all I/O. A throw would unwind into the message layer, which
+          // re-renders the page unchanged, so every one is caught here and logged before answering.
+          async addFolder() {
+            try {
+              const picked = await dialog.showOpenDialog({ properties: ["openDirectory"], title: "Watch a folder" });
+              const dir = picked.canceled ? null : (picked.filePaths[0] ?? null);
+              if (dir !== null) {
+                const saved = await setAllowlist({ home, add: [dir], cwd: home });
+                if (saved.ok) host.restart();
+                else log("desktop.folderFailed");
+              }
+            } catch {
+              log("desktop.folderFailed");
+            }
+            return await currentState();
+          },
+          async removeFolder(dir) {
+            try {
+              const config = await readConfig(agentPaths(home));
+              if (config !== null) {
+                const saved = await setAllowlist({ home, remove: dir, cwd: home });
+                if (saved.ok) host.restart();
+                else log("desktop.folderFailed");
+              }
+            } catch {
+              log("desktop.folderFailed");
+            }
+            return await currentState();
+          },
+          async installHooks() {
+            try {
+              const result = await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
+              if (!result.ok) log("desktop.hooksFailed", { repair: false });
+            } catch {
+              log("desktop.hooksFailed", { repair: false });
+            }
+            return await currentState();
+          },
+          async uninstallHooks() {
+            try {
+              const code = await uninstall({ home, settingsPath, now: Date.now, print: () => {} });
+              if (code !== 0) log("desktop.hooksFailed", { repair: false });
+            } catch {
+              log("desktop.hooksFailed", { repair: false });
+            }
+            return await currentState();
+          },
+          async setDetail(level) {
+            await setDetail({ home, level, print: () => {} });
+            host.restart();
+            return currentState();
+          },
+          async setOpenAtLogin(on) {
+            setOpenAtLogin(on);
+            return currentState();
+          },
+          async retryAgent() {
+            host.retry();
+            return currentState();
+          },
+          async openLogs() {
+            await shell.openPath(agentPaths(home).logs);
+          },
+        },
+        await currentState(),
+      ),
+    )) {
+      ipcMain.handle(channel, (_event, arg: unknown) => handler(arg));
+    }
+
     refreshTray(host.state());
     refreshMenu();
+
+    // Our hooks pointing at another folder are rewritten, so a moved app keeps receiving events.
+    const status = await currentHookStatus();
+    if (repairOnLaunch(status)) {
+      try {
+        const repaired = await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
+        if (repaired.ok) log("desktop.hooksRepaired");
+        else log("desktop.hooksFailed", { repair: true });
+      } catch {
+        log("desktop.hooksFailed", { repair: true });
+      }
+    }
 
     const action = loginOnLaunch({ packaged: app.isPackaged, remembered: store.get().openAtLogin, registered: openAtLogin() });
     if (action !== "none") {
@@ -176,6 +348,8 @@ function run(): void {
   // through, and take the window and the tray icon away at once while the agent stops.
   app.on("before-quit", () => {
     quitting = true;
+    // A rebuild waiting on the coalescer would only build state for a window that is going away.
+    pushStateSoon.cancel();
     win?.hide();
     tray?.destroy();
     tray = null;

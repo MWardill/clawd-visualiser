@@ -217,7 +217,9 @@ matching the app. The detail section is present only once the detail levels desi
 - Logs: `~/.clawd/logs/desktop-YYYY-MM-DD.log`, one JSON line per entry, written by the agent's
   `createLogger` with a file sink, so the codes-only rule holds for the desktop. New codes:
   `desktop.started`, `desktop.attached`, `desktop.takeover`, `desktop.agentFault`,
-  `desktop.agentFailed`, `desktop.hooksRepaired`, `desktop.loginItemReapplied`. Retention follows
+  `desktop.agentFailed`, `desktop.hooksRepaired`, `desktop.hooksFailed` (a hook write that failed or
+  threw, with a boolean for whether it was a launch repair), `desktop.folderFailed` (a watched-folder
+  change that was refused or threw), `desktop.loginItemReapplied`. Retention follows
   `logRetentionDays`.
 
 ## 11. Packaging and distribution
@@ -336,6 +338,80 @@ and is settled in its plan; the rest wait like the items above.
   launches, bounds, `--hidden`, the login item's re-apply and the development loop. Worth repeating
   once stage 6 packages the app: a real sign-out and sign-in with the login item on, since the
   packaged entry differs from the development one.
+
+Found in the reviews of stage 5 (16 September 2026).
+
+- **A restart the user asked for clears the fault budget.** `agent-host.ts`'s `restart()`, which the
+  settings window calls after a folder or detail-level change, resets the fault history, so the
+  give-up path cannot fire while restarts keep arriving. That is deliberate: only the settings window
+  calls it, nobody clicks faster than five crashes accumulate, and keeping the budget would deny a
+  clean start to someone who has just fixed a bad config. Revisit it if anything else ever calls
+  `restart()`, especially on a timer.
+- **The settings actions are rules living in untested glue.** `main.ts`'s actions object decides
+  things: save, then restart only when the save succeeded, and log a code when a write fails. That is
+  where the last-folder defect lived and where two more were found in review. `createHandlers`
+  already takes its actions injected, so a `createSettingsActions(deps)` factory could be tested with
+  doubles and leave `main.ts` as the wiring the design intends.
+- **The settings window does not get the app's font.** The build copies only the page's markup and
+  stylesheet into its directory, and the settings origin may load only its own files, so the face the
+  visualiser uses is out of reach and the window falls back to whatever the machine has. Ship the
+  font beside the page, or accept the fallback deliberately.
+- **A status line removed by hand is reinstated at every launch.** `hookStatus` calls our hook
+  present with the status line missing `stale`, and launch repair now runs unattended, so it writes
+  back something the user deleted. Decide whether that is repair or override; the same predicate also
+  drives the settings window's Reinstall button, where writing it back is clearly right.
+- **The preload carries the validation library.** The bridge script imports only the channel names,
+  but the module holding them also builds a schema, and `@clawd/core` is not marked side-effect free,
+  so the bundler keeps the whole barrel: roughly 750 kB loaded before every settings page. Mark the
+  core package side-effect free, or move the channel names into a module of their own.
+- **The hook check ignores the port and the token.** `hookStatus` compares only the command hook and
+  the status line, not the HTTP hook that carries the agent's port and token. A settings file whose
+  port was edited, or whose token no longer matches after `config.json` was recreated, still reports
+  `current`: the launch repair never fires, the settings window says the hooks are installed, and
+  events are lost with nothing said. Decide it together with the hand-deleted status line item above,
+  since both are what `stale` should mean.
+- **The bridge cannot tell the user an action was refused.** Every call answers with the whole state
+  and nothing else, so a refusal — a drive root picked in the folder dialog, say — re-renders an
+  identical page. Two defects have traced to this. The refusal now logs a code, which makes it
+  diagnosable but not visible. Adding a message to the bridge's answers would breach this stage's rule
+  that the list of calls does not grow, so it belongs to a stage that revisits the bridge.
+- **The failed agent's reason is never shown.** The host keeps a message for an unusable config, which
+  the design says the settings window should show beside the log directory and the retry button. The
+  directory is now rendered, but the reason has no route to the page: it is not part of the state the
+  bridge carries. Add it when the bridge next changes.
+
+Asked for while stage 5 was finishing (16 September 2026). Not a review finding; the shape below was
+settled in conversation, so whoever picks it up does not have to decide it again.
+
+- **A wait nobody answers should stop being shown.** `isShown` shows a waiting session for as long
+  as it waits, so a permission prompt left unanswered keeps its Clawd on screen for days. It should
+  be shown while waiting only until it has been waiting longer than a new `waitingHideMs` in
+  `StateConfig`, default 36 hours, following its neighbours' naming and their strictly-less-than
+  boundary. Past that the session falls through to the existing rules, which hide it whatever its
+  prompt count, since a stale wait is not activity. Two decisions go with it. It stays `waiting` in
+  the fleet rather than being re-stated as idle, so answering the prompt makes it working and it
+  returns at once, and so a heavily used session does not linger on screen as idle instead. And the
+  36 hours are measured from `since`, the moment it entered the state, not from its last activity,
+  which a tool finishing or a subagent stopping elsewhere could otherwise push back. One condition
+  in `visibility.ts` carries it: the snapshot format, the scene, the web app and the agent are all
+  untouched, and both places that build a `StateConfig` spread the defaults, so a new field with a
+  default reaches them. Hiding it also drops it from the tray badge, the window title and the status
+  bar, which all read the snapshot, and a pane whose only session is a stale wait goes with it.
+  Worth testing at either side of the boundary, with and without prompts, that an answer after the
+  limit brings it back, and that the four committed golden snapshots do not move, since each replays
+  a short captured run.
+
+Skipped when the settings page's choices became radio groups (16 September 2026).
+
+- **The settings page is no longer only glue, and nothing tests it.** The plan left `page.ts`
+  untested because it only drew what main sent. It now decides four things: a push that changes
+  nothing does not redraw, a redraw puts keyboard focus back on the control that had it, a slow
+  answer to an earlier choice does not overwrite a later one, and a failed request redraws main's
+  last state so a radio the browser already moved goes back. All four were checked once, by hand, in
+  an offscreen Electron window with a stub bridge and real key presses; that script was not kept.
+  The suggested fix is a DOM environment for vitest (happy-dom or jsdom, a new dev dependency) and a
+  page test with a stub `window.clawd` covering those four. Arrow keys moving between radios are the
+  browser's own and need no test.
 
 ## 13. Tests
 

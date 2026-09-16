@@ -3,6 +3,7 @@ import { parseArgs } from "node:util";
 import { ConfigError } from "./config";
 import { setDetail } from "./detail";
 import { install, uninstall, type Print } from "./install/installer";
+import { nodeRuntime } from "./install/settings";
 
 export type CliEnv = {
   serve: () => Promise<number>;
@@ -57,7 +58,7 @@ export async function runCli(argv: readonly string[], env: CliEnv): Promise<numb
           dryRun: values["dry-run"] ?? false,
           hooksDir: env.hooksDir,
           cwd: env.cwd,
-          node: env.node,
+          runtime: nodeRuntime(env.node),
           now: env.now,
           print: env.print,
           ...(env.probe ? { probe: env.probe } : {}),
