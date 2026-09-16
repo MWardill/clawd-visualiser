@@ -769,7 +769,9 @@ git commit -m "feat(desktop): the settings page has a state and its own origin, 
 > function that had just failed. Commit `6b6cbb9` gave `createHandlers` a second parameter, the state
 > main already holds when it registers the handlers, and has it keep the newest state built
 > successfully, so an answer can never reject. The code below already carries the correction; main's
-> call in Task 6 passes that starting state.
+> call in Task 6 passes that starting state. Pin it with tests whose seed differs from the state a
+> successful call returns: seeding both with one object passes even against an implementation that
+> never tracks the newest state, which is how the first attempt at these tests went wrong.
 
 **Files:**
 - Create: `apps/desktop/src/settings/ipc.ts`
