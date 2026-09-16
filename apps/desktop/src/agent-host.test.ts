@@ -212,6 +212,35 @@ describe("createAgentHost", () => {
     await stopping;
     expect(stopped).toBe(true);
   });
+
+  it("restarts the agent it owns, so a changed config is read again", async () => {
+    const { host, agents, codes } = harness();
+    host.start();
+    await flush();
+    host.restart();
+    await flush();
+    expect(agents[0]?.stopped).toBe(true);
+    expect(agents).toHaveLength(2);
+    expect(host.state()).toMatchObject({ mode: "own", port: 4750 });
+    expect(codes).toEqual([]);
+  });
+
+  it("takes over from an attached agent on a restart, and starts nothing after stop", async () => {
+    const attached = harness({ fail: [new PortInUseError(4750)], probe: async () => true });
+    attached.host.start();
+    await flush();
+    attached.host.restart();
+    await flush();
+    expect(attached.host.state().mode).toBe("own");
+
+    const stopped = harness();
+    stopped.host.start();
+    await flush();
+    await stopped.host.stop();
+    stopped.host.restart();
+    await flush();
+    expect(stopped.starts()).toBe(1);
+  });
 });
 
 describe("statusText", () => {
