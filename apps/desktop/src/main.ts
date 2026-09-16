@@ -189,6 +189,7 @@ function run(): void {
 
   /** After a config change the agent reads it again, and the page hears about the new state. */
   function pushState(): void {
+    if (settingsWin === null || settingsWin.isDestroyed()) return;
     void currentState().then((state) => {
       if (settingsWin !== null && !settingsWin.isDestroyed()) settingsWin.webContents.send(CHANNELS.state, state);
     });
@@ -222,8 +223,6 @@ function run(): void {
     trayFile = trayIconFile(0);
     tray = new Tray(trayImage(trayFile));
     tray.on("click", () => showWindow());
-    refreshTray(host.state());
-    refreshMenu();
 
     for (const [channel, handler] of Object.entries(
       createHandlers(
@@ -247,11 +246,13 @@ function run(): void {
             return currentState();
           },
           async installHooks() {
-            await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
+            const result = await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
+            if (!result.ok) log("desktop.hooksFailed", { repair: false });
             return currentState();
           },
           async uninstallHooks() {
-            await uninstall({ home, settingsPath, now: Date.now, print: () => {} });
+            const code = await uninstall({ home, settingsPath, now: Date.now, print: () => {} });
+            if (code !== 0) log("desktop.hooksFailed", { repair: false });
             return currentState();
           },
           async setDetail(level) {
@@ -277,11 +278,18 @@ function run(): void {
       ipcMain.handle(channel, (_event, arg: unknown) => handler(arg));
     }
 
+    refreshTray(host.state());
+    refreshMenu();
+
     // Our hooks pointing at another folder are rewritten, so a moved app keeps receiving events.
     const status = await currentHookStatus();
     if (repairOnLaunch(status)) {
-      await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
-      log("desktop.hooksRepaired");
+      try {
+        const repaired = await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
+        log(repaired.ok ? "desktop.hooksRepaired" : "desktop.hooksFailed", { repair: true });
+      } catch {
+        log("desktop.hooksFailed", { repair: true });
+      }
     }
 
     const action = loginOnLaunch({ packaged: app.isPackaged, remembered: store.get().openAtLogin, registered: openAtLogin() });

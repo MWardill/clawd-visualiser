@@ -32,9 +32,8 @@ export type SettingsActions = {
   openLogs(): Promise<void>;
 };
 
-const Folder = z.string().min(1);
-
 export function createHandlers(actions: SettingsActions, fallback: SettingsState): Record<string, (raw: unknown) => Promise<unknown>> {
+  const Folder = z.string().min(1);
   // The page treats every answer as the whole new state, so a handler must never reject. `last` is
   // the newest state built successfully; it starts as what main knew when it registered these.
   let last: SettingsState = fallback;

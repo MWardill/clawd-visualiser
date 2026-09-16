@@ -28,6 +28,7 @@ await build({
   format: "cjs",
   target: "node22",
   external: ["electron"],
+  sourcemap: true,
   logLevel: "info",
 });
 await build({
@@ -37,6 +38,7 @@ await build({
   platform: "browser",
   format: "iife",
   target: "chrome130",
+  sourcemap: true,
   logLevel: "info",
 });
 await cp(here("../src/settings/page.html"), here("../dist/settings/index.html"));

@@ -16,6 +16,7 @@ export type LogCode =
   | "desktop.stopTimedOut"
   | "desktop.loginItemReapplied"
   | "desktop.hooksRepaired"
+  | "desktop.hooksFailed"
   | "ingest.counts"
   | "ingest.failed"
   | "presence.failed"
