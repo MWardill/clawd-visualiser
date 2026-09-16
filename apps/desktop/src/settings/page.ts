@@ -77,7 +77,8 @@ function render(state: SettingsState): void {
     section("Agent", [
       row("state", `${AGENT_WORDS[state.agent.mode]} · port ${state.agent.port} · version ${state.agent.version}`),
       row("sessions", `${state.agent.sessions} · ${state.agent.waiting} waiting`),
-      row("logs", button("Open logs folder", () => window.clawd.openLogs())),
+      row("logs", el("code", state.logDir)),
+      row("", button("Open logs folder", () => window.clawd.openLogs())),
       ...(state.agent.mode === "failed" ? [row("retry", button("Start the agent again", () => window.clawd.retryAgent()))] : []),
     ]),
     section("This app", [row("version", state.app.version), row("runs from", el("code", state.app.exe))]),

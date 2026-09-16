@@ -31,6 +31,7 @@ import { distPaths } from "./paths";
 import { createQuitHandler } from "./quit";
 import { APP_SCHEME, createSchemeHandler } from "./scheme";
 import { settingsState, type SettingsState } from "./settings-state";
+import { createCoalescer } from "./settings/coalesce";
 import { CHANNELS, createHandlers } from "./settings/ipc";
 import { trayIconFile, trayMenuTemplate } from "./tray";
 import { createMainWindow, createSettingsWindow } from "./window";
@@ -76,6 +77,12 @@ function run(): void {
   // Set once quitting has begun, so that closing the window really closes it rather than hiding it.
   let quitting = false;
 
+  // The host's change callback fires on every snapshot the agent produces, and building the state
+  // reads two files and asks Electron for the login item synchronously, on the same event loop the
+  // agent runs on. A burst of snapshots is collapsed into one rebuild rather than one each.
+  const STATE_COALESCE_MS = 150;
+  const pushStateSoon = createCoalescer(STATE_COALESCE_MS, pushState);
+
   const host = createAgentHost({
     start: (onSnapshot) => startAgent({ home, log, onSnapshot }),
     probe: (port) => probeHealth(port),
@@ -84,7 +91,7 @@ function run(): void {
     onChange: (state) => {
       if (win !== null && !win.isDestroyed()) win.setTitle(statusText(state));
       refreshTray(state);
-      pushState();
+      pushStateSoon.ask();
     },
   });
 
@@ -228,32 +235,53 @@ function run(): void {
       createHandlers(
         {
           getState: currentState,
+          // Each of these can throw: creating the folder, copying the scripts, saving the config and
+          // writing the settings file are all I/O. A throw would unwind into the message layer, which
+          // re-renders the page unchanged, so every one is caught here and logged before answering.
           async addFolder() {
-            const picked = await dialog.showOpenDialog({ properties: ["openDirectory"], title: "Watch a folder" });
-            const dir = picked.canceled ? null : (picked.filePaths[0] ?? null);
-            if (dir !== null) {
-              const saved = await setAllowlist({ home, add: [dir], cwd: home });
-              if (saved.ok) host.restart();
+            try {
+              const picked = await dialog.showOpenDialog({ properties: ["openDirectory"], title: "Watch a folder" });
+              const dir = picked.canceled ? null : (picked.filePaths[0] ?? null);
+              if (dir !== null) {
+                const saved = await setAllowlist({ home, add: [dir], cwd: home });
+                if (saved.ok) host.restart();
+                else log("desktop.folderFailed");
+              }
+            } catch {
+              log("desktop.folderFailed");
             }
-            return currentState();
+            return await currentState();
           },
           async removeFolder(dir) {
-            const config = await readConfig(agentPaths(home));
-            if (config !== null) {
-              const saved = await setAllowlist({ home, remove: dir, cwd: home });
-              if (saved.ok) host.restart();
+            try {
+              const config = await readConfig(agentPaths(home));
+              if (config !== null) {
+                const saved = await setAllowlist({ home, remove: dir, cwd: home });
+                if (saved.ok) host.restart();
+                else log("desktop.folderFailed");
+              }
+            } catch {
+              log("desktop.folderFailed");
             }
-            return currentState();
+            return await currentState();
           },
           async installHooks() {
-            const result = await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
-            if (!result.ok) log("desktop.hooksFailed", { repair: false });
-            return currentState();
+            try {
+              const result = await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
+              if (!result.ok) log("desktop.hooksFailed", { repair: false });
+            } catch {
+              log("desktop.hooksFailed", { repair: false });
+            }
+            return await currentState();
           },
           async uninstallHooks() {
-            const code = await uninstall({ home, settingsPath, now: Date.now, print: () => {} });
-            if (code !== 0) log("desktop.hooksFailed", { repair: false });
-            return currentState();
+            try {
+              const code = await uninstall({ home, settingsPath, now: Date.now, print: () => {} });
+              if (code !== 0) log("desktop.hooksFailed", { repair: false });
+            } catch {
+              log("desktop.hooksFailed", { repair: false });
+            }
+            return await currentState();
           },
           async setDetail(level) {
             await setDetail({ home, level, print: () => {} });
@@ -286,7 +314,8 @@ function run(): void {
     if (repairOnLaunch(status)) {
       try {
         const repaired = await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
-        log(repaired.ok ? "desktop.hooksRepaired" : "desktop.hooksFailed", { repair: true });
+        if (repaired.ok) log("desktop.hooksRepaired");
+        else log("desktop.hooksFailed", { repair: true });
       } catch {
         log("desktop.hooksFailed", { repair: true });
       }
@@ -319,6 +348,8 @@ function run(): void {
   // through, and take the window and the tray icon away at once while the agent stops.
   app.on("before-quit", () => {
     quitting = true;
+    // A rebuild waiting on the coalescer would only build state for a window that is going away.
+    pushStateSoon.cancel();
     win?.hide();
     tray?.destroy();
     tray = null;
