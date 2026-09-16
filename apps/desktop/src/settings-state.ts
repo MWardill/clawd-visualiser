@@ -4,16 +4,14 @@ import { DEFAULT_PORT } from "@clawd/agent";
 import type { DetailLevel } from "@clawd/core";
 import type { HostMode, HostState } from "./agent-host";
 import type { HookStatus } from "./hooks";
+import type { SettingsState } from "./settings/state";
+export type { SettingsState };
 
-export type SettingsState = {
-  agent: { mode: HostMode; port: number; version: string; sessions: number; waiting: number };
-  app: { version: string; exe: string };
-  allowlist: string[];
-  hooks: HookStatus;
-  detail: DetailLevel;
-  openAtLogin: boolean;
-  logDir: string;
-};
+// The page's copy of these unions must keep matching the real ones; these lines fail to compile if not.
+type Extends<A extends B, B> = true;
+type ModeMatches = Extends<HostMode, SettingsState["agent"]["mode"]>;
+type HooksMatch = Extends<HookStatus, SettingsState["hooks"]>;
+type DetailMatches = Extends<DetailLevel, SettingsState["detail"]>;
 
 export type SettingsInput = {
   host: HostState;

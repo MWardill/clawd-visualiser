@@ -1,6 +1,6 @@
 // The settings page. It renders whatever state the bridge gives it and sends one message per click;
 // every decision is main's. No framework, no network: window.clawd is its only way out.
-import type { SettingsState } from "../settings-state";
+import type { SettingsState } from "./state";
 
 type Api = {
   getState(): Promise<SettingsState>;
