@@ -706,12 +706,43 @@ export function settingsPolicy(): string {
 }
 ```
 
-Change `SchemeDeps.rendererDir` to `dirs: SchemeDirs`, and in the handler pick the policy by host:
+Change `SchemeDeps.rendererDir` to `dirs: SchemeDirs`, and in the handler pick the policy by host.
+
+> **Erratum, found in review.** This step first told the handler to pick the policy with
+> `request.url.toLowerCase().startsWith(...)`, a second way of answering a question `mapRequest`
+> already answers by parsing the URL. The two disagree: `app://clawd@settings/index.html` maps into
+> the settings directory but takes the visualiser's policy, so the settings page would be served with
+> connections allowed; `app://settings@clawd/index.html` does the reverse; and `app://settingsfoo/`
+> matches the prefix although it is a different host. Commit `0304c8d` replaced both with one
+> decision, which is what to build:
+>
+> ```ts
+> type AppUrl = { host: string; pathname: string };
+>
+> /** The host and path of one of our URLs, or null when it does not parse or is not our scheme. */
+> function parseAppUrl(url: string): AppUrl | null {
+>   let parsed: URL;
+>   try {
+>     parsed = new URL(url);
+>   } catch {
+>     return null;
+>   }
+>   if (parsed.protocol !== `${APP_SCHEME}:`) return null;
+>   return { host: parsed.host.toLowerCase(), pathname: parsed.pathname };
+> }
+>
+> /** Which of our hosts a request names, or null. The one place that answers this question. */
+> export function hostOf(url: string): string | null {
+>   return parseAppUrl(url)?.host ?? null;
+> }
+> ```
+>
+> `mapRequest` calls `parseAppUrl` once for the host and the path, and the handler's policy line reads
+> `hostOf(request.url) === SETTINGS_HOST ? settingsPolicy() : contentSecurityPolicy(deps.port())`.
 
 ```ts
   return async (request) => {
-    const settings = request.url.toLowerCase().startsWith(`${APP_SCHEME}://${SETTINGS_HOST}`);
-    const policy = { "content-security-policy": settings ? settingsPolicy() : contentSecurityPolicy(deps.port()) };
+    const policy = { "content-security-policy": hostOf(request.url) === SETTINGS_HOST ? settingsPolicy() : contentSecurityPolicy(deps.port()) };
     const file = mapRequest(request.url, deps.dirs);
 ```
 
