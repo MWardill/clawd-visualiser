@@ -21,3 +21,7 @@ await build({
 
 // The tray loads its icons from beside main.cjs, as the window loads the export.
 await cp(here("../resources/tray"), here("../dist/tray"), { recursive: true });
+
+// The hook scripts ship as they are: the installer copies them into <home>/bin, where they read
+// ../config.json beside themselves, so they must not be bundled.
+await cp(here("../../agent/hooks"), here("../dist/hooks"), { recursive: true });
