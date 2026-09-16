@@ -34,13 +34,22 @@ export type SettingsActions = {
 
 const Folder = z.string().min(1);
 
-export function createHandlers(actions: SettingsActions): Record<string, (raw: unknown) => Promise<unknown>> {
-  /** Anything a call throws, or an argument that does not validate, leaves the state as it is. */
+export function createHandlers(actions: SettingsActions, fallback: SettingsState): Record<string, (raw: unknown) => Promise<unknown>> {
+  // The page treats every answer as the whole new state, so a handler must never reject. `last` is
+  // the newest state built successfully; it starts as what main knew when it registered these.
+  let last: SettingsState = fallback;
   const answer = async (run: () => Promise<SettingsState>): Promise<SettingsState> => {
     try {
-      return await run();
+      last = await run();
+      return last;
     } catch {
-      return await actions.getState();
+      // The action failed. Try to read the state; if that fails too, the page keeps what it last saw.
+      try {
+        last = await actions.getState();
+      } catch {
+        // Nothing fresher is available.
+      }
+      return last;
     }
   };
   const checked = <T>(schema: z.ZodType<T>, run: (value: T) => Promise<SettingsState>) => {

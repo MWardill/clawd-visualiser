@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import type { SettingsState } from "../settings-state";
 import { CHANNELS, createHandlers, type SettingsActions } from "./ipc";
 
@@ -49,7 +49,7 @@ function actions(over: Partial<SettingsActions> = {}) {
     },
     ...over,
   };
-  return { calls, handlers: createHandlers(base) };
+  return { calls, handlers: createHandlers(base, STATE) };
 }
 
 describe("createHandlers", () => {
@@ -88,6 +88,44 @@ describe("createHandlers", () => {
       getState: async () => STATE,
     });
     expect(await handlers[CHANNELS.installHooks]!(undefined)).toEqual(STATE);
+  });
+
+  it("answers with the last state it built when the action and the refresh both fail", async () => {
+    let broken = false;
+    const { handlers } = actions({
+      getState: async () => {
+        if (broken) throw new Error("cannot read the config");
+        return STATE;
+      },
+      installHooks: async () => {
+        throw new Error("boom");
+      },
+    });
+    expect(await handlers[CHANNELS.getState]!(undefined)).toEqual(STATE);
+    broken = true;
+    expect(await handlers[CHANNELS.installHooks]!(undefined)).toEqual(STATE);
+  });
+
+  it("answers with the fallback it was given when the action and the refresh both fail on the first call", async () => {
+    const { handlers } = actions({
+      getState: async () => {
+        throw new Error("cannot read the config");
+      },
+      installHooks: async () => {
+        throw new Error("boom");
+      },
+    });
+    expect(await handlers[CHANNELS.installHooks]!(undefined)).toEqual(STATE);
+  });
+
+  it("still answers when a refused argument's refresh fails", async () => {
+    const { calls, handlers } = actions({
+      getState: async () => {
+        throw new Error("cannot read the config");
+      },
+    });
+    expect(await handlers[CHANNELS.removeFolder]!(42)).toEqual(STATE);
+    expect(calls).toEqual([]);
   });
 
   it("opens the logs and answers with nothing", async () => {
