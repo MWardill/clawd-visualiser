@@ -11,7 +11,7 @@
     "dev": "node build/bundle.mjs && electron . --dev-url http://localhost:3000",
     "start": "node build/renderer.mjs && node build/bundle.mjs && electron .",
     "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.page.json"
   },
   "devDependencies": {
     "@clawd/agent": "workspace:*",

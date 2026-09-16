@@ -1,0 +1,14 @@
+/* The app's night palette, JetBrains Mono, no framework. */
+:root { color-scheme: dark; --bg: #0a0b10; --panel: #141721; --line: #262a3a; --text: #c9ccd6; --dim: #5d6274; --amber: #f2c35b; }
+* { box-sizing: border-box; }
+body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.5 "JetBrains Mono", Consolas, monospace; }
+main { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
+section { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
+h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--dim); }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; }
+.dim { color: var(--dim); }
+.warn { color: var(--amber); }
+button { font: inherit; color: var(--text); background: #1f2330; border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer; }
+button:hover { border-color: var(--dim); }
+ul { list-style: none; margin: 0; padding: 0; }
+code { word-break: break-all; }

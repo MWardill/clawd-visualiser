@@ -10,14 +10,16 @@ export function trayIconFile(waiting: number): string {
 
 export type TrayActions = {
   open(): void;
+  settings(): void;
   setOpenAtLogin(on: boolean): void;
   quit(): void;
 };
 
-/** Open, Start on login, Quit. Settings joins it in stage 5, with the settings window. */
+/** Open, Settings, Start on login, Quit. */
 export function trayMenuTemplate(openAtLogin: boolean, actions: TrayActions): MenuItemConstructorOptions[] {
   return [
     { label: "Open", click: () => actions.open() },
+    { label: "Settings", click: () => actions.settings() },
     { label: "Start on login", type: "checkbox", checked: openAtLogin, click: () => actions.setOpenAtLogin(!openAtLogin) },
     { type: "separator" },
     { label: "Quit", click: () => actions.quit() },

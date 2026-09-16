@@ -19,6 +19,29 @@ await build({
   logLevel: "info",
 });
 
+// The preload runs in Electron's preload world, which is CommonJS; the page is an ordinary script.
+await build({
+  entryPoints: [here("../src/settings/preload.ts")],
+  outfile: here("../dist/settings/preload.js"),
+  bundle: true,
+  platform: "node",
+  format: "cjs",
+  target: "node22",
+  external: ["electron"],
+  logLevel: "info",
+});
+await build({
+  entryPoints: [here("../src/settings/page.ts")],
+  outfile: here("../dist/settings/page.js"),
+  bundle: true,
+  platform: "browser",
+  format: "iife",
+  target: "chrome130",
+  logLevel: "info",
+});
+await cp(here("../src/settings/page.html"), here("../dist/settings/index.html"));
+await cp(here("../src/settings/page.css"), here("../dist/settings/page.css"));
+
 // The tray loads its icons from beside main.cjs, as the window loads the export.
 await cp(here("../resources/tray"), here("../dist/tray"), { recursive: true });
 
