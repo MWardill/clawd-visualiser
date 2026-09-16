@@ -12,7 +12,11 @@ const STATE: SettingsState = {
   logDir: "C:\\logs",
 };
 
-function actions(over: Partial<SettingsActions> = {}) {
+// Distinct from STATE (different logDir) so a test can tell "the seed main started with" apart
+// from "a state a handler actually tracked."
+const SEED: SettingsState = { ...STATE, logDir: "C:\\seed-logs" };
+
+function actions(over: Partial<SettingsActions> = {}, fallback: SettingsState = STATE) {
   const calls: string[] = [];
   const base: SettingsActions = {
     getState: async () => STATE,
@@ -49,7 +53,7 @@ function actions(over: Partial<SettingsActions> = {}) {
     },
     ...over,
   };
-  return { calls, handlers: createHandlers(base, STATE) };
+  return { calls, handlers: createHandlers(base, fallback) };
 }
 
 describe("createHandlers", () => {
@@ -92,39 +96,53 @@ describe("createHandlers", () => {
 
   it("answers with the last state it built when the action and the refresh both fail", async () => {
     let broken = false;
-    const { handlers } = actions({
-      getState: async () => {
-        if (broken) throw new Error("cannot read the config");
-        return STATE;
+    const { handlers } = actions(
+      {
+        getState: async () => {
+          if (broken) throw new Error("cannot read the config");
+          return STATE;
+        },
+        installHooks: async () => {
+          throw new Error("boom");
+        },
       },
-      installHooks: async () => {
-        throw new Error("boom");
-      },
-    });
+      SEED,
+    );
+    // A correct implementation records STATE as the last state it built here.
     expect(await handlers[CHANNELS.getState]!(undefined)).toEqual(STATE);
     broken = true;
-    expect(await handlers[CHANNELS.installHooks]!(undefined)).toEqual(STATE);
+    // Both the action and the refresh fail now, so the answer must come from what was tracked
+    // above (STATE), not from the seed it started with (SEED) and not from a refresh that failed.
+    const result = await handlers[CHANNELS.installHooks]!(undefined);
+    expect(result).toEqual(STATE);
+    expect(result).not.toEqual(SEED);
   });
 
   it("answers with the fallback it was given when the action and the refresh both fail on the first call", async () => {
-    const { handlers } = actions({
-      getState: async () => {
-        throw new Error("cannot read the config");
+    const { handlers } = actions(
+      {
+        getState: async () => {
+          throw new Error("cannot read the config");
+        },
+        installHooks: async () => {
+          throw new Error("boom");
+        },
       },
-      installHooks: async () => {
-        throw new Error("boom");
-      },
-    });
-    expect(await handlers[CHANNELS.installHooks]!(undefined)).toEqual(STATE);
+      SEED,
+    );
+    expect(await handlers[CHANNELS.installHooks]!(undefined)).toEqual(SEED);
   });
 
   it("still answers when a refused argument's refresh fails", async () => {
-    const { calls, handlers } = actions({
-      getState: async () => {
-        throw new Error("cannot read the config");
+    const { calls, handlers } = actions(
+      {
+        getState: async () => {
+          throw new Error("cannot read the config");
+        },
       },
-    });
-    expect(await handlers[CHANNELS.removeFolder]!(42)).toEqual(STATE);
+      SEED,
+    );
+    expect(await handlers[CHANNELS.removeFolder]!(42)).toEqual(SEED);
     expect(calls).toEqual([]);
   });
 
