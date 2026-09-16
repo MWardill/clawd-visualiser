@@ -7,6 +7,7 @@
   "scripts": {
     "bundle": "node build/bundle.mjs",
     "renderer": "node build/renderer.mjs",
+    "icons": "node build/icons.mjs",
     "dev": "node build/bundle.mjs && electron . --dev-url http://localhost:3000",
     "start": "node build/renderer.mjs && node build/bundle.mjs && electron .",
     "test": "vitest run --passWithNoTests",
@@ -15,6 +16,7 @@
   "devDependencies": {
     "@clawd/agent": "workspace:*",
     "@clawd/core": "workspace:*",
+    "@clawd/scene": "workspace:*",
     "@types/node": "^22.20.2",
     "electron": "^44.3.0",
     "esbuild": "^0.28.2",

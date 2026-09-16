@@ -304,6 +304,38 @@ early; otherwise they are done after stage 6.
   in the `dev` loop; a real Claude Code prompt setting a Clawd working in the packaged UI. Stage 3's
   smoke test ran on port 4751 because other processes held 4750 and 3000.
 
+Found in the reviews of stage 4 (15 September 2026). The first item blocks stage 6's "done when"
+and is settled in its plan; the rest wait like the items above.
+
+- **Development and packaged builds share one login item.** Both name the Run value after `APP_ID`
+  and read `~/.clawd/desktop.json`. Once the packaged app has `openAtLogin: true`, a development run
+  re-applies the login item to the repository's `electron.exe`, and the next packaged run points it
+  back. Give development its own value name and login choice, or never re-apply when not packaged.
+- **An unreadable `desktop.json`.** A read that fails for a reason other than a missing file counts
+  as nothing remembered, so the next change overwrites the real file, and a packaged first run would
+  turn the login item on against a stored off. A failed write is dropped with no log code. Tell
+  unreadable from missing, skip writes and the first-run enable after an unreadable load, and log a
+  code for a failed write.
+- **Restored bounds.** Bounds saved on a large display are restored at full size on a smaller one,
+  the maximised state is not kept, and a title strip across the seam of two displays counts as off
+  every display. Clamp the size to the chosen work area.
+- **The Start on login checkbox and Task Manager.** The tray checkbox reads `openAtLogin`, which
+  ignores an entry disabled in Task Manager's startup list. Stage 5's settings toggle faces the same
+  choice; `executableWillLaunchAtLogin` or `launchItems[].enabled` would show it.
+- **Ctrl+Q on other keyboard layouts.** `isQuitShortcut` matches `input.key`, so on a layout where
+  that key types another letter the shortcut never fires. Also accept `input.code === "KeyQ"`.
+- **Tearing the tray down before a quit is certain.** `before-quit` destroys the tray, so a quit
+  cancelled by a page's `beforeunload` would leave the agent running with no tray icon. Nothing
+  registers `beforeunload` today; destroying the tray in `will-quit` removes the risk.
+- **Tray icon scaling.** At 125% and 150% display scaling Windows resamples the 16 or 32 px PNG and
+  blurs the pixel art. An ICO with 16, 20, 24 and 32 px images fixes it, with stage 6's icons, along
+  with a check that the checked-in icons still match the sprite.
+- **Checks still owed from stage 4.** The tray icon and its tooltip; clicking it; the menu's Open,
+  Start on login and Quit; the waiting badge with a real permission prompt; unticking Start on
+  login; a physical Ctrl+Q; and a real sign-out and sign-in with the login item on, confirming
+  Windows does not report the app holding the sign-out up. Stage 4's automated run covered closing,
+  second launches, bounds, `--hidden`, the login item's re-apply and the development loop.
+
 ## 13. Tests
 
 - Unit tests in `apps/desktop` with vitest: `args`; `scheme` mapping, MIME and CSP text;

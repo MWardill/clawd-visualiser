@@ -1,0 +1,45 @@
+import type { MenuItemConstructorOptions } from "electron";
+import { describe, expect, it } from "vitest";
+import { TRAY_ICONS } from "./icons";
+import { trayIconFile, trayMenuTemplate } from "./tray";
+
+const click = (item: MenuItemConstructorOptions | undefined): void => (item?.click as (() => void) | undefined)?.();
+
+function recorder() {
+  const calls: string[] = [];
+  return { calls, actions: { open: () => void calls.push("open"), setOpenAtLogin: (on: boolean) => void calls.push(`login ${on}`), quit: () => void calls.push("quit") } };
+}
+
+describe("trayIconFile", () => {
+  it("is the badged icon while any session waits, and a file the icon build writes", () => {
+    expect(trayIconFile(0)).toBe("tray.png");
+    expect(trayIconFile(1)).toBe("tray-waiting.png");
+    expect(trayIconFile(3)).toBe("tray-waiting.png");
+    const files = TRAY_ICONS.map((icon) => icon.file as string);
+    expect(files).toContain(trayIconFile(0));
+    expect(files).toContain(trayIconFile(1));
+  });
+});
+
+describe("trayMenuTemplate", () => {
+  it("is Open, Start on login as a checkbox, a separator, then Quit", () => {
+    const { actions } = recorder();
+    const menu = trayMenuTemplate(true, actions);
+    expect(menu.map((item) => item.label ?? item.type)).toEqual(["Open", "Start on login", "separator", "Quit"]);
+    expect(menu[1]).toMatchObject({ type: "checkbox", checked: true });
+    expect(trayMenuTemplate(false, actions)[1]).toMatchObject({ type: "checkbox", checked: false });
+  });
+
+  it("opens, flips the login choice from what the menu showed, and quits", () => {
+    const on = recorder();
+    const menu = trayMenuTemplate(true, on.actions);
+    click(menu[0]);
+    click(menu[1]);
+    click(menu[3]);
+    expect(on.calls).toEqual(["open", "login false", "quit"]);
+
+    const off = recorder();
+    click(trayMenuTemplate(false, off.actions)[1]);
+    expect(off.calls).toEqual(["login true"]);
+  });
+});

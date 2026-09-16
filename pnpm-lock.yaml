@@ -196,6 +196,9 @@ importers:
       '@clawd/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@clawd/scene':
+        specifier: workspace:*
+        version: link:../../packages/scene
       '@types/node':
         specifier: ^22.20.2
         version: 22.20.2
