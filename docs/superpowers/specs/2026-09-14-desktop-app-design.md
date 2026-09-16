@@ -345,6 +345,23 @@ Found in the reviews of stage 5 (16 September 2026).
   calls it, nobody clicks faster than five crashes accumulate, and keeping the budget would deny a
   clean start to someone who has just fixed a bad config. Revisit it if anything else ever calls
   `restart()`, especially on a timer.
+- **The settings actions are rules living in untested glue.** `main.ts`'s actions object decides
+  things: save, then restart only when the save succeeded, and log a code when a write fails. That is
+  where the last-folder defect lived and where two more were found in review. `createHandlers`
+  already takes its actions injected, so a `createSettingsActions(deps)` factory could be tested with
+  doubles and leave `main.ts` as the wiring the design intends.
+- **The settings window does not get the app's font.** The build copies only the page's markup and
+  stylesheet into its directory, and the settings origin may load only its own files, so the face the
+  visualiser uses is out of reach and the window falls back to whatever the machine has. Ship the
+  font beside the page, or accept the fallback deliberately.
+- **A status line removed by hand is reinstated at every launch.** `hookStatus` calls our hook
+  present with the status line missing `stale`, and launch repair now runs unattended, so it writes
+  back something the user deleted. Decide whether that is repair or override; the same predicate also
+  drives the settings window's Reinstall button, where writing it back is clearly right.
+- **The preload carries the validation library.** The bridge script imports only the channel names,
+  but the module holding them also builds a schema, and `@clawd/core` is not marked side-effect free,
+  so the bundler keeps the whole barrel: roughly 750 kB loaded before every settings page. Mark the
+  core package side-effect free, or move the channel names into a module of their own.
 
 ## 13. Tests
 
