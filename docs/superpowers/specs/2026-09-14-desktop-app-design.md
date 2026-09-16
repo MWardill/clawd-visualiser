@@ -380,6 +380,27 @@ Found in the reviews of stage 5 (16 September 2026).
   directory is now rendered, but the reason has no route to the page: it is not part of the state the
   bridge carries. Add it when the bridge next changes.
 
+Asked for while stage 5 was finishing (16 September 2026). Not a review finding; the shape below was
+settled in conversation, so whoever picks it up does not have to decide it again.
+
+- **A wait nobody answers should stop being shown.** `isShown` shows a waiting session for as long
+  as it waits, so a permission prompt left unanswered keeps its Clawd on screen for days. It should
+  be shown while waiting only until it has been waiting longer than a new `waitingHideMs` in
+  `StateConfig`, default 36 hours, following its neighbours' naming and their strictly-less-than
+  boundary. Past that the session falls through to the existing rules, which hide it whatever its
+  prompt count, since a stale wait is not activity. Two decisions go with it. It stays `waiting` in
+  the fleet rather than being re-stated as idle, so answering the prompt makes it working and it
+  returns at once, and so a heavily used session does not linger on screen as idle instead. And the
+  36 hours are measured from `since`, the moment it entered the state, not from its last activity,
+  which a tool finishing or a subagent stopping elsewhere could otherwise push back. One condition
+  in `visibility.ts` carries it: the snapshot format, the scene, the web app and the agent are all
+  untouched, and both places that build a `StateConfig` spread the defaults, so a new field with a
+  default reaches them. Hiding it also drops it from the tray badge, the window title and the status
+  bar, which all read the snapshot, and a pane whose only session is a stale wait goes with it.
+  Worth testing at either side of the boundary, with and without prompts, that an answer after the
+  limit brings it back, and that the four committed golden snapshots do not move, since each replays
+  a short captured run.
+
 ## 13. Tests
 
 - Unit tests in `apps/desktop` with vitest: `args`; `scheme` mapping, MIME and CSP text;
