@@ -214,12 +214,14 @@ happens in main, over injected actions that are tested without Electron.
 
 **Hooks under the app's binary.** With `ELECTRON_RUN_AS_NODE=1` the app's own exe runs as plain Node,
 so Claude Code's hooks need no Node install: the written command is that prefix plus the script in
-`~/.clawd/bin`. The installer takes this prefix as a string now, which is the only change the agent
-needed. One hook run measured here, with an empty payload on stdin, took 233 ms the first time and
-about 140 ms warm, well inside the two second timeout the installer writes. At launch the app
-compares the commands in the settings file with the ones it would write: ours pointing elsewhere are
-rewritten and logged as `desktop.hooksRepaired`, so a moved folder repairs itself; hooks that were
-never installed wait for this window.
+`~/.clawd/bin`. The installer takes this prefix as a string now, and the agent also gained the hook
+status check, the quoting helper, the split into setting the allowlist and installing hooks, the
+removal helper, a relaxed rule about watching no folders, and new log codes. One hook run measured
+here, on a development build rather than a packaged one, with an empty payload on stdin, took 233 ms
+the first time and about 140 ms warm, well inside the two second timeout the installer writes. At
+launch the app compares the commands in the settings file with the ones it would write: ours pointing
+elsewhere are rewritten and logged as `desktop.hooksRepaired`, so a moved folder repairs itself;
+hooks that were never installed wait for this window.
 
 **Its own origin.** The page is served from `app://settings/`, beside the visualiser's `app://clawd/`,
 under a stricter policy: it may load only its own files and may open no connections at all, because

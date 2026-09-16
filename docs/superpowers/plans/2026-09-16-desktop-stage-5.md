@@ -29,7 +29,8 @@
 - The installer's `InstallOptions.node` becomes `runtime`, the exact command prefix. The CLI passes the quoted Node path; the desktop passes the prefix above. `install()` splits into `setAllowlist()` and `installHooks()`; the CLI composes them as today and the settings window calls them separately.
 - `hookStatus` returns `missing`, `current` or `stale`. On launch: `current` does nothing, `stale` rewrites through `installHooks()` with the usual backup and logs `desktop.hooksRepaired`, `missing` does nothing and the settings window offers to install.
 - The hook scripts ship with the app: `build/bundle.mjs` copies `apps/agent/hooks` to `dist/hooks`, and the installer copies them from there into `<home>/bin`, where they read `../config.json`.
-- Log lines carry a time, a code and numbers or booleans only. New code this stage: `desktop.hooksRepaired`.
+- Log lines carry a time, a code and numbers or booleans only. New codes this stage: `desktop.hooksRepaired`,
+  `desktop.hooksFailed` and `desktop.folderFailed`.
 - The tray menu becomes Open, Settings, Start on login, Quit, which completes the design's §10 menu.
 - Each stage note explains the Electron idea it introduces, in plain words, for a maintainer learning Electron.
 - Check listening ports with `netstat -ano`. Stop processes by exact process id; never by process tree, which on this machine also stopped unrelated processes.
@@ -1096,6 +1097,27 @@ git commit -m "feat(desktop): the host restarts the agent it owns when the confi
 ---
 
 ### Task 6: The window, the bridge, the page, and the wiring
+
+> **Erratum, found in review.** The task's text below still carries four defects found while building
+> it.
+>
+> 1. **The page's type-check project.** As written it checked main-process files with browser types
+>    and never checked the page: a `tsconfig.page.json` that adds only `lib` inherits
+>    `tsconfig.json`'s `include: ["src"]` and `exclude: ["src/settings/page.ts"]`, exactly backwards.
+>    What shipped is `tsconfig.page.json` with the browser library added, `"types": []`, an `include`
+>    naming only the page, and an empty `"exclude"` to defeat the one it inherits (`"types": []`
+>    landed in commit `e23d58f`). That project only works because the page's state type stands alone:
+>    `apps/desktop/src/settings/state.ts` imports nothing and spells out its unions, and
+>    `settings-state.ts` re-exports it and asserts at compile time that the real unions still match
+>    (commit `2a84827`).
+> 2. **The scheme's directories.** The step's `dirs: dist` does not satisfy the type, which wants
+>    exactly a visualiser directory and a settings directory. Main maps them:
+>    `{ clawd: dist.renderer, settings: dist.settings }`.
+> 3. **The handler factory.** The call shown omits the second argument. It takes the state main
+>    already holds, so that an answer can never reject.
+> 4. **The launch repair.** The step logs a successful repair unconditionally. What shipped logs the
+>    success code only when the write succeeded, logs `desktop.hooksFailed` otherwise, and catches a
+>    throw so the rest of startup still runs (commit `e23d58f`).
 
 **Files:**
 - Create: `apps/desktop/src/settings/preload.ts`

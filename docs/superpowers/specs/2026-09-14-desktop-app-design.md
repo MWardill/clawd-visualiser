@@ -217,7 +217,9 @@ matching the app. The detail section is present only once the detail levels desi
 - Logs: `~/.clawd/logs/desktop-YYYY-MM-DD.log`, one JSON line per entry, written by the agent's
   `createLogger` with a file sink, so the codes-only rule holds for the desktop. New codes:
   `desktop.started`, `desktop.attached`, `desktop.takeover`, `desktop.agentFault`,
-  `desktop.agentFailed`, `desktop.hooksRepaired`, `desktop.loginItemReapplied`. Retention follows
+  `desktop.agentFailed`, `desktop.hooksRepaired`, `desktop.hooksFailed` (a hook write that failed or
+  threw, with a boolean for whether it was a launch repair), `desktop.folderFailed` (a watched-folder
+  change that was refused or threw), `desktop.loginItemReapplied`. Retention follows
   `logRetentionDays`.
 
 ## 11. Packaging and distribution
@@ -362,6 +364,21 @@ Found in the reviews of stage 5 (16 September 2026).
   but the module holding them also builds a schema, and `@clawd/core` is not marked side-effect free,
   so the bundler keeps the whole barrel: roughly 750 kB loaded before every settings page. Mark the
   core package side-effect free, or move the channel names into a module of their own.
+- **The hook check ignores the port and the token.** `hookStatus` compares only the command hook and
+  the status line, not the HTTP hook that carries the agent's port and token. A settings file whose
+  port was edited, or whose token no longer matches after `config.json` was recreated, still reports
+  `current`: the launch repair never fires, the settings window says the hooks are installed, and
+  events are lost with nothing said. Decide it together with the hand-deleted status line item above,
+  since both are what `stale` should mean.
+- **The bridge cannot tell the user an action was refused.** Every call answers with the whole state
+  and nothing else, so a refusal — a drive root picked in the folder dialog, say — re-renders an
+  identical page. Two defects have traced to this. The refusal now logs a code, which makes it
+  diagnosable but not visible. Adding a message to the bridge's answers would breach this stage's rule
+  that the list of calls does not grow, so it belongs to a stage that revisits the bridge.
+- **The failed agent's reason is never shown.** The host keeps a message for an unusable config, which
+  the design says the settings window should show beside the log directory and the retry button. The
+  directory is now rendered, but the reason has no route to the page: it is not part of the state the
+  bridge carries. Add it when the bridge next changes.
 
 ## 13. Tests
 

@@ -1,6 +1,6 @@
-// Many changes in a row should cost one rebuild, not one each. The waiting call runs after the burst
-// stops, on the trailing edge, so the page always ends up with the newest state. Pure, so the timing
-// is tested with a fake clock.
+// Many changes in a row should cost one rebuild, not one each. The timer starts on the first ask and
+// ignores the rest, so it fires a fixed delay after the burst begins, not once it stops: waiting for
+// the stream to stop would freeze the page for as long as sessions change, which is when it's watched.
 export type Coalescer = {
   /** Ask for a run. A run already waiting is reused, so a burst costs one. */
   ask(): void;
