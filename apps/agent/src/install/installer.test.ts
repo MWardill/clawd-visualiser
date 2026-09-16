@@ -161,6 +161,32 @@ describe("install and uninstall", () => {
     expect(removeFromAllowlist([allowed], allowed)).toEqual([]);
   });
 
+  it("removing the last folder saves an allowlist with nothing in it, as the settings window does", async () => {
+    const t = await setup();
+    const allowed = join(t.root, "work");
+    expect(await setAllowlist({ home: t.home, add: [allowed], cwd: t.root })).toEqual({ ok: true, allowlist: [allowed] });
+    expect(await setAllowlist({ home: t.home, remove: allowed, cwd: t.root })).toEqual({ ok: true, allowlist: [] });
+    const config = await readConfig(agentPaths(t.home));
+    expect(config?.allowlist).toEqual([]);
+  });
+
+  it("removing a folder that is not in the list leaves the allowlist as it was", async () => {
+    const t = await setup();
+    const allowed = join(t.root, "work");
+    const other = join(t.root, "other");
+    expect(await setAllowlist({ home: t.home, add: [allowed], cwd: t.root })).toEqual({ ok: true, allowlist: [allowed] });
+    expect(await setAllowlist({ home: t.home, remove: other, cwd: t.root })).toEqual({ ok: true, allowlist: [allowed] });
+    const config = await readConfig(agentPaths(t.home));
+    expect(config?.allowlist).toEqual([allowed]);
+  });
+
+  it("setAllowlist still refuses a blank addition and a filesystem root, and saves nothing", async () => {
+    const t = await setup();
+    expect(await setAllowlist({ home: t.home, add: ["  "], cwd: t.root })).toMatchObject({ ok: false });
+    expect(await setAllowlist({ home: t.home, add: [parse(t.root).root], cwd: t.root })).toMatchObject({ ok: false });
+    expect(await readConfig(agentPaths(t.home))).toBeNull();
+  });
+
   it("uninstall restores the original settings and forgets the wrapped status line", async () => {
     const original = { env: { A: "1" }, statusLine: { type: "command", command: "mine.sh" } };
     const t = await setup(JSON.stringify(original));

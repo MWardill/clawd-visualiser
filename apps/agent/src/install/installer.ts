@@ -108,14 +108,22 @@ export function removeFromAllowlist(existing: readonly string[], dir: string): s
   return existing.filter((d) => normalisePath(d) !== normalisePath(dir));
 }
 
-/** Saves the allowlist, and the port when one is given. The agent reads the config at startup. */
+/**
+ * Saves the allowlist, and the port when one is given. The agent reads the config at startup.
+ *
+ * An empty result is refused only when `add` is asking to add directories (via `mergeAllowlist`'s
+ * own guard); watching no folders at all is a legitimate thing to save here, e.g. the settings
+ * window removing the last one. `install()` is the one place a caller must have at least one
+ * folder, and it enforces that itself before calling this.
+ */
 export async function setAllowlist(req: AllowlistRequest): Promise<AllowlistResult> {
   const paths = agentPaths(req.home);
   const base: AgentConfig = (await readConfig(paths)) ?? defaultConfig();
-  const added = mergeAllowlist(req.remove === undefined ? base.allowlist : removeFromAllowlist(base.allowlist, req.remove), req.add ?? [], req.cwd);
-  if (!added.ok) return added;
-  await saveConfig(paths, { ...base, port: req.port ?? base.port, allowlist: added.allowlist });
-  return added;
+  const starting = req.remove === undefined ? base.allowlist : removeFromAllowlist(base.allowlist, req.remove);
+  const result: AllowlistResult = req.add !== undefined && req.add.length > 0 ? mergeAllowlist(starting, req.add, req.cwd) : { ok: true, allowlist: starting };
+  if (!result.ok) return result;
+  await saveConfig(paths, { ...base, port: req.port ?? base.port, allowlist: result.allowlist });
+  return result;
 }
 
 export type HooksRequest = {
@@ -187,8 +195,17 @@ export async function install(req: InstallRequest): Promise<number> {
     req.print(check.message);
     return 1;
   }
+  // The command, unlike setAllowlist itself, still insists on at least one folder: an empty
+  // --allow with an empty (or absent) config means the user named nothing to watch. Check that
+  // here, before anything is saved, reusing mergeAllowlist's own empty-result message.
+  const existingAllowlist = (await readConfig(agentPaths(req.home)))?.allowlist ?? [];
+  const merged = mergeAllowlist(existingAllowlist, req.allow, req.cwd);
+  if (!merged.ok) {
+    req.print(merged.message);
+    return 1;
+  }
   const allow = req.dryRun
-    ? mergeAllowlist((await readConfig(agentPaths(req.home)))?.allowlist ?? [], req.allow, req.cwd)
+    ? merged
     : await setAllowlist({ home: req.home, add: req.allow, cwd: req.cwd, ...(req.port === undefined ? {} : { port: req.port }) });
   if (!allow.ok) {
     req.print(allow.message);

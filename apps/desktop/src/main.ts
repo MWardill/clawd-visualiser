@@ -241,8 +241,8 @@ function run(): void {
           async removeFolder(dir) {
             const config = await readConfig(agentPaths(home));
             if (config !== null) {
-              await setAllowlist({ home, remove: dir, cwd: home });
-              host.restart();
+              const saved = await setAllowlist({ home, remove: dir, cwd: home });
+              if (saved.ok) host.restart();
             }
             return currentState();
           },
