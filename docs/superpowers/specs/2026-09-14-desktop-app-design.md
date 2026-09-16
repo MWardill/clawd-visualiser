@@ -401,6 +401,18 @@ settled in conversation, so whoever picks it up does not have to decide it again
   limit brings it back, and that the four committed golden snapshots do not move, since each replays
   a short captured run.
 
+Skipped when the settings page's choices became radio groups (16 September 2026).
+
+- **The settings page is no longer only glue, and nothing tests it.** The plan left `page.ts`
+  untested because it only drew what main sent. It now decides four things: a push that changes
+  nothing does not redraw, a redraw puts keyboard focus back on the control that had it, a slow
+  answer to an earlier choice does not overwrite a later one, and a failed request redraws main's
+  last state so a radio the browser already moved goes back. All four were checked once, by hand, in
+  an offscreen Electron window with a stub bridge and real key presses; that script was not kept.
+  The suggested fix is a DOM environment for vitest (happy-dom or jsdom, a new dev dependency) and a
+  page test with a stub `window.clawd` covering those four. Arrow keys moving between radios are the
+  browser's own and need no test.
+
 ## 13. Tests
 
 - Unit tests in `apps/desktop` with vitest: `args`; `scheme` mapping, MIME and CSP text;
