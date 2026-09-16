@@ -3,10 +3,10 @@ import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import { dirname, join, parse } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { agentPaths, defaultConfig, readConfig, saveConfig } from "../config";
+import { DEFAULT_PORT, agentPaths, defaultConfig, readConfig, saveConfig } from "../config";
 import { useTempDirs } from "../testing/tmp";
-import { install, mergeAllowlist, uninstall } from "./installer";
-import { HOOK_SCRIPTS, type JsonObject } from "./settings";
+import { install, installHooks, mergeAllowlist, removeFromAllowlist, setAllowlist, uninstall } from "./installer";
+import { HOOK_SCRIPTS, hookCommand, hookStatus, nodeRuntime, statusCommand, type InstallOptions, type JsonObject } from "./settings";
 
 const HOOKS = fileURLToPath(new URL("../../hooks/", import.meta.url));
 const NOW = Date.UTC(2026, 8, 12, 10, 0, 0);
@@ -46,7 +46,7 @@ describe("install and uninstall", () => {
       settingsPath,
       hooksDir: HOOKS,
       cwd: root,
-      node: "C:\\node\\node.exe",
+      runtime: nodeRuntime("C:\\node\\node.exe"),
       now: () => NOW,
       print: (line: string) => lines.push(line),
       probe: async () => false,
@@ -145,6 +145,20 @@ describe("install and uninstall", () => {
     const t = await setup();
     expect(await install({ ...t.base, allow: ["work"], dryRun: false, probe: async () => true })).toBe(0);
     expect(t.lines.join("\n")).toContain("restart");
+  });
+
+  it("sets the allowlist and installs the hooks separately, as the settings window does", async () => {
+    const t = await setup();
+    const allowed = join(t.root, "work");
+    const runtime = nodeRuntime("C:\\node.exe");
+    expect(await setAllowlist({ home: t.home, add: [allowed], cwd: t.root })).toEqual({ ok: true, allowlist: [allowed] });
+    const hooks = await installHooks({ home: t.home, settingsPath: t.settingsPath, runtime, hooksDir: HOOKS, now: () => NOW });
+    expect(hooks.ok).toBe(true);
+    const settings = JSON.parse(await readFile(t.settingsPath, "utf8")) as JsonObject;
+    // Only the prefix and the bin directory shape the two commands.
+    const opts: InstallOptions = { port: DEFAULT_PORT, token: "t".repeat(64), binDir: agentPaths(t.home).bin, runtime };
+    expect(hookStatus(settings, { hook: hookCommand(opts), status: statusCommand(opts) })).toBe("current");
+    expect(removeFromAllowlist([allowed], allowed)).toEqual([]);
   });
 
   it("uninstall restores the original settings and forgets the wrapped status line", async () => {
