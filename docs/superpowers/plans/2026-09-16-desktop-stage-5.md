@@ -249,31 +249,39 @@ export async function installHooks(req: HooksRequest): Promise<HooksResult> {
   return { ok: true, statusLine: result.statusLine, events: result.events, backup: saved, allowlist: base.allowlist, port };
 }
 
-/** The CLI's install: the allowlist, then the hooks, then the report the user reads. */
+/** The CLI's install: check, then the allowlist, then the hooks, then the report the user reads. */
 export async function install(req: InstallRequest): Promise<number> {
-  const allow = await setAllowlist({ home: req.home, add: req.allow, cwd: req.cwd, ...(req.port === undefined ? {} : { port: req.port }) });
-  if (!allow.ok) {
-    req.print(allow.message);
-    return 1;
-  }
-  const hooks = await installHooks({
+  const common = {
     home: req.home,
     settingsPath: req.settingsPath,
     runtime: req.runtime,
     hooksDir: req.hooksDir,
     ...(req.port === undefined ? {} : { port: req.port }),
-    dryRun: req.dryRun,
     now: req.now,
-  });
-  if (!hooks.ok) {
-    req.print(hooks.message);
+  };
+  // A dry run of the hooks reads and checks the settings file and writes nothing, so a file we
+  // cannot use stops the install before anything is saved, as it did before the halves were split.
+  const check = await installHooks({ ...common, dryRun: true });
+  if (!check.ok) {
+    req.print(check.message);
+    return 1;
+  }
+  const base = (await readConfig(agentPaths(req.home)))?.allowlist ?? [];
+  const allow = req.dryRun ? mergeAllowlist(base, req.allow, req.cwd) : await setAllowlist({ home: req.home, add: req.allow, cwd: req.cwd, ...(req.port === undefined ? {} : { port: req.port }) });
+  if (!allow.ok) {
+    req.print(allow.message);
     return 1;
   }
   if (req.dryRun) {
-    req.print(`dry run: would add hooks to ${req.settingsPath} for ${hooks.events.join(", ")}`);
-    req.print(`dry run: would ${STATUS_WORDS[hooks.statusLine]}`);
+    req.print(`dry run: would add hooks to ${req.settingsPath} for ${check.events.join(", ")}`);
+    req.print(`dry run: would ${STATUS_WORDS[check.statusLine]}`);
     req.print(`dry run: the allowlist would be ${allow.allowlist.join(", ")}`);
     return 0;
+  }
+  const hooks = await installHooks(common);
+  if (!hooks.ok) {
+    req.print(hooks.message);
+    return 1;
   }
   req.print(`installed the Clawd hooks into ${req.settingsPath}; ${STATUS_DONE[hooks.statusLine]}`);
   req.print(hooks.backup ? `backup of the previous settings: ${hooks.backup}` : "there were no previous settings to back up");
@@ -286,13 +294,11 @@ export async function install(req: InstallRequest): Promise<number> {
 
 In the same file, change `InstallRequest`'s `node: string` to `runtime: string`, with the comment `/** The command prefix the written hooks run. */`.
 
-A dry run must write nothing: it returns before the config is saved, so the allowlist save has to move too. Change `install`'s first call to skip saving on a dry run by passing no `add` and reading the merge only:
+Two properties of the old `install()` have to survive the split, and both are in the code above.
 
-```ts
-  const allow = req.dryRun
-    ? mergeAllowlist((await readConfig(agentPaths(req.home)))?.allowlist ?? [], req.allow, req.cwd)
-    : await setAllowlist({ home: req.home, add: req.allow, cwd: req.cwd, ...(req.port === undefined ? {} : { port: req.port }) });
-```
+An unusable settings file must leave the machine untouched, with no `~/.clawd` and no fresh token. The old `install()` checked everything before it wrote anything; now `setAllowlist()` writes as soon as it is called, so the dry run of `installHooks()` goes first as the check. It reads the settings file, applies the install in memory and writes nothing.
+
+A dry run must also write nothing, so on that path the allowlist is merged for the printed line only, never saved. That is the `req.dryRun ? mergeAllowlist(...) : await setAllowlist(...)` line.
 
 - [ ] **Step 6: Point the CLI at the prefix**
 
