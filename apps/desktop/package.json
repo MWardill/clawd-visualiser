@@ -17,6 +17,7 @@
     "@clawd/agent": "workspace:*",
     "@clawd/core": "workspace:*",
     "@clawd/scene": "workspace:*",
+    "zod": "^4.6.2",
     "@types/node": "^22.20.2",
     "electron": "^44.3.0",
     "esbuild": "^0.28.2",
