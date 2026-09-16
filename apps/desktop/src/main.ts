@@ -11,6 +11,7 @@ import { createDesktopStore, desktopStatePath } from "./desktop-state";
 import { isQuitShortcut } from "./keys";
 import { createFileSink, readRetentionDays } from "./log";
 import { APP_ID, loginItemTarget, loginOnLaunch } from "./login";
+import { distPaths } from "./paths";
 import { createQuitHandler } from "./quit";
 import { APP_SCHEME, createSchemeHandler } from "./scheme";
 import { trayIconFile, trayMenuTemplate } from "./tray";
@@ -134,7 +135,8 @@ function run(): void {
   const started = app.whenReady().then(async () => {
     // Every app:// request is answered from the export beside main.cjs, under a CSP that lets the
     // page reach only the agent in use.
-    protocol.handle(APP_SCHEME, createSchemeHandler({ rendererDir: join(__dirname, "renderer"), port: () => host.state().port ?? DEFAULT_PORT }));
+    const dist = distPaths(__dirname);
+    protocol.handle(APP_SCHEME, createSchemeHandler({ dirs: { clawd: dist.renderer, settings: dist.settings }, port: () => host.state().port ?? DEFAULT_PORT }));
     log("desktop.started", { packaged: app.isPackaged });
     host.start();
     await store.load();

@@ -9,6 +9,11 @@ export const APP_SCHEME = "app";
 export const APP_HOST = "clawd";
 /** Where the window loads the visualiser from when no dev URL is given. */
 export const APP_URL = `${DESKTOP_ORIGIN}/`;
+/** The settings window's host; its page is served from dist/settings (design §7). */
+export const SETTINGS_HOST = "settings";
+export const SETTINGS_URL = `${APP_SCHEME}://${SETTINGS_HOST}/`;
+
+export type SchemeDirs = { clawd: string; settings: string };
 
 /** The only file types served. Anything else is 404, so a stray file in the export is never run. */
 export const MIME_TYPES: Readonly<Record<string, string>> = {
@@ -30,14 +35,17 @@ export const MIME_TYPES: Readonly<Record<string, string>> = {
  * resolved dot segments; what decoding reveals (an encoded slash or backslash, a `..`, a drive
  * letter, a NUL) is refused, and the result must still lie inside the directory.
  */
-export function mapRequest(url: string, rendererDir: string): string | null {
+export function mapRequest(url: string, dirs: SchemeDirs): string | null {
   let parsed: URL;
   try {
     parsed = new URL(url);
   } catch {
     return null;
   }
-  if (parsed.protocol !== `${APP_SCHEME}:` || parsed.host.toLowerCase() !== APP_HOST) return null;
+  if (parsed.protocol !== `${APP_SCHEME}:`) return null;
+  const host = parsed.host.toLowerCase();
+  let root = host === APP_HOST ? dirs.clawd : host === SETTINGS_HOST ? dirs.settings : null;
+  if (root === null) return null;
   let path: string;
   try {
     path = decodeURIComponent(parsed.pathname);
@@ -49,7 +57,7 @@ export function mapRequest(url: string, rendererDir: string): string | null {
   // ":" would let a segment name a drive or an alternate data stream on Windows.
   if (segments.some((segment) => segment === "." || segment === ".." || segment.includes(":"))) return null;
   if (segments.length === 0) segments.push("index.html");
-  const root = resolve(rendererDir);
+  root = resolve(root);
   const file = resolve(root, ...segments);
   const inside = relative(root, file);
   if (inside === "" || inside.startsWith("..") || isAbsolute(inside)) return null;
@@ -78,9 +86,25 @@ export function contentSecurityPolicy(port: number): string {
   ].join("; ");
 }
 
+/**
+ * The settings page talks to main through its preload bridge, never over the network, so it is
+ * allowed no connections at all, and no inline scripts.
+ */
+export function settingsPolicy(): string {
+  return [
+    "default-src 'self'",
+    "script-src 'self'",
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data:",
+    "font-src 'self'",
+    "connect-src 'none'",
+    "frame-ancestors 'none'",
+  ].join("; ");
+}
+
 export type SchemeDeps = {
-  /** The directory holding the export: dist/renderer beside main.cjs. */
-  rendererDir: string;
+  /** The renderer's and the settings page's directories: dist/renderer and dist/settings beside main.cjs. */
+  dirs: SchemeDirs;
   /** The port of the agent in use, read for each response. */
   port(): number;
   readFile?(path: string): Promise<Uint8Array>;
@@ -90,8 +114,9 @@ export type SchemeDeps = {
 export function createSchemeHandler(deps: SchemeDeps): (request: { url: string }) => Promise<Response> {
   const read = deps.readFile ?? ((path: string) => readFile(path));
   return async (request) => {
-    const policy = { "content-security-policy": contentSecurityPolicy(deps.port()) };
-    const file = mapRequest(request.url, deps.rendererDir);
+    const settings = request.url.toLowerCase().startsWith(`${APP_SCHEME}://${SETTINGS_HOST}`);
+    const policy = { "content-security-policy": settings ? settingsPolicy() : contentSecurityPolicy(deps.port()) };
+    const file = mapRequest(request.url, deps.dirs);
     const type = file === null ? null : mimeFor(file);
     if (file !== null && type !== null) {
       try {
