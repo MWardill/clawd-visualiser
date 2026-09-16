@@ -299,10 +299,10 @@ early; otherwise they are done after stage 6.
 - **zod's eval probe.** zod tests for `Function("")` on every page load, which the CSP reports as
   an eval violation. It is harmless. Set `z.config({ jitless: true })` for the desktop target, or
   note it as expected in the desktop README.
-- **Checks still owed from stage 3.** `pnpm --filter @clawd/desktop start` on the default port with
-  no dev server, opening a session's detail sheet with no `Refused to` lines in DevTools; hot reload
-  in the `dev` loop; a real Claude Code prompt setting a Clawd working in the packaged UI. Stage 3's
-  smoke test ran on port 4751 because other processes held 4750 and 3000.
+- **Stage 3's manual check: done.** On 16 September 2026 the maintainer ran
+  `pnpm --filter @clawd/desktop start` on the default port, and the page read live rather than
+  simulated. Stage 3's automated smoke test had run on port 4751 because other processes held 4750
+  and 3000.
 
 Found in the reviews of stage 4 (15 September 2026). The first item blocks stage 6's "done when"
 and is settled in its plan; the rest wait like the items above.
