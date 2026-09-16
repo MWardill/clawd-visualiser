@@ -337,6 +337,15 @@ and is settled in its plan; the rest wait like the items above.
   once stage 6 packages the app: a real sign-out and sign-in with the login item on, since the
   packaged entry differs from the development one.
 
+Found in the reviews of stage 5 (16 September 2026).
+
+- **A restart the user asked for clears the fault budget.** `agent-host.ts`'s `restart()`, which the
+  settings window calls after a folder or detail-level change, resets the fault history, so the
+  give-up path cannot fire while restarts keep arriving. That is deliberate: only the settings window
+  calls it, nobody clicks faster than five crashes accumulate, and keeping the budget would deny a
+  clean start to someone who has just fixed a bad config. Revisit it if anything else ever calls
+  `restart()`, especially on a timer.
+
 ## 13. Tests
 
 - Unit tests in `apps/desktop` with vitest: `args`; `scheme` mapping, MIME and CSP text;
