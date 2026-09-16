@@ -179,6 +179,7 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
     restart() {
       queue(async () => {
         if (stopped()) return;
+        begun = true;
         if (timer !== null) clearTimeout(timer);
         timer = null;
         faults = [];
