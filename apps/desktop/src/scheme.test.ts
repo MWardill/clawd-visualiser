@@ -3,7 +3,18 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { APP_HOST, APP_SCHEME, APP_URL, contentSecurityPolicy, createSchemeHandler, mapRequest, mimeFor, settingsPolicy } from "./scheme";
+import {
+  APP_HOST,
+  APP_SCHEME,
+  APP_URL,
+  contentSecurityPolicy,
+  createSchemeHandler,
+  hostOf,
+  mapRequest,
+  mimeFor,
+  SETTINGS_URL,
+  settingsPolicy,
+} from "./scheme";
 
 const made: string[] = [];
 afterEach(async () => {
@@ -23,6 +34,17 @@ describe("the app origin", () => {
   it("is core's desktop origin, so the window and the agent's CORS check agree", () => {
     expect(`${APP_SCHEME}://${APP_HOST}`).toBe(DESKTOP_ORIGIN);
     expect(APP_URL).toBe("app://clawd/");
+    expect(SETTINGS_URL).toBe("app://settings/");
+  });
+});
+
+describe("hostOf", () => {
+  it("names our hosts, whatever the case, and nothing else", () => {
+    expect(hostOf("app://clawd/index.html")).toBe("clawd");
+    expect(hostOf("app://SETTINGS/page.js")).toBe("settings");
+    expect(hostOf("app://settingsfoo/index.html")).toBe("settingsfoo");
+    expect(hostOf("http://clawd/index.html")).toBeNull();
+    expect(hostOf("not a url")).toBeNull();
   });
 });
 
@@ -135,5 +157,16 @@ describe("createSchemeHandler", () => {
     const page = await handle({ url: "app://settings/" });
     expect(page.status).toBe(200);
     expect(page.headers.get("content-security-policy")).toBe(settingsPolicy());
+  });
+
+  it("answers 404 under the settings host with the settings policy, and treats a host that merely starts with it as unknown", async () => {
+    const dir = await tempDir();
+    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => 4750 });
+    const missing = await handle({ url: "app://settings/missing.js" });
+    expect(missing.status).toBe(404);
+    expect(missing.headers.get("content-security-policy")).toBe(settingsPolicy());
+    const other = await handle({ url: "app://settingsfoo/index.html" });
+    expect(other.status).toBe(404);
+    expect(other.headers.get("content-security-policy")).toBe(contentSecurityPolicy(4750));
   });
 });
