@@ -157,4 +157,8 @@ describe("hookStatus", () => {
     expect(hookStatus(withCommands('"D:/old/electron.exe" "C:/h/bin/clawd-hook.mjs"', expected.status), expected)).toBe("stale");
     expect(hookStatus(withCommands(expected.hook, '"D:/old/electron.exe" "C:/h/bin/clawd-statusline.mjs"'), expected)).toBe("stale");
   });
+
+  it("is stale when our hook is there but the status line was removed by hand, since an install would write it back", () => {
+    expect(hookStatus({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: expected.hook }] }] } }, expected)).toBe("stale");
+  });
 });

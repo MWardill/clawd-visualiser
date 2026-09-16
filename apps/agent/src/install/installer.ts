@@ -130,7 +130,16 @@ export type HooksRequest = {
   now: () => number;
 };
 export type HooksResult =
-  | { ok: true; statusLine: InstallResult["statusLine"]; events: readonly string[]; backup: string | null; allowlist: string[]; port: number }
+  | {
+      ok: true;
+      statusLine: InstallResult["statusLine"];
+      events: readonly string[];
+      backup: string | null;
+      /** The allowlist as read at the top of this call, before it. A caller that has just saved a
+       * new allowlist should read the config again rather than trust this. */
+      allowlist: string[];
+      port: number;
+    }
   | { ok: false; message: string };
 
 /**
@@ -178,8 +187,9 @@ export async function install(req: InstallRequest): Promise<number> {
     req.print(check.message);
     return 1;
   }
-  const base = (await readConfig(agentPaths(req.home)))?.allowlist ?? [];
-  const allow = req.dryRun ? mergeAllowlist(base, req.allow, req.cwd) : await setAllowlist({ home: req.home, add: req.allow, cwd: req.cwd, ...(req.port === undefined ? {} : { port: req.port }) });
+  const allow = req.dryRun
+    ? mergeAllowlist((await readConfig(agentPaths(req.home)))?.allowlist ?? [], req.allow, req.cwd)
+    : await setAllowlist({ home: req.home, add: req.allow, cwd: req.cwd, ...(req.port === undefined ? {} : { port: req.port }) });
   if (!allow.ok) {
     req.print(allow.message);
     return 1;

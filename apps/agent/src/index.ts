@@ -1,8 +1,7 @@
 // The agent's public surface for hosts other than the CLI. The desktop app runs the agent in its
 // own main process through these.
 export { PortInUseError, startAgent, type AgentOptions, type RunningAgent } from "./agent";
-export { ConfigError, DEFAULT_PORT, agentPaths, defaultConfig, defaultHome, readConfig, saveConfig, type AgentConfig, type AgentPaths } from "./config";
-export { defaultSettingsPath, defaultTranscriptsDir } from "./config";
+export { ConfigError, DEFAULT_PORT, agentPaths, defaultConfig, defaultHome, defaultSettingsPath, defaultTranscriptsDir, readConfig, saveConfig, type AgentConfig, type AgentPaths } from "./config";
 export { setDetail } from "./detail";
 export { install, installHooks, removeFromAllowlist, setAllowlist, uninstall, type AllowlistResult, type HooksResult } from "./install/installer";
 export { HOOK_SCRIPTS, hookCommand, hookStatus, nodeRuntime, statusCommand, type HookStatus, type InstallOptions, type JsonObject } from "./install/settings";

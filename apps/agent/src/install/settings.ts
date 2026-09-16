@@ -86,8 +86,9 @@ function ourHookCommand(settings: JsonObject): string | null {
 }
 
 /**
- * Whether the settings file already runs the commands we would write. `stale` is ours pointing
- * somewhere else, which is what a moved folder or a new unzip leaves behind.
+ * Whether the settings file already runs the commands we would write. `stale` is ours present but
+ * not matching what an install would write now: pointing somewhere else, which is what a moved
+ * folder or a new unzip leaves behind, or half-present, such as a status line removed by hand.
  */
 export function hookStatus(settings: JsonObject | null, expected: { hook: string; status: string }): HookStatus {
   if (settings === null) return "missing";
