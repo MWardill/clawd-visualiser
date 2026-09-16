@@ -330,11 +330,12 @@ and is settled in its plan; the rest wait like the items above.
 - **Tray icon scaling.** At 125% and 150% display scaling Windows resamples the 16 or 32 px PNG and
   blurs the pixel art. An ICO with 16, 20, 24 and 32 px images fixes it, with stage 6's icons, along
   with a check that the checked-in icons still match the sprite.
-- **Checks still owed from stage 4.** The tray icon and its tooltip; clicking it; the menu's Open,
-  Start on login and Quit; the waiting badge with a real permission prompt; unticking Start on
-  login; a physical Ctrl+Q; and a real sign-out and sign-in with the login item on, confirming
-  Windows does not report the app holding the sign-out up. Stage 4's automated run covered closing,
-  second launches, bounds, `--hidden`, the login item's re-apply and the development loop.
+- **Stage 4's manual checks: done.** The maintainer walked them on 16 September 2026: the tray icon
+  and its tooltip, clicking it, the menu's Open, Start on login and Quit, the waiting badge,
+  unticking Start on login, and Ctrl+Q. Stage 4's automated run had already covered closing, second
+  launches, bounds, `--hidden`, the login item's re-apply and the development loop. Worth repeating
+  once stage 6 packages the app: a real sign-out and sign-in with the login item on, since the
+  packaged entry differs from the development one.
 
 ## 13. Tests
 
