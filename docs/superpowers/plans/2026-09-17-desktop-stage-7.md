@@ -2,13 +2,13 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** The settings window and the installer stop losing events and stop lying: the hook check compares everything an install writes, an update refreshes the scripts, an unreadable file says so, a refusal and a failed agent's reason reach the page, a change while attached says it was not applied, the install never leaves the config half-changed, and development runs leave nothing behind for the packaged app to trip over.
+**Goal:** The settings window and the installer stop losing events and stop lying: the hook check compares everything an install writes, an update refreshes the scripts, an unreadable file says so, a refusal and a failed agent's reason reach the page, a change while attached says it was not applied, the install never leaves the config half-changed, and the launch repair rewrites only what is this app's to rewrite.
 
-**Architecture:** The agent's installer saves the config once, inside `installHooks`, and gains result-returning cores for uninstall and the detail level. `hookStatus` compares the whole set an install would write, and the desktop's `hooks.ts` adds the scripts check and the `unreadable` classification. The settings actions move out of `main.ts` into `settings/actions.ts`, a tested module over injected doubles, and the bridge's state gains a `notice` and the agent's `error`. Stage 6.1 has already closed the stage 6 review's items, so this stage builds on version 2 of `desktop.json` and a smoke script with its own profile.
+**Architecture:** The agent's installer saves the config once, inside `installHooks`, and gains result-returning cores for uninstall and the detail level. `hookStatus` compares the whole set an install would write, and the desktop's `hooks.ts` adds the scripts check and the `unreadable` classification, and decides from the exe the installed command names whether a stale set is this app's to repair. The settings actions move out of `main.ts` into `settings/actions.ts`, a tested module over injected doubles, and the bridge's state gains a `notice` and the agent's `error`. Stage 6.1 has already closed the stage 6 review's items, so this stage builds on version 2 of `desktop.json` and a smoke script with its own profile.
 
 **Tech Stack:** Electron 44, electron-builder 26, esbuild 0.28, zod 4, vitest 5, TypeScript 5.9, pnpm 12 workspaces.
 
-**Spec:** `docs/superpowers/specs/2026-09-14-desktop-app-design.md`, §5, §8, §9, §11, and these §12.1 items: from stage 5's review the settings actions in untested glue, the status line removed by hand, the hook check ignoring port and token, the bridge unable to say an action was refused, the failed agent's reason; from the 17 September overall review attached mode, unreadable config or settings, `install()` saving before the hooks, the minted token, the double config read, the double login build, the CLI-shaped uninstall, the detail default; from stage 6's final review the update not refreshing the scripts, the icon byte check, the smoke answered by another agent. The 17 September review of stage 6's merge is stage 6.1's, done before this stage. Everything else in §12.1 is stage 8's (Task 4 lists it).
+**Spec:** `docs/superpowers/specs/2026-09-14-desktop-app-design.md`, §5, §8, §9, §11, and these §12.1 items: from stage 5's review the settings actions in untested glue, the status line removed by hand, the hook check ignoring port and token, the bridge unable to say an action was refused, the failed agent's reason; from the 17 September overall review attached mode, unreadable config or settings, `install()` saving before the hooks, the minted token, the double config read, the double login build, the CLI-shaped uninstall, the detail default; from stage 6's final review the update not refreshing the scripts; and from the review of stage 6's merge the launch repair treating `packaged` as the only installer. The rest of that review is stage 6.1's, done before this stage. Everything else in §12.1 is stage 8's (Task 5 lists it).
 
 **Stage idea:** none new in Electron. This is the first half of the post-dev hardening row: the items where the app loses events, misleads the user, or corrupts its own state. The second half, the page's rendering and tests, the shell's edge cases and the scheme, is stage 8.
 
@@ -19,7 +19,7 @@
 - `exactOptionalPropertyTypes` is on (`tsconfig.base.json`): never assign `undefined` to an optional property; omit it.
 - The desktop package has no runtime dependencies. No dependency is added this stage.
 - The bridge's list of calls does not grow. Its state gains two fields, `notice: string | null` and `agent.error: string | null`, and the hook status gains `unreadable`.
-- `stale` means: hooks of ours are present and any part of what an install would write now differs, including the http hooks' port and token, a status line removed by hand, and a script in `~/.clawd/bin` that differs from the one shipped. The packaged app repairs all of it at launch; a development run shows it and offers Reinstall. This settles the two §12.1 items on what stale should mean.
+- `stale` means: hooks of ours are present and any part of what an install would write now differs, including the http hooks' port and token, a status line removed by hand, and a script in `~/.clawd/bin` that differs from the one shipped. The packaged app repairs it at launch only when the installed command names this exe or an exe that no longer exists; a command naming another exe that still exists, the CLI's or another copy's, is a live install and is left alone. A development run never repairs unattended. In every case the settings window shows `stale` and offers Reinstall. This settles the three §12.1 items on what stale should mean and who may repair it.
 - `unreadable` means: the config file exists but cannot be used, or the settings file exists but is not a JSON object. The page says so and offers no buttons.
 - A saved config change is applied by restarting the agent the app owns. While attached to another agent, the change is saved, not applied, logged as `desktop.attachedChange`, and the page says the attached agent must be restarted.
 - Installing hooks from the app while attached and without a config of its own is refused: the hooks would carry a token the other agent does not hold.
@@ -35,11 +35,11 @@
 | File | Responsibility |
 | --- | --- |
 | `apps/agent/src/install/installer.ts` | `installHooks` saves once, after the scripts; `uninstallHooks` returns a result; `install` and `uninstall` print. |
-| `apps/agent/src/install/settings.ts` | `hookStatus` compares the whole set; `unreadable` joins `HookStatus`. |
+| `apps/agent/src/install/settings.ts` | `hookStatus` compares the whole set; `unreadable` joins `HookStatus`; `installedRuntimeExe`. |
 | `apps/agent/src/detail.ts` | `saveDetail` core; `setDetail` prints. |
 | `apps/agent/src/index.ts` | Exports `uninstallHooks`, `saveDetail`, `detailLevel`, `isJsonObject`. |
 | `apps/agent/src/log.ts` | `desktop.attachedChange` joins the closed set. |
-| `apps/desktop/src/hooks.ts` | `readConfigState`, `scriptsMatch`, `currentHookStatus`. |
+| `apps/desktop/src/hooks.ts` | `readConfigState`, `scriptsMatch`, `currentHookStatus`, `installedExe`, `repairOnLaunch` over the installed exe. |
 | `apps/desktop/src/settings/actions.ts` | `createSettingsActions(deps)`: the rules, with notices. |
 | `apps/desktop/src/settings/state.ts`, `settings-state.ts` | `notice` and `agent.error`; `unreadable`. |
 | `apps/desktop/src/settings/page.ts`, `page.css` | Renders the notice, the reason, the unreadable status. |
@@ -746,7 +746,199 @@ git commit -m "fix(desktop): the hook check compares every hook, the token, the 
 
 ---
 
-### Task 3: The settings actions become a tested module, and the bridge carries a notice and the agent's reason
+### Task 3: The launch repair leaves a live other install alone
+
+**Files:**
+- Modify: `apps/agent/src/install/settings.ts`, `apps/agent/src/index.ts`
+- Modify: `apps/desktop/src/hooks.ts`
+- Modify: `apps/desktop/src/main.ts`
+- Test: `apps/agent/src/install/settings.test.ts`, `apps/desktop/src/hooks.test.ts`
+
+**Interfaces:**
+- Produces, from `@clawd/agent`: `installedRuntimeExe(settings: JsonObject): string | null`, the executable our SessionStart command hook names, with forward slashes. In `hooks.ts`: `repairOnLaunch(input: RepairInput): boolean` with `RepairInput = { status: HookStatus; packaged: boolean; installedExe: string | null; installedExeExists: boolean; thisExe: string }` (this replaces Task 2's `repairOnLaunch(status, packaged)`); `samePath(a: string, b: string): boolean`; `installedExe(settingsPath: string): Promise<string | null>`.
+
+Why: since stage 6 the packaged app rewrites at launch any hooks of ours whose command is not its own, so two packaged copies, or a packaged app beside the CLI's install, take turns rewriting the settings file and leaving a backup each. The check cannot tell "ours, at the folder I used to be in" from "ours, belonging to a different install that still works". The exe the installed command names can: if it is this exe, what drifted is the port, the token, the status line or a script, and the repair is ours; if it no longer exists, the folder moved or was deleted, and the repair is ours; if it is another exe that still exists, it is a live install, and the settings window shows `stale` and offers Reinstall instead.
+
+- [ ] **Step 1: Write the failing tests**
+
+In `apps/agent/src/install/settings.test.ts`, add `installedRuntimeExe` to the import from `./settings`, and add after the `hookStatus` describe:
+
+```ts
+describe("installedRuntimeExe", () => {
+  const withCommand = (command: string): JsonObject => ({
+    hooks: { SessionStart: [{ hooks: [{ type: "http", url: "http://127.0.0.1:4750/ingest/hook" }, { type: "command", command }] }] },
+  });
+
+  it("is the quoted executable of our SessionStart command, under either prefix", () => {
+    expect(installedRuntimeExe(withCommand('"C:/Program Files/nodejs/node.exe" "C:/h/bin/clawd-hook.mjs"'))).toBe("C:/Program Files/nodejs/node.exe");
+    expect(installedRuntimeExe(withCommand('ELECTRON_RUN_AS_NODE=1 "C:/Apps/Clawd Visualiser/Clawd Visualiser.exe" "C:/h/bin/clawd-hook.mjs"'))).toBe("C:/Apps/Clawd Visualiser/Clawd Visualiser.exe");
+  });
+
+  it("is null with no command hook of ours, or one in another shape", () => {
+    expect(installedRuntimeExe({})).toBeNull();
+    expect(installedRuntimeExe({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "other.mjs" }] }] } })).toBeNull();
+    expect(installedRuntimeExe(withCommand("node C:/h/bin/clawd-hook.mjs"))).toBeNull();
+  });
+});
+```
+
+In `apps/desktop/src/hooks.test.ts`, add `installedExe` and `samePath` to the import from `./hooks`, and replace the `repairOnLaunch` describe with:
+
+```ts
+describe("samePath", () => {
+  it("compares the way Windows does: slashes either way, no case, no trailing slash", () => {
+    expect(samePath("C:\\Apps\\Clawd Visualiser\\Clawd Visualiser.exe", "c:/apps/clawd visualiser/clawd visualiser.exe")).toBe(true);
+    expect(samePath("C:/Apps/", "C:\\Apps")).toBe(true);
+    expect(samePath("C:/Apps/One/app.exe", "C:/Apps/Two/app.exe")).toBe(false);
+  });
+});
+
+describe("repairOnLaunch", () => {
+  const base = { status: "stale" as const, packaged: true, installedExe: "C:/Apps/Clawd Visualiser/Clawd Visualiser.exe", installedExeExists: true, thisExe: "C:\\Apps\\Clawd Visualiser\\Clawd Visualiser.exe" };
+
+  it("repairs stale hooks that name this exe, however the path is spelled", () => {
+    expect(repairOnLaunch(base)).toBe(true);
+    expect(repairOnLaunch({ ...base, installedExe: "c:/apps/clawd visualiser/clawd visualiser.exe" })).toBe(true);
+  });
+
+  it("repairs stale hooks that name an exe that no longer exists, as after the folder moved", () => {
+    expect(repairOnLaunch({ ...base, installedExe: "C:/Apps/Old/Clawd Visualiser.exe", installedExeExists: false })).toBe(true);
+  });
+
+  it("leaves a live install by another exe alone, so two installs never take turns", () => {
+    expect(repairOnLaunch({ ...base, installedExe: "C:/Program Files/nodejs/node.exe" })).toBe(false);
+    expect(repairOnLaunch({ ...base, installedExe: "D:/Other/Clawd Visualiser.exe" })).toBe(false);
+  });
+
+  it("repairs stale hooks with no command of ours, and never anything that is not stale or not packaged", () => {
+    expect(repairOnLaunch({ ...base, installedExe: null, installedExeExists: false })).toBe(true);
+    for (const status of ["current", "missing", "unreadable"] as const) expect(repairOnLaunch({ ...base, status })).toBe(false);
+    expect(repairOnLaunch({ ...base, packaged: false })).toBe(false);
+  });
+});
+
+describe("installedExe", () => {
+  it("reads the exe our command names, and null when the file is missing, unreadable or has no command of ours", async () => {
+    const settingsPath = join(await tempDir(), "settings.json");
+    expect(await installedExe(settingsPath)).toBeNull();
+    await writeFile(settingsPath, "{ nope");
+    expect(await installedExe(settingsPath)).toBeNull();
+    await writeFile(settingsPath, "{}");
+    expect(await installedExe(settingsPath)).toBeNull();
+    await writeFile(settingsPath, JSON.stringify(applyInstall({}, { port: 4750, token: "c".repeat(64), binDir: "C:\\h\\bin", runtime: runtimePrefix("C:\\Apps\\app.exe") }).settings));
+    expect(await installedExe(settingsPath)).toBe("C:/Apps/app.exe");
+  });
+});
+```
+
+- [ ] **Step 2: Run the tests to verify they fail**
+
+Run: `cd apps/agent && npx vitest run src/install/settings.test.ts; cd ../desktop && npx vitest run src/hooks.test.ts`
+Expected: FAIL. `installedRuntimeExe`, `samePath` and `installedExe` do not exist, and `repairOnLaunch` still takes two arguments.
+
+- [ ] **Step 3: Read the installed exe in the agent**
+
+In `apps/agent/src/install/settings.ts`, after `ourInstalled`, add:
+
+```ts
+/**
+ * The executable our SessionStart command hook runs, as an install wrote it: the quoted path after
+ * an optional `ELECTRON_RUN_AS_NODE=1` prefix, with forward slashes. Null when the file holds no
+ * command hook of ours, or one not in that shape.
+ */
+export function installedRuntimeExe(settings: JsonObject): string | null {
+  const hooks = settings.hooks;
+  if (!isJsonObject(hooks) || !Array.isArray(hooks.SessionStart)) return null;
+  for (const group of hooks.SessionStart) {
+    if (!isJsonObject(group) || !Array.isArray(group.hooks)) continue;
+    for (const hook of group.hooks) {
+      if (!isOurHook(hook) || (hook as JsonObject).type !== "command") continue;
+      const match = /^(?:ELECTRON_RUN_AS_NODE=1 )?"([^"]+)"/.exec(String((hook as JsonObject).command));
+      return match?.[1] ?? null;
+    }
+  }
+  return null;
+}
+```
+
+In `apps/agent/src/index.ts`, add `installedRuntimeExe` to the `./install/settings` export line.
+
+- [ ] **Step 4: Decide the repair in the desktop**
+
+In `apps/desktop/src/hooks.ts`, add `installedRuntimeExe` to the import from `@clawd/agent`, and replace the `repairOnLaunch` function and its comment with:
+
+```ts
+export type RepairInput = {
+  status: HookStatus;
+  packaged: boolean;
+  /** The executable the installed SessionStart command names, or null when there is no command of ours. */
+  installedExe: string | null;
+  /** Whether that executable exists on disk; ignored when `installedExe` is null. */
+  installedExeExists: boolean;
+  /** This app's own executable, `process.execPath`. */
+  thisExe: string;
+};
+
+/** Paths compared the way Windows does: slashes either way, no case, no trailing slash. */
+export function samePath(a: string, b: string): boolean {
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  return norm(a) === norm(b);
+}
+
+/**
+ * Whether the packaged app rewrites the hooks at launch. Only `stale` is ever repaired, and only when
+ * the repair is ours to make: the installed command names this exe (so what drifted is the port, the
+ * token, the status line or a script), or an exe that no longer exists (the folder moved or was
+ * deleted), or there is no command of ours at all. A command naming another exe that still exists
+ * is a live install, the CLI's or another copy's, and is left alone: the settings window shows
+ * `stale` and offers Reinstall, and no two installs take turns rewriting the file. A development run
+ * never repairs unattended (stage 6).
+ */
+export function repairOnLaunch(input: RepairInput): boolean {
+  if (!input.packaged || input.status !== "stale") return false;
+  if (input.installedExe === null) return true;
+  if (samePath(input.installedExe, input.thisExe)) return true;
+  return !input.installedExeExists;
+}
+
+/** The executable the installed SessionStart command names, read from the settings file; null when the file is missing, unreadable or has none of ours. */
+export async function installedExe(settingsPath: string): Promise<string | null> {
+  const file = await readJsonFile(settingsPath).catch(() => null);
+  if (file === null || !file.found || !file.ok || !isJsonObject(file.value)) return null;
+  return installedRuntimeExe(file.value);
+}
+```
+
+In `apps/desktop/src/main.ts`, add `import { access } from "node:fs/promises";`, add `installedExe` to the import from `./hooks`, and replace the two lines
+
+```ts
+    // Our hooks pointing at another folder are rewritten by the packaged app, so a moved app keeps receiving events.
+    if (repairOnLaunch(fallback.hooks, app.isPackaged)) {
+```
+
+with:
+
+```ts
+    // The packaged app rewrites our hooks when what they name is this exe or an exe that is gone; a
+    // live install by another exe is left alone, and the settings window shows it as stale instead.
+    const named = fallback.hooks === "stale" && app.isPackaged ? await installedExe(settingsPath) : null;
+    const namedExists = named !== null && (await access(named).then(() => true, () => false));
+    if (repairOnLaunch({ status: fallback.hooks, packaged: app.isPackaged, installedExe: named, installedExeExists: namedExists, thisExe: process.execPath })) {
+```
+
+- [ ] **Step 5: Run the tests and the type checks, and commit**
+
+Run: `cd apps/agent && npx vitest run && pnpm typecheck && cd ../desktop && npx vitest run && pnpm typecheck`
+Expected: PASS.
+
+```bash
+git add apps/agent/src/install/settings.ts apps/agent/src/install/settings.test.ts apps/agent/src/index.ts apps/desktop/src/hooks.ts apps/desktop/src/hooks.test.ts apps/desktop/src/main.ts
+git commit -m "fix(desktop): the launch repair rewrites hooks that name this exe or a missing one, and leaves a live install by another exe alone"
+```
+
+---
+
+### Task 4: The settings actions become a tested module, and the bridge carries a notice and the agent's reason
 
 **Files:**
 - Create: `apps/desktop/src/settings/actions.ts`
@@ -1204,7 +1396,7 @@ git commit -m "feat(desktop): the settings actions are a tested module, the page
 
 ---
 
-### Task 4: The documents, the checklist, and the hand-off
+### Task 5: The documents, the checklist, and the hand-off
 
 **Files:**
 - Modify: `docs/superpowers/specs/2026-09-14-desktop-app-design.md`
@@ -1220,7 +1412,7 @@ In `docs/superpowers/specs/2026-09-14-desktop-app-design.md`:
 
 3. In §6, the last bullet ends with a sentence beginning `\`hookStatus(settingsPath, expectedCommand)\` returns` (it wraps across two lines, around line 121). Replace that whole sentence with: `\`hookStatus(settings, options)\` compares everything an install would write, the http hooks with their port and token, the SessionStart command and the status line, and returns \`missing\`, \`current\` or \`stale\`; \`uninstallHooks()\` and \`saveDetail()\` are the result-returning cores the CLI's \`uninstall\` and \`detail\` print (stage 7).`
 
-4. In §8, in the bullet beginning `On launch, \`hooks.ts\` reads the settings file.`, replace `\`stale\` (our hook present with a different command, as after the folder moved or a new version was unzipped elsewhere)` with `\`stale\` (ours present with any part different from what an install would write now: the commands after the folder moved or a new version was unzipped elsewhere, an http hook's port or token, a status line removed by hand, or a script in \`~/.clawd/bin\` that differs from the one shipped beside the archive, which is how an update refreshes the scripts)`, and after the sentence ending `the settings window offers to install.` add `\`unreadable\`: the config exists but cannot be used, or the settings file is not a JSON object; nothing is repaired and the page offers no buttons (stage 7).`
+4. In §8, in the bullet beginning `On launch, \`hooks.ts\` reads the settings file.`, replace `\`stale\` (our hook present with a different command, as after the folder moved or a new version was unzipped elsewhere)` with `\`stale\` (ours present with any part different from what an install would write now: the commands after the folder moved or a new version was unzipped elsewhere, an http hook's port or token, a status line removed by hand, or a script in \`~/.clawd/bin\` that differs from the one shipped beside the archive, which is how an update refreshes the scripts)`, and after the sentence ending `the settings window offers to install.` add `\`unreadable\`: the config exists but cannot be used, or the settings file is not a JSON object; nothing is repaired and the page offers no buttons. The packaged app rewrites at launch only when the installed command names this exe or an exe that no longer exists; a command naming another exe that still exists is a live install and is left alone, shown as stale in the settings window (stage 7).`
 
 5. In §9, replace the `SettingsState` type block with:
 
@@ -1258,7 +1450,7 @@ In §12's stages table, replace the `Post-dev Hardening` row with two rows:
 | 8 Hardening II | The page's rendering and tests, the shell's edge cases, the scheme, the stale wait (§12.1) | None new | Every remaining §12.1 item is done or dropped with a reason in the decision log |
 ```
 
-In §12.1, append `Done in stage 7.` with a clause to each of these items: stage 5's `The settings actions are rules living in untested glue` (`: \`settings/actions.ts\``), `A status line removed by hand is reinstated at every launch` (`: decided, it is stale and the packaged app repairs it`), `The hook check ignores the port and the token` (`: the whole set is compared`), `The bridge cannot tell the user an action was refused` (`: the state's \`notice\``), `The failed agent's reason is never shown` (`: \`agent.error\``); from the 17 September overall review `Attached mode applies nothing`, `An unreadable config or settings file reads as "not installed"`, `\`install()\` saves the config before the hooks can still fail`, `An install from the app can mint a token the serving agent lacks`, `Every state build reads the config twice`, `The login toggle from the page builds the state twice`, `The desktop calls the CLI-shaped uninstall with a no-op printer`, `The detail default duplicates \`detailLevel()\``; from stage 6's final review `An update does not refresh the hook scripts` (`: the scripts are compared at launch`).
+In §12.1, append `Done in stage 7.` with a clause to each of these items: stage 5's `The settings actions are rules living in untested glue` (`: \`settings/actions.ts\``), `A status line removed by hand is reinstated at every launch` (`: decided, it is stale and the packaged app repairs it`), `The hook check ignores the port and the token` (`: the whole set is compared`), `The bridge cannot tell the user an action was refused` (`: the state's \`notice\``), `The failed agent's reason is never shown` (`: \`agent.error\``); from the 17 September overall review `Attached mode applies nothing`, `An unreadable config or settings file reads as "not installed"`, `\`install()\` saves the config before the hooks can still fail`, `An install from the app can mint a token the serving agent lacks`, `Every state build reads the config twice`, `The login toggle from the page builds the state twice`, `The desktop calls the CLI-shaped uninstall with a no-op printer`, `The detail default duplicates \`detailLevel()\``; from stage 6's final review `An update does not refresh the hook scripts` (`: the scripts are compared at launch`); and from the review of stage 6's merge `\`packaged\` stands in for "the only installer on this machine"` (`: the repair fires only for this exe or an exe that no longer exists`).
 
 Then, after the stage 6.1 list (`Found in the review of stage 6's merge`), add:
 
@@ -1332,6 +1524,7 @@ Stop any CLI agent and any development run first. Check each:
 - **Refusals reach the page.** Settings, Add folder, pick `C:\`: the notice says a filesystem root is refused. Remove the last folder: the notice clears. Remove hooks with none installed: "no hooks of ours were found".
 - **Unreadable.** Quit. Write `{ nope` into `$env:CLAWD_HOME\config.json`. Launch: the Agent section reads failed with the reason, and the Hooks section reads `cannot be checked` with no buttons. Restore the file (delete it; the agent recreates it) and launch again.
 - **The whole set is stale.** Install the hooks. Quit. In `$env:CLAUDE_CONFIG_DIR\settings.json`, change one http hook's port to 4800. Launch: the log gains `desktop.hooksRepaired` and the port is back. Do the same by deleting the `statusLine`: repaired.
+- **A live other install is left alone.** Quit. Install the CLI's hooks into the scratch settings (`pnpm --filter @clawd/agent agent install --allow <the folder>` with the two scratch variables set): the commands now name `node.exe`. Launch the packaged app: no `desktop.hooksRepaired` in the log, and Settings says stale and offers Reinstall. Quit, edit the settings file so the command names a folder that does not exist, launch: repaired.
 - **An update refreshes the scripts.** Quit. Append a comment line to `$env:CLAWD_HOME\bin\clawd-hook.mjs`. Launch: `desktop.hooksRepaired`, and the file matches the shipped one again.
 - **Attached.** Start the CLI agent (`pnpm --filter @clawd/agent start`) against the same scratch home, then launch the app: the tray says attached. Add a folder: the notice says the attached agent keeps its own settings, and the log has `desktop.attachedChange`. Stop the CLI agent; the app takes over.
 - **Refused install while attached without a config.** With the CLI agent running from a different `CLAWD_HOME` and this app's scratch home empty, Install hooks: the notice says the app has no config of its own, and nothing is written.
@@ -1345,7 +1538,7 @@ In §12.1, after the `Stage 6's manual checks: partly done` item, add:
 ```markdown
 - **Stage 6's remaining checks and stage 7's: done.** On <date> the maintainer walked them: the
   refusals and the attached notice on the page, the unreadable config, the port, the status line and
-  a changed script all repaired at launch, the refused install without a config, a sign-out and sign-in with the login item on, and the
+  a changed script all repaired at launch, the CLI's install left alone and a missing exe repaired, the refused install without a config, a sign-out and sign-in with the login item on, and the
   folder deleted under a running session.
 ```
 
