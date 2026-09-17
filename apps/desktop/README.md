@@ -50,6 +50,26 @@ pnpm --filter @clawd/desktop test
 pnpm --filter @clawd/desktop typecheck
 ```
 
+## Package
+
+```
+pnpm --filter @clawd/desktop package
+```
+
+builds the export, bundles main and runs electron-builder: `release/win-unpacked/` is the folder
+teammates get, and `release/Clawd-Visualiser-<version>-win-x64.zip` is that folder zipped. Unzip it
+anywhere, a folder under your user profile is best since the hooks will point at it, and run
+`Clawd Visualiser.exe`. `pnpm --filter @clawd/desktop smoke` starts the packaged app once against
+scratch folders and checks that the exe runs as Node, that the app starts as packaged and that its
+agent answers. `pnpm --filter @clawd/desktop icons` redraws the tray and app icons from the sprite;
+`pnpm test` fails if the checked-in files no longer match it.
+
+A development run and the packaged app stay out of each other's way: they have their own names, so
+their own profile folders and single-instance locks, and neither blocks the other from starting; the
+development login item has its own name and is never remembered, a development launch never rewrites
+the hooks unattended (the settings window shows `stale` and offers Reinstall), and the packaged app
+ignores `--dev-url` and `CLAWD_DESKTOP_URL`.
+
 ## Stage notes
 
 ### Stage 1: the window
@@ -228,3 +248,54 @@ under a stricter policy: it may load only its own files and may open no connecti
 it talks to main through the bridge.
 
 What stage 5 leaves in place: everything a teammate needs except packaging, which is stage 6.
+
+### Stage 6: the package
+
+Until now the app was a repository: `electron .` on a folder of source, with the repository's own
+`electron.exe`. Packaging makes it a folder a teammate can run with nothing installed.
+
+**What electron-builder does.** It copies Electron's binary and its support files into
+`release/win-unpacked/`, renames the exe to `Clawd Visualiser.exe`, stamps the icon and the version
+into it, and puts the app's own files, `dist/main.cjs` and the two pages, into one archive,
+`resources/app.asar`. The `zip` target then zips that folder. There is no installer and no updater:
+the folder is the install, and a new version is unzipped over it.
+
+**asar.** The archive is a read-only bundle of files with an index. Node inside Electron reads it as
+if it were a directory: `require`, `readFile` and `readdir` see through it, which is how the scheme
+handler serves the export and the settings page from inside it. Anything that uses a file as a file
+does not: the tray loads its icon by path, and the installer copies the hook scripts into `~/.clawd/bin`.
+Those two directories go beside the archive with `extraResources`, and `paths.ts` finds them under
+`process.resourcesPath` when packaged. The `onlyLoadAppFromAsar` fuse means the app's code can come
+only from the archive, never from a loose `resources/app` folder someone drops beside it.
+
+**Fuses.** Switches baked into the binary itself, flipped by the packager after the copy.
+`runAsNode` stays on: every installed hook runs this exe with `ELECTRON_RUN_AS_NODE=1`, and turning
+it off would break them all. `enableCookieEncryption` and `onlyLoadAppFromAsar` close doors the app
+never uses. `pnpm dlx @electron/fuses read --app <exe>` shows what is set.
+
+**The app's name.** Electron names the profile folder under `%APPDATA%`, where Chromium keeps its
+caches, and the single-instance lock after the app's name, read from `package.json`. The
+repository's `package.json` is named `@clawd/desktop`, so electron-builder writes
+`productName: Clawd Visualiser` into the archive's copy only (`extraMetadata`). The packaged app
+then keeps its own profile and lock, and a development run can start while the packaged app sits in
+the tray.
+
+**`process.execPath` in a packaged app.** In development it was the repository's `electron.exe`; now
+it is `Clawd Visualiser.exe` wherever the folder was unzipped. The hook commands and the login item
+are written from it, and at each launch the packaged app compares them with what it would write now:
+after the folder moves, both are repaired. A development run no longer does this unattended, since on
+the maintainer's machine the hooks may belong to the CLI or to another checkout.
+
+**Icons.** Windows resamples a PNG at 125% and 150% scaling and blurs the pixel art, so the tray
+icons are ICO files holding 16, 20, 24 and 32 px images and Windows picks the matching one; the app
+icon is an ICO up to 256 px, which the packager needs. Both are drawn from the canonical sprite by
+`build/icons.mjs` with nothing but `node:zlib`, and `pnpm test` fails if a checked-in file no longer
+matches the sprite.
+
+**SmartScreen.** The exe is unsigned, so Windows warns once for an exe extracted from a downloaded
+zip: More info, then Run anyway. A certificate is the fix, not a code change (design §11). The exe
+starts as Node in about 85 ms once Windows has seen it; the first launch of a freshly built exe is
+slower, about 600 ms, while it is scanned.
+
+What stage 6 leaves in place: the whole design. What the stage reviews deferred is listed in the
+design's §12.1 for the hardening pass.

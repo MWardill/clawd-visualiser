@@ -57,6 +57,7 @@ replay / simulated ────────────────────�
 1. **Sources** emit events. v1 ships three real ones, HTTP hooks, a status line command and the agents-list poll, plus two synthetic ones, a simulated fleet and a replay of recorded logs. Later sources, such as an Azure DevOps poll for headless pipeline runs, plug in at the same interface.
 2. **Local agent** (Node). The only component that sees raw hook payloads. It strips content at the door, appends redacted events to a local log, runs the state machine, owns the alias map, serves snapshots and the per-session ticker over SSE, and executes focus commands.
 3. **Web app** (Next.js). Renders snapshots. In local mode it subscribes to the agent's SSE stream. With no agent present it runs the simulated source in the browser, which is how the Vercel deployment and stage-one development work. Cloud mode (P2) reads anonymised snapshots from Redis.
+4. **Desktop app** (Electron). The agent and the web app's static export in one process, run from an unzipped folder: the agent in the main process, the visualiser in a sandboxed window over a custom scheme, a tray icon, and a settings window that watches folders and installs the hooks under the app's own binary. See `docs/superpowers/specs/2026-09-14-desktop-app-design.md`.
 
 The web app never talks to Claude Code and never reads transcripts. The snapshot and ticker schemas in section 8 are the whole contract between the two halves, which is what allows them to be built in parallel.
 
@@ -245,6 +246,7 @@ Rule for extending either type: add optional fields or use `ext`; bump `version`
 - **Windows focus:** resolve the session's PID from the agents list, walk to the top-level window, `SetForegroundWindow` via PowerShell, with the taskbar flash as fallback.
 - **Development in parallel.** Contract first: `packages/core` with fixtures lands before the fork. Then the web app and the agent proceed in separate sessions on separate git worktrees, each tested against the same fixtures, neither needing the other running. Changes to `packages/core` are made by one session at a time.
 - **Deployment.** GitHub with a Vercel deployment of `apps/web` from the first commit, running the simulated source, so the city is visible online before any agent exists.
+- **Desktop deployment.** `apps/desktop` packages the agent and the web app's export into one folder, zipped, with electron-builder: `Clawd-Visualiser-<version>-win-x64.zip`. Unzipped and run; no installer, no updater, no signing. The hooks run under the app's own binary with `ELECTRON_RUN_AS_NODE=1`, so teammates need no Node install.
 
 ## 12. Milestones
 
@@ -280,6 +282,12 @@ The contract comes first and is the fork point. After it, the web app and the ag
 | M5 | Integration | The web app switches from simulated to live when an agent is present; end-to-end with real sessions. |
 | M6 | Cloud mode | The agent publishes to Redis; the Vercel app shows the live city on any device; commands flow back by outbound polling. |
 | M7 | Replay and timeline | Replay recorded logs at speed; swimlane view; collision warning. |
+
+**Desktop**
+
+| # | Milestone | Outcome |
+|---|---|---|
+| M8 | Desktop | The Electron app in six stages, one Electron idea each: the window, the agent inside, the packaged UI over `app://`, the tray, the settings window, the package. Done when a teammate unzips the folder, runs the exe and sets up the hooks from the settings window, and moving the folder and relaunching repairs the hooks and the login item. |
 
 ## 13. Open questions
 
@@ -319,3 +327,4 @@ The contract comes first and is the fork point. After it, the web app and the ag
 | 12 Sep 2026 | Viewing from other devices is a goal from the start: cloud mode is P1 and follows integration; remote viewers get the anonymised snapshot only, never the ticker. |
 | 13 Sep 2026 | Pane labels in the local view are the working directory's last path segment, numbered on collision, behind an agent setting; cloud snapshots keep generated tree names. Session labels stay generated. |
 | 14 Sep 2026 | Detail levels: an opt-in agent setting adds hints or paths to the local view; the event log and the cloud stay at level none through one strip function with invariant tests. Content is never read at any level. |
+| 14 Sep 2026 | Desktop app: the agent runs in Electron's main process; the UI is the static export over a custom scheme; the hooks run under the app's own binary; shipped as a zipped folder with no installer, electron-builder's `portable` target ruled out. |
