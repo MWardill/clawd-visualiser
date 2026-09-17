@@ -815,10 +815,39 @@ git commit -m "fix(desktop): the folder picker belongs to the settings window, a
 
 ### Task 5: The package
 
+> **Erratum, found in review.** The task's text below differs from what shipped in five ways.
+>
+> 1. **The smoke script wrote a real login item.** The plan's scratch `desktop.json` said nothing
+>    about `openAtLogin`, so the packaged app's first-run rule would write a real Windows Run
+>    value pointing at `release/win-unpacked`, starting at the next sign-in against the real
+>    `~/.clawd`. What shipped writes `desktop.json` with `openAtLogin: false` into the scratch
+>    home first (commit `b9061f9`).
+> 2. **Stale tray files.** The plan's `build/bundle.mjs` copied the tray icons and the hook
+>    scripts without clearing their destinations first, so an old icon set left in `dist/tray`
+>    would be packaged beside the new one. What shipped clears `dist/tray` and `dist/hooks` before
+>    copying into them, so `apps/desktop/build/bundle.mjs` joins the files below (commit
+>    `b9061f9`).
+> 3. **The packaged app shared a name with development.** Without a `productName` in the archive's
+>    own `package.json`, the packaged app's Electron name was `@clawd/desktop`, the same as a
+>    development run, so the profile folder and the single-instance lock Electron derives from
+>    that name collided, and one build could not start while the other ran. What shipped adds
+>    `extraMetadata: { productName: Clawd Visualiser }` to `electron-builder.yml`, so only the
+>    archive's copy of `package.json` gets the name (commit `28f2d91`).
+> 4. **The smoke script's failure paths.** The plan's script did not check the exe existed first,
+>    could keep waiting past a spawn error instead of stopping at once, awaited the app's exit
+>    with a listener that could reject, and left the scratch Claude folder in place after a Claude
+>    CLI call that outlives the stopped app wrote into it late. What shipped fixes all four
+>    (commits `28f2d91`, `4fe3b48`, `65c8293`).
+> 5. **`electron-winstaller`.** It arrives with electron-builder, and pnpm would not run its
+>    install script unasked, which only serves a Squirrel installer target this app does not
+>    build. What shipped lists it under `allowBuilds` in `pnpm-workspace.yaml` as `false`, with a
+>    comment saying what it builds (commits `b9061f9`, `28f2d91`).
+
 **Files:**
 - Modify: `apps/desktop/package.json` (electron-builder, the `package` and `smoke` scripts)
 - Create: `apps/desktop/electron-builder.yml`
 - Modify: `apps/desktop/build/renderer.mjs`
+- Modify: `apps/desktop/build/bundle.mjs`
 - Create: `apps/desktop/build/smoke-packaged.mjs`
 - Modify: `.gitignore` (root)
 
