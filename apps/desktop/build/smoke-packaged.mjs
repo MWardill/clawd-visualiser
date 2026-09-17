@@ -47,6 +47,28 @@ async function newestLog() {
   return name === undefined ? "" : readFile(join(dir, name), "utf8");
 }
 
+/**
+ * The agent runs the Claude CLI through a shell to see which sessions are alive, and a call in
+ * flight when the app stops outlives it and can still write into the scratch Claude folder. So the
+ * folder is removed again until it has stayed gone for three seconds, for at most twenty.
+ */
+async function removeUntilGone(dir) {
+  const until = Date.now() + 20_000;
+  let goneSince = null;
+  while (Date.now() < until) {
+    if (existsSync(dir)) {
+      await rm(dir, { recursive: true, force: true });
+      goneSince = null;
+    } else if (goneSince === null) {
+      goneSince = Date.now();
+    } else if (Date.now() - goneSince >= 3_000) {
+      return;
+    }
+    await sleep(250);
+  }
+  if (existsSync(dir)) console.warn(`smoke: ${dir} was written again after cleanup; delete it by hand`);
+}
+
 const before = Date.now();
 const asNode = spawnSync(exe, ["-e", "process.exit(0)"], { env: { ...env, ELECTRON_RUN_AS_NODE: "1" }, timeout: 10_000 });
 if (asNode.status !== 0) {
@@ -79,5 +101,5 @@ try {
   app.kill();
   if (running) await Promise.race([exited, sleep(5_000)]);
   await rm(home, { recursive: true, force: true });
-  await rm(claudeDir, { recursive: true, force: true });
+  await removeUntilGone(claudeDir);
 }
