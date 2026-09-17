@@ -133,14 +133,27 @@ function run(): void {
     win = created;
   }
 
-  /** The ICO file holds one image per size and Windows picks the one matching the display scale. */
+  const version = app.getVersion();
+  let trayTip = "";
+  /** The two images, loaded once: a waiting flip swaps them rather than reading the ICO again. */
+  const trayImages = new Map<string, NativeImage>();
   function trayImage(file: string): NativeImage {
-    return nativeImage.createFromPath(join(dist.tray, file));
+    let image = trayImages.get(file);
+    if (image === undefined) {
+      image = nativeImage.createFromPath(join(dist.tray, file));
+      trayImages.set(file, image);
+    }
+    return image;
   }
 
+  /** The host's change callback fires on every snapshot; the tray is touched only when its text or its image changes. */
   function refreshTray(state: HostState): void {
     if (tray === null) return;
-    tray.setToolTip(trayTooltip(state, app.getVersion()));
+    const tip = trayTooltip(state, version);
+    if (tip !== trayTip) {
+      trayTip = tip;
+      tray.setToolTip(tip);
+    }
     const file = trayIconFile(state.waiting);
     if (file !== trayFile) {
       trayFile = file;

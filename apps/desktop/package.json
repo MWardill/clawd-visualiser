@@ -8,11 +8,11 @@
     "bundle": "node build/bundle.mjs",
     "renderer": "node build/renderer.mjs",
     "icons": "node build/icons.mjs",
-    "dev": "node build/bundle.mjs && electron . --dev-url http://localhost:3000",
-    "start": "node build/renderer.mjs && node build/bundle.mjs && electron .",
+    "dev": "node build/clean.mjs && node build/bundle.mjs && electron . --dev-url http://localhost:3000",
+    "start": "node build/clean.mjs && node build/renderer.mjs && node build/bundle.mjs && electron .",
     "test": "vitest run --passWithNoTests && node build/icons.mjs --check",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.page.json",
-    "package": "node build/renderer.mjs && node build/bundle.mjs && electron-builder --win",
+    "package": "node build/clean.mjs && node build/renderer.mjs && node build/bundle.mjs && electron-builder --win",
     "smoke": "node build/smoke-packaged.mjs"
   },
   "devDependencies": {
