@@ -33,7 +33,7 @@ import { APP_SCHEME, createSchemeHandler } from "./scheme";
 import { settingsState, type SettingsState } from "./settings-state";
 import { createCoalescer } from "./settings/coalesce";
 import { CHANNELS, createHandlers } from "./settings/ipc";
-import { trayIconFile, trayMenuTemplate } from "./tray";
+import { trayIconFile, trayMenuTemplate, trayTooltip } from "./tray";
 import { createMainWindow, createSettingsWindow } from "./window";
 
 // One copy of the app per user. The first launch holds the lock; a second one hands its command
@@ -66,7 +66,8 @@ function run(): void {
 
   const store = createDesktopStore(desktopStatePath(home));
   const login = loginItemTarget(app.isPackaged, process.execPath, app.getAppPath());
-  const dist = distPaths(__dirname);
+  // Packaged, the bundle and the pages are inside resources/app.asar and the icons and scripts beside it.
+  const dist = distPaths(__dirname, app.isPackaged ? process.resourcesPath : __dirname);
   const settingsPath = defaultSettingsPath();
   const runtime = runtimePrefix(process.execPath);
 
@@ -131,14 +132,14 @@ function run(): void {
     win = created;
   }
 
-  /** Electron loads the @2x file beside the named one on a display scaled to 200%. */
+  /** The ICO file holds one image per size and Windows picks the one matching the display scale. */
   function trayImage(file: string): NativeImage {
     return nativeImage.createFromPath(join(dist.tray, file));
   }
 
   function refreshTray(state: HostState): void {
     if (tray === null) return;
-    tray.setToolTip(statusText(state));
+    tray.setToolTip(trayTooltip(state, app.getVersion()));
     const file = trayIconFile(state.waiting);
     if (file !== trayFile) {
       trayFile = file;

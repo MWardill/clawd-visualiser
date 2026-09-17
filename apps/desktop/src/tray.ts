@@ -1,5 +1,5 @@
 // The tray's icon choice, tooltip and menu, as data. Main turns the template into a Menu and the file
-// name into an image. Only Electron's types are imported, so this is tested without Electron.
+// name into an image. Nothing here loads Electron at run time (only its types are imported), so this is tested without Electron.
 import type { MenuItemConstructorOptions } from "electron";
 import { statusText, type HostState } from "./agent-host";
 
