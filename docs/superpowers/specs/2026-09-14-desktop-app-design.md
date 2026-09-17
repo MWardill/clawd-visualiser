@@ -289,7 +289,7 @@ matching the app. The detail section is present only once the detail levels desi
 | 4 Tray | Tray, badge, tooltip, hide on close, the single-instance lock, `--hidden`, the login item | `Tray`, `Menu`, the single-instance lock, login items | Closing the window keeps the agent up; the app returns hidden at login |
 | 5 Settings | The settings window, preload, IPC, the folder picker, hook install and repair with the runtime prefix | Preload, `contextBridge`, `ipcMain`, dialogs, process-model security | A fresh machine is set up from the app alone |
 | 6 Package | Icons, electron-builder with the `dir` and `zip` targets, fuses | Packaging, asar, fuses, `process.execPath` in a packaged app | A teammate unzips the folder, runs the exe, and sets up hooks from the settings window; moving the folder and relaunching repairs the hooks and the login item |
-| 6.1 Review fixes | The thirteen findings of the review of stage 6's merge (§12.1) | None new | Each is done or recorded with a reason |
+| 6.1 Review fixes | The findings of the review of stage 6's merge (§12.1) | None new | Each is done or recorded with a reason |
 | Post-dev Hardening | The fixes and checks deferred from the stage reviews (§12.1) | None new | Each item in §12.1 is fixed, or dropped with a reason in the decision log |
 
 Each stage has its own plan and branch and is merged before the next starts. Stage 5's detail
@@ -560,6 +560,33 @@ Found while stage 6.1 was built, and done in it.
   reads as different.
 - **The smoke's seed could fail silently, and the packaged app's first-run rule would then write a
   real Run value.** Done: the smoke reads the seed back and stops before starting the app.
+
+Found in the final review of stage 6.1 (17 September 2026). They wait for the hardening pass.
+
+- **A restarted poller logs a false failure.** A `stop()` followed at once by `start()` shares the
+  run still in flight. That run was aborted, so it logs `presence.failed` and skips a poll, and the
+  same sequence can leave two loops (older). No caller restarts the poller today. The cure is for
+  `start()` to wait for, or refuse, a stopped run still in flight.
+- **`taskkill` is found by searching.** `nodeExec` and the smoke script run `taskkill` by name, so
+  Windows searches the working directory and `PATH` for it, the same kind of lookup as `cmd.exe` and
+  `claude`. Call it by its full path under `%SystemRoot%\System32` at both sites.
+- **An output overflow still ends only the shell.** When `claude agents --json` writes more than
+  `maxBuffer` (4 MB), Node kills `cmd.exe` itself and the CLI lives on. That is far off. A
+  spawn-based runner with its own cap could end the tree here too.
+- **The real-process `nodeExec` tests abort at 300 ms.** They run concurrently and expect the
+  started file by then. The chain starts in about 60 to 70 ms on the maintainer's machine, but a
+  loaded machine could flake. Poll for the started file before aborting, and give the timeout test
+  about 1 s.
+- **The smoke's kill fallback can hang.** If `app.kill()` also fails to end the app, the child's
+  handle keeps Node running. The fallback should check again whether the app exited and `unref()`
+  it. A partial tree kill, where a child survives, also goes unreported.
+- **A CLI call can outlive an app that exits on its own.** If the packaged app exits mid-poll during
+  the smoke, the tree kill is skipped and its children are no longer its tree. The cost is a
+  leftover scratch folder, which the script warns about.
+- **The smoke still spells one log line.** It finds `desktop.started` by the raw substring
+  `"code":"desktop.started","packaged":true`, while the ownership check parses records. It should
+  parse this line too. Change it together with the `taskkill` path, in one edit that runs the smoke
+  again.
 
 Asked for while stage 5 was finishing (16 September 2026). Not a review finding; the shape below was
 settled in conversation, so whoever picks it up does not have to decide it again.

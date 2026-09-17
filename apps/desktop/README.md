@@ -27,7 +27,8 @@ the app run its own.
 The app lives in the tray. Closing the window hides it and the agent keeps running; click the tray
 icon to bring it back, and quit from the tray menu or with Ctrl+Q. Only one copy runs: starting it
 again shows the running copy's window. `--hidden` starts it with only the tray icon, as the login
-item does. The window's position and the login choice are kept in `~/.clawd/desktop-dev.json`.
+item does. The window's position and the login choice are kept in `~/.clawd/desktop-dev.json` (the
+packaged app's are in `desktop.json`).
 
 Settings opens from the tray. It watches folders, installs Claude Code's hooks under this app's own
 binary, sets the detail level and toggles start on login, so a machine can be set up from the app
