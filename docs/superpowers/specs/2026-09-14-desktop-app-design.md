@@ -126,7 +126,7 @@ attached.
 
 - One `BrowserWindow`: 1280 by 800, black background, `autoHideMenuBar`, `webPreferences: {
   sandbox: true, contextIsolation: true, nodeIntegration: false }`, no preload. Bounds persist in
-  `~/.clawd/desktop.json`.
+  the packaged app's `~/.clawd/desktop.json` and a development run's `desktop-dev.json` (§10).
 - The window loads `--dev-url`, else `CLAWD_DESKTOP_URL`, else `app://clawd/`. The desktop
   package's `dev` script passes `--dev-url http://localhost:3000` for the hot-reload loop, and
   `start` loads the export (changed in the stage 3 plan, so the export runs before packaging).
@@ -244,7 +244,7 @@ matching the app. The detail section is present only once the detail levels desi
   `win.target: ["dir", "zip"]`, output in `release/` (its default, `dist`, is the bundle's directory),
   asar on, `npmRebuild: false`, fuses `runAsNode: true`, `enableCookieEncryption: true`,
   `onlyLoadAppFromAsar: true`. The archive's `package.json` gets `productName: Clawd Visualiser`
-  there through `extraMetadata`, the only place the name is written, so the packaged app's name, and
+  through `extraMetadata`, the only place the name is written, so the packaged app's name, and
   with it its profile folder under `%APPDATA%` and its single-instance lock, differ from a
   development run's `@clawd/desktop` and neither blocks the other from starting. The archive holds
   `dist/main.cjs`, `dist/renderer/` and `dist/settings/`, without source maps; the tray icons and the
