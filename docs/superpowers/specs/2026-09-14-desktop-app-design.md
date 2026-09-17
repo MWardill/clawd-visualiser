@@ -49,7 +49,7 @@ apps/desktop/
   src/
     main.ts               entry: lock, scheme, agent host, tray, window
     args.ts               --hidden, --dev-url; pure
-    paths.ts              home, logs, desktop.json, renderer directory
+    paths.ts              where the pages, the tray icons and the hook scripts are, in development and packaged
     log.ts                dated file sink for the agent's Logger (codes only)
     agent-host.ts         supervisor: starting, own, attached, restarting, failed
     scheme.ts             app:// handler: path mapping, MIME, CSP; a pure mapper and a thin handler
@@ -253,16 +253,18 @@ matching the app. The detail section is present only once the detail levels desi
 - `pnpm --filter @clawd/desktop package` runs the export, the bundle (§3) and electron-builder.
   `pnpm --filter @clawd/desktop smoke` runs the packaged app once against scratch folders: the exe
   as Node, the packaged start, the agent's health from the visualiser's origin. Its scratch home
-  remembers the login item as off, so the packaged app's first-run rule writes no real Run value,
-  and it removes the scratch Claude folder again after the agent's presence check, a Claude CLI call
-  that outlives the stopped app, writes into it late. `build/bundle.mjs` clears `dist/tray` and
-  `dist/hooks` before copying, so nothing stale is packaged. The zip is shared by hand or attached to
-  a GitHub release by the maintainer; nothing is automated.
+  remembers the login item as off, so the packaged app's first-run rule writes no real Run value.
+  The agent checks which sessions are alive by running the Claude CLI, and a call still running
+  when the app stops can write into the scratch Claude folder late, so the script removes that
+  folder again until it stays gone. `build/bundle.mjs` clears `dist/tray` and `dist/hooks` before
+  copying, so nothing stale is packaged. The zip is shared by hand or attached to a GitHub release
+  by the maintainer; nothing is automated.
 - Version: `apps/desktop/package.json`, shown in the settings window and after the status in the
   tray tooltip.
 - Updating: quit the app, unzip the new version over the folder, launch. The hooks and the login
   item point at the same path, so nothing is repaired. Unzipping to a new place is the moved-folder
-  case in §8 and §10.
+  case in §8 and §10. When a new version changes the hook scripts, open Settings and choose
+  Reinstall after updating: the scripts in `~/.clawd/bin` are only refreshed by an install.
 - Signing: none. SmartScreen warns once for an exe extracted from a downloaded zip. An enterprise
   policy that blocks unsigned executables in user-writable directories blocks this too; a
   certificate is the fix, not a code change.
@@ -469,6 +471,26 @@ settings window, and the detail setter is caught and logged. The rest wait for t
   consulted once, which is also where the "handler that can reject" item above belongs.
 - **The detail default duplicates `detailLevel()`.** `currentState` writes `config?.detail ?? "none"`
   while the agent uses `detailLevel()`, which the agent package does not export. Export it and call it.
+
+Found in the final review of stage 6 (17 September 2026). They wait for the hardening pass.
+
+- **An update does not refresh the hook scripts.** An in-place update (quit, unzip over, launch)
+  keeps `process.execPath`, the port and the token, so the hook status stays `current` and the
+  launch repair finds nothing to do; the three scripts the installer copied into `~/.clawd/bin` are
+  left at the old version. The real fix is to compare the scripts bundled beside the archive with
+  the copies in `~/.clawd/bin` at launch, or stamp them with the version, and copy them again when
+  they differ. Until then, the documents tell the maintainer to choose Reinstall from Settings after
+  an update that changes the scripts.
+- **The icon check compares bytes.** `build/icons.mjs --check` compares the checked-in ICOs with a
+  fresh render byte for byte, and the PNGs inside come from `node:zlib`, so a Node upgrade that
+  changes zlib's output fails `pnpm test` with no sprite change. Compare decoded pixels instead,
+  which `icons.test.ts` already knows how to do.
+- **Two fuses the app does not need are still on.** `EnableNodeOptionsEnvironmentVariable` and
+  `EnableNodeCliInspectArguments` are separate from `runAsNode`, so turning them off would not
+  affect the hooks. Consider them with signing.
+- **The smoke check can be answered by another agent.** If a CLI agent already holds the port, the
+  packaged app attaches and the health answer comes from that agent. The app logs
+  `desktop.attached` then, so the smoke script can fail or say so when the newest log contains it.
 
 Asked for while stage 5 was finishing (16 September 2026). Not a review finding; the shape below was
 settled in conversation, so whoever picks it up does not have to decide it again.

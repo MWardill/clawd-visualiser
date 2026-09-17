@@ -258,7 +258,9 @@ Until now the app was a repository: `electron .` on a folder of source, with the
 `release/win-unpacked/`, renames the exe to `Clawd Visualiser.exe`, stamps the icon and the version
 into it, and puts the app's own files, `dist/main.cjs` and the two pages, into one archive,
 `resources/app.asar`. The `zip` target then zips that folder. There is no installer and no updater:
-the folder is the install, and a new version is unzipped over it.
+the folder is the install, and a new version is unzipped over it. When a new version changes the
+hook scripts, open Settings and choose Reinstall after updating: the scripts copied into
+`~/.clawd/bin` are only refreshed by an install, not by unzipping a new version over the folder.
 
 **asar.** The archive is a read-only bundle of files with an index. Node inside Electron reads it as
 if it were a directory: `require`, `readFile` and `readdir` see through it, which is how the scheme
