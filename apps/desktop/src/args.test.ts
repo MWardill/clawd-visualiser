@@ -22,10 +22,14 @@ describe("ownArgs", () => {
 });
 
 describe("resolveRendererUrl", () => {
-  it("prefers the flag, then the environment, then the static export over app://clawd/", () => {
-    expect(resolveRendererUrl({ hidden: false, devUrl: "http://a" }, { CLAWD_DESKTOP_URL: "http://b" })).toBe("http://a");
-    expect(resolveRendererUrl({ hidden: false, devUrl: null }, { CLAWD_DESKTOP_URL: "http://b" })).toBe("http://b");
-    expect(resolveRendererUrl({ hidden: false, devUrl: null }, { CLAWD_DESKTOP_URL: "  " })).toBe("app://clawd/");
-    expect(resolveRendererUrl({ hidden: false, devUrl: null }, {})).toBe("app://clawd/");
+  it("in development, prefers the flag, then the environment, then the static export over app://clawd/", () => {
+    expect(resolveRendererUrl({ hidden: false, devUrl: "http://a" }, { CLAWD_DESKTOP_URL: "http://b" }, false)).toBe("http://a");
+    expect(resolveRendererUrl({ hidden: false, devUrl: null }, { CLAWD_DESKTOP_URL: "http://b" }, false)).toBe("http://b");
+    expect(resolveRendererUrl({ hidden: false, devUrl: null }, { CLAWD_DESKTOP_URL: "  " }, false)).toBe("app://clawd/");
+    expect(resolveRendererUrl({ hidden: false, devUrl: null }, {}, false)).toBe("app://clawd/");
+  });
+
+  it("packaged, loads the export whatever the flag or the environment says", () => {
+    expect(resolveRendererUrl({ hidden: false, devUrl: "http://a" }, { CLAWD_DESKTOP_URL: "http://b" }, true)).toBe("app://clawd/");
   });
 });

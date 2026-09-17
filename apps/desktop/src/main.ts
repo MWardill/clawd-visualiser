@@ -26,7 +26,7 @@ import { createDesktopStore, desktopStatePath } from "./desktop-state";
 import { expectedCommands, hookStatus, repairOnLaunch, runtimePrefix, type HookStatus } from "./hooks";
 import { isQuitShortcut } from "./keys";
 import { createFileSink, readRetentionDays } from "./log";
-import { APP_ID, loginItemTarget, loginOnLaunch } from "./login";
+import { appUserModelId, loginItemTarget, loginOnLaunch } from "./login";
 import { distPaths } from "./paths";
 import { createQuitHandler } from "./quit";
 import { APP_SCHEME, createSchemeHandler } from "./scheme";
@@ -43,12 +43,12 @@ else app.exit(0);
 
 function run(): void {
   const args = parseArgs(ownArgs(process.argv, app.isPackaged));
-  const url = resolveRendererUrl(args, process.env);
+  const url = resolveRendererUrl(args, process.env, app.isPackaged);
   const home = defaultHome();
 
   // The id names the login item's Run key entry and groups the app in the taskbar. electron-builder
-  // sets the same id in the packaged app.
-  app.setAppUserModelId(APP_ID);
+  // sets the same id in the packaged app; a development run gets its own, so the two never share an entry.
+  app.setAppUserModelId(appUserModelId(app.isPackaged));
 
   // A custom scheme is declared before `ready`, with what it may do. `standard` makes app://clawd/
   // behave like http: relative and root-relative URLs resolve under it and the page's origin is
@@ -153,7 +153,8 @@ function run(): void {
 
   function setOpenAtLogin(on: boolean): void {
     app.setLoginItemSettings({ ...login, openAtLogin: on });
-    store.update({ openAtLogin: on });
+    // Only the packaged app's choice is remembered; a development toggle is a testing convenience.
+    if (app.isPackaged) store.update({ openAtLogin: on });
     refreshMenu();
     pushState();
   }
@@ -310,9 +311,9 @@ function run(): void {
     refreshTray(host.state());
     refreshMenu();
 
-    // Our hooks pointing at another folder are rewritten, so a moved app keeps receiving events.
+    // Our hooks pointing at another folder are rewritten by the packaged app, so a moved app keeps receiving events.
     const status = await currentHookStatus();
-    if (repairOnLaunch(status)) {
+    if (repairOnLaunch(status, app.isPackaged)) {
       try {
         const repaired = await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
         if (repaired.ok) log("desktop.hooksRepaired");

@@ -20,9 +20,10 @@ describe("expectedCommands", () => {
 });
 
 describe("repairOnLaunch", () => {
-  it("rewrites only hooks of ours that point somewhere else", () => {
-    expect(repairOnLaunch("stale")).toBe(true);
-    expect(repairOnLaunch("current")).toBe(false);
-    expect(repairOnLaunch("missing")).toBe(false);
+  it("rewrites only hooks of ours that point somewhere else, and only from the packaged app", () => {
+    expect(repairOnLaunch("stale", true)).toBe(true);
+    expect(repairOnLaunch("current", true)).toBe(false);
+    expect(repairOnLaunch("missing", true)).toBe(false);
+    expect(repairOnLaunch("stale", false)).toBe(false);
   });
 });
