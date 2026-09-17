@@ -1,15 +1,23 @@
-import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { distPaths } from "./paths";
 
 describe("distPaths", () => {
-  it("names the four directories beside the bundle", () => {
-    const dist = join("C:", "app", "dist");
-    expect(distPaths(dist)).toEqual({
-      renderer: join(dist, "renderer"),
-      tray: join(dist, "tray"),
-      settings: join(dist, "settings"),
-      hooks: join(dist, "hooks"),
+  it("in development, finds everything beside the bundle", () => {
+    const dir = "C:\\repo\\apps\\desktop\\dist";
+    expect(distPaths(dir, dir)).toEqual({
+      renderer: "C:\\repo\\apps\\desktop\\dist\\renderer",
+      settings: "C:\\repo\\apps\\desktop\\dist\\settings",
+      tray: "C:\\repo\\apps\\desktop\\dist\\tray",
+      hooks: "C:\\repo\\apps\\desktop\\dist\\hooks",
+    });
+  });
+
+  it("packaged, keeps the pages in the archive and looks for the icons and the scripts beside it", () => {
+    expect(distPaths("C:\\Apps\\Clawd Visualiser\\resources\\app.asar\\dist", "C:\\Apps\\Clawd Visualiser\\resources")).toEqual({
+      renderer: "C:\\Apps\\Clawd Visualiser\\resources\\app.asar\\dist\\renderer",
+      settings: "C:\\Apps\\Clawd Visualiser\\resources\\app.asar\\dist\\settings",
+      tray: "C:\\Apps\\Clawd Visualiser\\resources\\tray",
+      hooks: "C:\\Apps\\Clawd Visualiser\\resources\\hooks",
     });
   });
 });

@@ -1,9 +1,23 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { APP_ID, loginItemTarget, loginOnLaunch } from "./login";
+import { APP_ID, appUserModelId, loginItemTarget, loginOnLaunch } from "./login";
 
 describe("APP_ID", () => {
   it("is the design's appId", () => {
     expect(APP_ID).toBe("io.github.mwardill.clawd-visualiser");
+  });
+
+  it("matches electron-builder.yml's appId", async () => {
+    const yml = await readFile(new URL("../electron-builder.yml", import.meta.url), "utf8");
+    const match = yml.match(/^appId:\s*(\S+)\s*$/m);
+    expect(match?.[1]).toBe(APP_ID);
+  });
+});
+
+describe("appUserModelId", () => {
+  it("names the packaged app's Run entry after the id, and a development run's after its own name", () => {
+    expect(appUserModelId(true)).toBe("io.github.mwardill.clawd-visualiser");
+    expect(appUserModelId(false)).toBe("io.github.mwardill.clawd-visualiser.dev");
   });
 });
 
@@ -36,9 +50,9 @@ describe("loginOnLaunch", () => {
     expect(loginOnLaunch({ packaged: false, remembered: undefined, registered: false })).toBe("none");
   });
 
-  it("writes the entry again when the user wants it and Windows has none for this path", () => {
+  it("writes the entry again when the user wants it and Windows has none for this path, packaged only", () => {
     expect(loginOnLaunch({ packaged: true, remembered: true, registered: false })).toBe("reapply");
-    expect(loginOnLaunch({ packaged: false, remembered: true, registered: false })).toBe("reapply");
+    expect(loginOnLaunch({ packaged: false, remembered: true, registered: false })).toBe("none");
   });
 
   it("leaves an entry Windows already has, and a choice of off, alone", () => {

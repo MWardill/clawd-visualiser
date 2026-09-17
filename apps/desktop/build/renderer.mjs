@@ -14,7 +14,13 @@ const rendererDir = here("../dist/renderer");
 
 // Next's own CLI, run with this Node and no shell, so the environment variable is set the same way on Windows.
 const nextBin = createRequire(join(webDir, "package.json")).resolve("next/dist/bin/next");
+// A stale export would pass the check below, so the previous one goes first.
+await rm(exportDir, { recursive: true, force: true });
 const result = spawnSync(process.execPath, [nextBin, "build"], { cwd: webDir, env: { ...process.env, CLAWD_TARGET: "desktop" }, stdio: "inherit" });
+if (result.error) {
+  console.error(`renderer: could not start the Next build: ${result.error.message}`);
+  process.exit(1);
+}
 if (result.status !== 0) process.exit(result.status ?? 1);
 
 if (!existsSync(join(exportDir, "index.html"))) {

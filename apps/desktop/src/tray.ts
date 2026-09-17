@@ -1,11 +1,16 @@
-// The tray's icon choice and menu, as data. Main turns the template into a Menu and the file name
-// into an image; the tooltip is statusText from agent-host.ts. Only Electron's types are imported,
-// so this is tested without Electron.
+// The tray's icon choice, tooltip and menu, as data. Main turns the template into a Menu and the file
+// name into an image. Nothing here loads Electron at run time (only its types are imported), so this is tested without Electron.
 import type { MenuItemConstructorOptions } from "electron";
+import { statusText, type HostState } from "./agent-host";
 
-/** The icon for a waiting count: the amber-dot variant while any session waits. */
+/** The icon for a waiting count: the badged ICO while any session waits. Windows picks the size from the file. */
 export function trayIconFile(waiting: number): string {
-  return waiting > 0 ? "tray-waiting.png" : "tray.png";
+  return waiting > 0 ? "tray-waiting.ico" : "tray.ico";
+}
+
+/** The tooltip: the status line with the app's version after it (design §11). The window title keeps the status line alone. */
+export function trayTooltip(state: HostState, version: string): string {
+  return `${statusText(state)} · v${version}`;
 }
 
 export type TrayActions = {

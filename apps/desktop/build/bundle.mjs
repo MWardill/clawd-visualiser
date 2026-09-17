@@ -1,7 +1,7 @@
 // Bundles the main process into one CommonJS file. Electron loads `main` from package.json as a
 // plain Node module, and the workspace packages export TypeScript, so a bundler has to run first.
 import { build } from "esbuild";
-import { cp } from "node:fs/promises";
+import { cp, rm } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
@@ -18,6 +18,10 @@ await build({
   sourcemap: true,
   logLevel: "info",
 });
+
+// Cleared first so a leftover settings file from an older build is never packaged (electron-builder
+// takes dist/**).
+await rm(here("../dist/settings"), { recursive: true, force: true });
 
 // The preload runs in Electron's preload world, which is CommonJS; the page is an ordinary script.
 await build({
@@ -44,9 +48,12 @@ await build({
 await cp(here("../src/settings/page.html"), here("../dist/settings/index.html"));
 await cp(here("../src/settings/page.css"), here("../dist/settings/page.css"));
 
-// The tray loads its icons from beside main.cjs, as the window loads the export.
+// The tray loads its icons from beside main.cjs, as the window loads the export. The target is
+// cleared first so a leftover from an older icon set is never packaged alongside the new one.
+await rm(here("../dist/tray"), { recursive: true, force: true });
 await cp(here("../resources/tray"), here("../dist/tray"), { recursive: true });
 
 // The hook scripts ship as they are: the installer copies them into <home>/bin, where they read
-// ../config.json beside themselves, so they must not be bundled.
+// ../config.json beside themselves, so they must not be bundled. Cleared first for the same reason.
+await rm(here("../dist/hooks"), { recursive: true, force: true });
 await cp(here("../../agent/hooks"), here("../dist/hooks"), { recursive: true });

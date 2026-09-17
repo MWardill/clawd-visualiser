@@ -9,3 +9,6 @@ allowBuilds:
   unrs-resolver: true
   # electron downloads its binary in a postinstall step.
   electron: true
+  # Installed with electron-builder; its install script only copies a bundled 7-Zip binary for the
+  # Squirrel installer target, which this app does not build, so it is not run.
+  electron-winstaller: false

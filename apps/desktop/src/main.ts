@@ -16,7 +16,7 @@ import {
   uninstall,
   type JsonObject,
 } from "@clawd/agent";
-import { Menu, Tray, app, dialog, ipcMain, nativeImage, protocol, screen, shell, type BrowserWindow, type NativeImage } from "electron";
+import { Menu, Tray, app, dialog, ipcMain, nativeImage, protocol, screen, shell, type BrowserWindow, type NativeImage, type OpenDialogOptions } from "electron";
 import { join } from "node:path";
 import { fetchCounts, probeHealth } from "./agent-client";
 import { createAgentHost, statusText, type HostState } from "./agent-host";
@@ -26,14 +26,14 @@ import { createDesktopStore, desktopStatePath } from "./desktop-state";
 import { expectedCommands, hookStatus, repairOnLaunch, runtimePrefix, type HookStatus } from "./hooks";
 import { isQuitShortcut } from "./keys";
 import { createFileSink, readRetentionDays } from "./log";
-import { APP_ID, loginItemTarget, loginOnLaunch } from "./login";
+import { appUserModelId, loginItemTarget, loginOnLaunch } from "./login";
 import { distPaths } from "./paths";
 import { createQuitHandler } from "./quit";
 import { APP_SCHEME, createSchemeHandler } from "./scheme";
 import { settingsState, type SettingsState } from "./settings-state";
 import { createCoalescer } from "./settings/coalesce";
 import { CHANNELS, createHandlers } from "./settings/ipc";
-import { trayIconFile, trayMenuTemplate } from "./tray";
+import { trayIconFile, trayMenuTemplate, trayTooltip } from "./tray";
 import { createMainWindow, createSettingsWindow } from "./window";
 
 // One copy of the app per user. The first launch holds the lock; a second one hands its command
@@ -43,12 +43,13 @@ else app.exit(0);
 
 function run(): void {
   const args = parseArgs(ownArgs(process.argv, app.isPackaged));
-  const url = resolveRendererUrl(args, process.env);
+  const url = resolveRendererUrl(args, process.env, app.isPackaged);
   const home = defaultHome();
 
-  // The id names the login item's Run key entry and groups the app in the taskbar. electron-builder
-  // sets the same id in the packaged app.
-  app.setAppUserModelId(APP_ID);
+  // The id matches electron-builder.yml's appId, but for the dir and zip targets electron-builder
+  // does not set an AppUserModelId itself: this call is what names the login item's Run value and
+  // groups the app in the taskbar. A development run uses its own name, so the two never share an entry.
+  app.setAppUserModelId(appUserModelId(app.isPackaged));
 
   // A custom scheme is declared before `ready`, with what it may do. `standard` makes app://clawd/
   // behave like http: relative and root-relative URLs resolve under it and the page's origin is
@@ -66,7 +67,8 @@ function run(): void {
 
   const store = createDesktopStore(desktopStatePath(home));
   const login = loginItemTarget(app.isPackaged, process.execPath, app.getAppPath());
-  const dist = distPaths(__dirname);
+  // Packaged, the bundle and the pages are inside resources/app.asar and the icons and scripts beside it.
+  const dist = distPaths(__dirname, app.isPackaged ? process.resourcesPath : __dirname);
   const settingsPath = defaultSettingsPath();
   const runtime = runtimePrefix(process.execPath);
 
@@ -131,14 +133,14 @@ function run(): void {
     win = created;
   }
 
-  /** Electron loads the @2x file beside the named one on a display scaled to 200%. */
+  /** The ICO file holds one image per size and Windows picks the one matching the display scale. */
   function trayImage(file: string): NativeImage {
     return nativeImage.createFromPath(join(dist.tray, file));
   }
 
   function refreshTray(state: HostState): void {
     if (tray === null) return;
-    tray.setToolTip(statusText(state));
+    tray.setToolTip(trayTooltip(state, app.getVersion()));
     const file = trayIconFile(state.waiting);
     if (file !== trayFile) {
       trayFile = file;
@@ -152,7 +154,8 @@ function run(): void {
 
   function setOpenAtLogin(on: boolean): void {
     app.setLoginItemSettings({ ...login, openAtLogin: on });
-    store.update({ openAtLogin: on });
+    // Only the packaged app's choice is remembered; a development toggle is a testing convenience.
+    if (app.isPackaged) store.update({ openAtLogin: on });
     refreshMenu();
     pushState();
   }
@@ -240,7 +243,10 @@ function run(): void {
           // re-renders the page unchanged, so every one is caught here and logged before answering.
           async addFolder() {
             try {
-              const picked = await dialog.showOpenDialog({ properties: ["openDirectory"], title: "Watch a folder" });
+              // The picker belongs to the settings window, so it is modal to it and a second click cannot open another.
+              const options: OpenDialogOptions = { properties: ["openDirectory"], title: "Watch a folder" };
+              const parent = settingsWin !== null && !settingsWin.isDestroyed() ? settingsWin : null;
+              const picked = parent === null ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(parent, options);
               const dir = picked.canceled ? null : (picked.filePaths[0] ?? null);
               if (dir !== null) {
                 const saved = await setAllowlist({ home, add: [dir], cwd: home });
@@ -284,9 +290,13 @@ function run(): void {
             return await currentState();
           },
           async setDetail(level) {
-            await setDetail({ home, level, print: () => {} });
-            host.restart();
-            return currentState();
+            try {
+              await setDetail({ home, level, print: () => {} });
+              host.restart();
+            } catch {
+              log("desktop.detailFailed");
+            }
+            return await currentState();
           },
           async setOpenAtLogin(on) {
             setOpenAtLogin(on);
@@ -309,9 +319,9 @@ function run(): void {
     refreshTray(host.state());
     refreshMenu();
 
-    // Our hooks pointing at another folder are rewritten, so a moved app keeps receiving events.
+    // Our hooks pointing at another folder are rewritten by the packaged app, so a moved app keeps receiving events.
     const status = await currentHookStatus();
-    if (repairOnLaunch(status)) {
+    if (repairOnLaunch(status, app.isPackaged)) {
       try {
         const repaired = await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
         if (repaired.ok) log("desktop.hooksRepaired");

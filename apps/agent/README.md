@@ -36,6 +36,11 @@ pnpm --filter @clawd/agent start
 Restart the agent after changing the allowlist. If Node moves (a version manager, an upgrade), run
 install again so the hook commands point at it.
 
+The desktop app installs the same hooks with a different command prefix, `ELECTRON_RUN_AS_NODE=1
+"<its exe>"` in place of Node's path, so teammates need no Node install. Either install overwrites
+the other's commands; the last one run wins, and the packaged app rewrites ours at launch if they
+point elsewhere.
+
 ## Detail levels
 
 By default the agent keeps only states, categories, tool names and timings. `agent detail hints`

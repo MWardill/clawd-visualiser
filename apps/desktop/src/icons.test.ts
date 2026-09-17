@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { crc32, inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { BADGE_ORIGIN, ICON_GRID, SPRITE_ORIGIN, TRAY_ICONS, encodePng, renderTrayIcon, type Sprite } from "./icons";
+import { APP_ICON, BADGE_ORIGIN, ICON_GRID, SPRITE_ORIGIN, TRAY_ICONS, TRAY_SIZES, encodeIco, encodePng, renderIcon, renderTrayIcon, type Sprite } from "./icons";
 
 const COLOURS = { body: "#cd6e58", eye: "#000000", badge: "#f2c35b" };
 const BODY = [205, 110, 88, 255];
@@ -33,6 +33,17 @@ function chunks(png: Buffer): Chunk[] {
     at += 12 + length;
   }
   return out;
+}
+
+type IcoEntry = { size: number; bytes: number; offset: number };
+/** The directory of an ICO: one entry per image, width 0 meaning 256. */
+function icoEntries(ico: Buffer): IcoEntry[] {
+  const count = ico.readUInt16LE(4);
+  return Array.from({ length: count }, (_, i) => {
+    const at = 6 + i * 16;
+    const width = ico[at]!;
+    return { size: width === 0 ? 256 : width, bytes: ico.readUInt32LE(at + 8), offset: ico.readUInt32LE(at + 12) };
+  });
 }
 
 describe("renderTrayIcon", () => {
@@ -76,6 +87,59 @@ describe("renderTrayIcon", () => {
   });
 });
 
+describe("renderIcon", () => {
+  it("at 24 pixels, gives each grid cell one or two pixels a side and keeps every edge sharp", () => {
+    const rgba = renderIcon(SPRITE, COLOURS, 24, false);
+    expect(rgba.length).toBe(24 * 24 * 4);
+    // Cell x=1 covers pixel 2 only, cell x=2 covers 3 and 4, cell x=3 covers 5; row y=5 is pixel 8, row y=6 is 9 and 10.
+    expect(pixel(rgba, 24, 2, 8)).toEqual(EYE);
+    expect(pixel(rgba, 24, 3, 8)).toEqual(BODY);
+    expect(pixel(rgba, 24, 4, 8)).toEqual(BODY);
+    expect(pixel(rgba, 24, 5, 8)).toEqual(EYE);
+    expect(pixel(rgba, 24, 2, 9)).toEqual(BODY);
+    expect(pixel(rgba, 24, 2, 10)).toEqual(BODY);
+    expect(pixel(rgba, 24, 3, 9)).toEqual(CLEAR);
+    expect(opaque(rgba)).toBe(8);
+  });
+
+  it("at 32 pixels is exactly the 2× tray render", () => {
+    expect(Buffer.from(renderIcon(SPRITE, COLOURS, 32, true)).equals(Buffer.from(renderTrayIcon(SPRITE, COLOURS, 2, true)))).toBe(true);
+  });
+
+  it("refuses a size below the grid or not a whole number", () => {
+    expect(() => renderIcon(SPRITE, COLOURS, 8, false)).toThrow();
+    expect(() => renderIcon(SPRITE, COLOURS, 20.5, false)).toThrow();
+  });
+});
+
+describe("encodeIco", () => {
+  it("writes a directory of PNG entries, 256 spelled as 0, at the offsets where the images sit", () => {
+    const small = encodePng(16, 16, renderIcon(SPRITE, COLOURS, 16, false));
+    const large = encodePng(256, 256, renderIcon(SPRITE, COLOURS, 256, false));
+    const ico = encodeIco([
+      { size: 16, png: small },
+      { size: 256, png: large },
+    ]);
+    expect([ico.readUInt16LE(0), ico.readUInt16LE(2), ico.readUInt16LE(4)]).toEqual([0, 1, 2]);
+    expect([ico[6], ico[7], ico[8], ico[9], ico.readUInt16LE(10), ico.readUInt16LE(12)]).toEqual([16, 16, 0, 0, 1, 32]);
+    expect([ico[22], ico[23]]).toEqual([0, 0]);
+    const entries = icoEntries(ico);
+    expect(entries).toEqual([
+      { size: 16, bytes: small.length, offset: 6 + 32 },
+      { size: 256, bytes: large.length, offset: 6 + 32 + small.length },
+    ]);
+    expect(ico.subarray(entries[0]!.offset, entries[0]!.offset + entries[0]!.bytes).equals(small)).toBe(true);
+    expect(ico.subarray(entries[1]!.offset, entries[1]!.offset + entries[1]!.bytes).equals(large)).toBe(true);
+    expect(ico.length).toBe(6 + 32 + small.length + large.length);
+  });
+
+  it("refuses no images, and an image larger than an entry can describe", () => {
+    const png = encodePng(16, 16, renderIcon(SPRITE, COLOURS, 16, false));
+    expect(() => encodeIco([])).toThrow();
+    expect(() => encodeIco([{ size: 512, png }])).toThrow();
+  });
+});
+
 describe("encodePng", () => {
   it("writes an 8-bit RGBA PNG whose chunks check out and whose rows inflate back to the pixels", () => {
     const rgba = renderTrayIcon(SPRITE, COLOURS, 1, true);
@@ -100,13 +164,25 @@ describe("encodePng", () => {
   });
 });
 
-describe("the checked-in tray icons", () => {
-  it("are PNGs at 16 and 32 pixels, a plain pair and a badged pair", async () => {
-    expect(TRAY_ICONS.map((icon) => icon.file)).toEqual(["tray.png", "tray@2x.png", "tray-waiting.png", "tray-waiting@2x.png"]);
+describe("the checked-in icons", () => {
+  const pngSize = (png: Buffer): number => png.readUInt32BE(16);
+
+  it("are two tray ICOs holding 16, 20, 24 and 32 pixel PNGs, plain and badged", async () => {
+    expect(TRAY_ICONS.map((icon) => icon.file)).toEqual(["tray.ico", "tray-waiting.ico"]);
     for (const icon of TRAY_ICONS) {
-      const png = await readFile(new URL(`../resources/tray/${icon.file}`, import.meta.url));
-      expect(png.subarray(0, 8).equals(PNG_SIGNATURE)).toBe(true);
-      expect([png.readUInt32BE(16), png.readUInt32BE(20)]).toEqual([ICON_GRID * icon.scale, ICON_GRID * icon.scale]);
+      const ico = await readFile(new URL(`../resources/tray/${icon.file}`, import.meta.url));
+      const entries = icoEntries(ico);
+      expect(entries.map((entry) => entry.size)).toEqual([...TRAY_SIZES]);
+      for (const entry of entries) {
+        const png = ico.subarray(entry.offset, entry.offset + entry.bytes);
+        expect(png.subarray(0, 8).equals(PNG_SIGNATURE)).toBe(true);
+        expect(pngSize(png)).toBe(entry.size);
+      }
     }
+  });
+
+  it("include the app icon up to 256 pixels, which the packager needs", async () => {
+    const ico = await readFile(new URL(`../resources/${APP_ICON.file}`, import.meta.url));
+    expect(icoEntries(ico).map((entry) => entry.size)).toEqual([...APP_ICON.sizes]);
   });
 });

@@ -21,8 +21,13 @@ export function parseArgs(argv: readonly string[]): Args {
   return args;
 }
 
-/** Where the window loads from: the flag, else the environment, else the static export over app://clawd/. */
-export function resolveRendererUrl(args: Args, env: Readonly<Record<string, string | undefined>>): string {
+/**
+ * Where the window loads from: packaged, always the static export over app://clawd/, so no flag or
+ * environment variable can point a teammate's app elsewhere; in development the flag, else the
+ * environment, else the export.
+ */
+export function resolveRendererUrl(args: Args, env: Readonly<Record<string, string | undefined>>, packaged: boolean): string {
+  if (packaged) return APP_URL;
   const fromEnv = env.CLAWD_DESKTOP_URL?.trim();
   return args.devUrl ?? (fromEnv ? fromEnv : APP_URL);
 }

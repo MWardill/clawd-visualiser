@@ -13,10 +13,20 @@ only; the cloud always gets the anonymised form.
 
 ## Status
 
-The contract (`packages/core`) and the web app (Track A: the panes scene, the simulated and live
-feeds, the detail ticker) are built. The local agent (Track B) is in progress on its own branch.
-The product requirements are in [docs/PRD.md](docs/PRD.md), and the measured facts about Claude
-Code's hooks that the design rests on are in [docs/spike-hooks.md](docs/spike-hooks.md).
+The contract (`packages/core`), the web app (the panes scene, the simulated and live feeds, the
+detail ticker), the local agent and the desktop app are built. The desktop app ships as a zipped
+folder; see Run below. The product requirements are in [docs/PRD.md](docs/PRD.md), and the measured
+facts about Claude Code's hooks that the design rests on are in [docs/spike-hooks.md](docs/spike-hooks.md).
+
+## Run
+
+Download `Clawd-Visualiser-<version>-win-x64.zip`, unzip it anywhere (a folder under your user
+profile is best, since the hooks will point at it), and run `Clawd Visualiser.exe`. The app sits in
+the tray; open Settings from its menu to watch your repositories and install Claude Code's hooks.
+Nothing else is installed, and the app runs from wherever it was unzipped. To update, quit, unzip the
+new version over the folder and launch. If the new version changes the hook scripts, open Settings
+and choose Reinstall afterwards, since an update alone does not refresh the copies in `~/.clawd/bin`.
+Details in [apps/desktop/README.md](apps/desktop/README.md).
 
 ## Layout
 
@@ -26,7 +36,7 @@ A pnpm workspace. Packages export TypeScript source directly; the web app compil
 | --- | --- |
 | `apps/web` | Next.js app (App Router, Tailwind, shadcn/ui). The panes scene on one canvas, fed by the agent's SSE stream when one answers and by the simulated source otherwise; a detail sheet with the redacted ticker in xterm.js. See `docs/superpowers/specs/2026-09-12-web-app-design.md`. |
 | `apps/agent` | The local agent: hook and status line receivers, redaction at ingest, presence polling, snapshot and ticker streams, the settings installer and Windows window focus. See its README. |
-| `apps/desktop` | The Electron app, built in stages: the agent and the visualiser in one window and the tray, run from a folder. Stage 5 adds the settings window, which watches folders and installs the hooks under the app's own binary. See its README. |
+| `apps/desktop` | The Electron app: the agent and the visualiser in one window and the tray, with a settings window that installs the hooks under the app's own binary, packaged as a zipped folder. See its README. |
 | `packages/core` | Contracts, redaction, state machine, aliases, simulated and replay sources, fixtures. Pure TypeScript, tested with Vitest. See its README. |
 | `packages/scene` | The canvas renderer: the Clawd pixel engine and the panes scene. Framework-free; takes a snapshot, draws a frame. See its README. |
 | `docs/PRD.md` | Requirements, contracts, state machine, milestones, decision log. |

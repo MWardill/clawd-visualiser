@@ -10,18 +10,21 @@
     "icons": "node build/icons.mjs",
     "dev": "node build/bundle.mjs && electron . --dev-url http://localhost:3000",
     "start": "node build/renderer.mjs && node build/bundle.mjs && electron .",
-    "test": "vitest run --passWithNoTests",
-    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.page.json"
+    "test": "node build/icons.mjs --check && vitest run --passWithNoTests",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.page.json",
+    "package": "node build/renderer.mjs && node build/bundle.mjs && electron-builder --win",
+    "smoke": "node build/smoke-packaged.mjs"
   },
   "devDependencies": {
     "@clawd/agent": "workspace:*",
     "@clawd/core": "workspace:*",
     "@clawd/scene": "workspace:*",
-    "zod": "^4.6.2",
     "@types/node": "^22.20.2",
     "electron": "^44.3.0",
+    "electron-builder": "^26.15.3",
     "esbuild": "^0.28.2",
     "typescript": "^5",
-    "vitest": "^5"
+    "vitest": "^5",
+    "zod": "^4.6.2"
   }
 }

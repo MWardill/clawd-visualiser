@@ -40,14 +40,16 @@ or tested elsewhere); code signing; the detail levels themselves (the detail lev
 apps/desktop/
   package.json            @clawd/desktop. No dependencies. devDependencies: electron, electron-builder,
                           esbuild, vitest, typescript, @clawd/agent, @clawd/core
-  electron-builder.yml
+  electron-builder.yml    dir and zip targets, asar, fuses, extraResources for the icons and the scripts
   build/
-    bundle.mjs            esbuild: main, preload, settings page script; copies the Next export
-    icons.mjs             renders the canonical Clawd matrix to PNG and ICO, dependency-free
+    bundle.mjs            esbuild: main, preload, settings page script; copies the tray icons and the hook scripts
+    icons.mjs             renders the canonical Clawd matrix to ICO files, dependency-free; --check compares them
+    renderer.mjs          the Next static export, copied to dist/renderer
+    smoke-packaged.mjs    runs the packaged app once against scratch folders
   src/
     main.ts               entry: lock, scheme, agent host, tray, window
     args.ts               --hidden, --dev-url; pure
-    paths.ts              home, logs, desktop.json, renderer directory
+    paths.ts              where the pages, the tray icons and the hook scripts are, in development and packaged
     log.ts                dated file sink for the agent's Logger (codes only)
     agent-host.ts         supervisor: starting, own, attached, restarting, failed
     scheme.ts             app:// handler: path mapping, MIME, CSP; a pure mapper and a thin handler
@@ -59,8 +61,8 @@ apps/desktop/
       preload.ts          the contextBridge API
       ipc.ts              ipcMain handlers, zod-validated
       page.html, page.ts  the settings window
-  resources/              generated icons, checked in
-  dist/                   build output, ignored
+  resources/              the tray ICOs and the app icon, generated and checked in
+  dist/                   build output, ignored; release/ is the packager's, also ignored
 ```
 
 Main-process code stays thin. Anything with logic (path mapping, supervisor transitions, the hook
@@ -127,6 +129,8 @@ attached.
 - The window loads `--dev-url`, else `CLAWD_DESKTOP_URL`, else `app://clawd/`. The desktop
   package's `dev` script passes `--dev-url http://localhost:3000` for the hot-reload loop, and
   `start` loads the export (changed in the stage 3 plan, so the export runs before packaging).
+  Packaged, both the flag and the variable are ignored and the export is loaded, so nothing in a
+  teammate's environment can point the app elsewhere (stage 6).
 - The scheme handler maps `app://clawd/<path>` to `<renderer dir>/<path>` and `/` to `index.html`.
   The mapper is pure: it decodes, normalises, refuses `..` and absolute paths, and returns null for
   anything outside the renderer directory. MIME comes from a fixed table (html, js, css, json, png,
@@ -162,9 +166,13 @@ attached.
   every installed hook.
 - On launch, `hooks.ts` reads the settings file. `current`: nothing. `stale` (our hook present with
   a different command, as after the folder moved or a new version was unzipped elsewhere): rewrite
-  through `installHooks()` with the usual backup, logged as `desktop.hooksRepaired`. `missing`:
-  nothing; the settings window offers to install. Until the app is launched from its new place the
-  hooks fail quietly, as hooks always do, and events for that interval are missed.
+  through `installHooks()` with the usual backup, logged as `desktop.hooksRepaired`. Only the
+  packaged app rewrites unattended: on the maintainer's machine the hooks may belong to the CLI's
+  install or to another checkout, and a development launch would otherwise flip them on every run
+  and leave a backup each time. A development run still shows `stale` in the settings window, where
+  Reinstall is a choice (stage 6). `missing`: nothing; the settings window offers to install. Until
+  the app is launched from its new place the hooks fail quietly, as hooks always do, and events for
+  that interval are missed.
 - Uninstall from the app is the CLI's uninstall. Deleting the folder without it leaves the hooks
   pointing at nothing; they keep failing quietly, and the CLI's uninstall or a fresh install repairs
   the settings file.
@@ -206,14 +214,19 @@ matching the app. The detail section is present only once the detail levels desi
 
 ## 10. Tray, login item, logging
 
-- Tray icon: the canonical Clawd at 16 and 32 px, rendered from the matrix by `build/icons.mjs`,
-  plus a variant with an amber dot for waiting above zero. Tooltip: `Clawd Visualiser · 3 sessions ·
-  1 waiting`, with `· agent attached` or `· agent failed` appended in those states. Menu: Open,
-  Settings, Start on login (checkbox), Quit. Clicking the icon opens the window.
+- Tray icon: the canonical Clawd rendered from the matrix by `build/icons.mjs` into an ICO holding
+  16, 20, 24 and 32 px images, so Windows picks a crisp one at 100, 125, 150 and 200% scaling, plus a
+  variant with an amber dot for waiting above zero. The app's own icon is an ICO up to 256 px from
+  the same sprite. `pnpm test` fails if a checked-in icon no longer matches the sprite. Tooltip:
+  `Clawd Visualiser · 3 sessions · 1 waiting`, with `· agent attached` or `· agent failed` appended
+  in those states. Menu: Open, Settings, Start on login (checkbox), Quit. Clicking the icon opens the
+  window.
 - Login item: `app.setLoginItemSettings({ openAtLogin, args: ["--hidden"] })`. Turned on the first
   time the packaged app runs (a flag in `desktop.json`). The settings toggle and the tray checkbox
   read `getLoginItemSettings()`. On every launch, when it is on, `login.ts` applies it again so the
-  registered path follows a moved folder.
+  registered path follows a moved folder. In development the Run value has its own name
+  (`<appId>.dev`), the toggle is not remembered in `desktop.json`, and nothing is enabled or
+  re-applied at launch, so a development run cannot disturb the packaged app's entry (stage 6).
 - Logs: `~/.clawd/logs/desktop-YYYY-MM-DD.log`, one JSON line per entry, written by the agent's
   `createLogger` with a file sink, so the codes-only rule holds for the desktop. New codes:
   `desktop.started`, `desktop.attached`, `desktop.takeover`, `desktop.agentFault`,
@@ -224,17 +237,34 @@ matching the app. The detail section is present only once the detail levels desi
 
 ## 11. Packaging and distribution
 
-- electron-builder: `appId: io.github.mwardill.clawd-visualiser`, `productName: Clawd Visualiser`,
-  `win.target: ["dir", "zip"]`, `files: ["dist/**"]`, asar on, fuses `runAsNode: true`,
-  `enableCookieEncryption: true`, `onlyLoadAppFromAsar: true`. The artifact is
-  `Clawd-Visualiser-<version>-win-x64.zip`, holding one folder with `Clawd Visualiser.exe` and its
-  resources.
-- `pnpm --filter @clawd/desktop package` runs the bundle (§3) and electron-builder. The zip is
-  shared by hand or attached to a GitHub release by the maintainer; nothing is automated.
-- Version: `apps/desktop/package.json`, shown in the settings window and the tray tooltip on hover.
+- electron-builder, configured in `electron-builder.yml`: `appId: io.github.mwardill.clawd-visualiser`,
+  `productName: Clawd Visualiser`, `win.target: ["dir", "zip"]`, output in `release/` (its default,
+  `dist`, is the bundle's directory), asar on, `npmRebuild: false`, fuses `runAsNode: true`,
+  `enableCookieEncryption: true`, `onlyLoadAppFromAsar: true`. `extraMetadata` gives the archive's
+  `package.json` the `productName`, so the packaged app's name, and with it its profile folder
+  under `%APPDATA%` and its single-instance lock, differ from a development run's `@clawd/desktop`
+  and neither blocks the other from starting. The archive holds `dist/main.cjs`, `dist/renderer/`
+  and `dist/settings/`, without source maps; the tray icons and the hook scripts go beside it
+  through `extraResources`, under `resources/tray/` and `resources/hooks/`, because the tray loads
+  its icon by path and the installer copies the scripts as files, and an asar is read-only and
+  transparent only to Node's read calls. `paths.ts` finds them under `process.resourcesPath`. The
+  artifact is `Clawd-Visualiser-<version>-win-x64.zip`, holding the unpacked folder's files;
+  Windows' Extract All puts them in a folder named after the zip.
+- `pnpm --filter @clawd/desktop package` runs the export, the bundle (§3) and electron-builder.
+  `pnpm --filter @clawd/desktop smoke` runs the packaged app once against scratch folders: the exe
+  as Node, the packaged start, the agent's health from the visualiser's origin. Its scratch home
+  remembers the login item as off, so the packaged app's first-run rule writes no real Run value.
+  The agent checks which sessions are alive by running the Claude CLI, and a call still running
+  when the app stops can write into the scratch Claude folder late, so the script removes that
+  folder again until it stays gone. `build/bundle.mjs` clears `dist/tray` and `dist/hooks` before
+  copying, so nothing stale is packaged. The zip is shared by hand or attached to a GitHub release
+  by the maintainer; nothing is automated.
+- Version: `apps/desktop/package.json`, shown in the settings window and after the status in the
+  tray tooltip.
 - Updating: quit the app, unzip the new version over the folder, launch. The hooks and the login
   item point at the same path, so nothing is repaired. Unzipping to a new place is the moved-folder
-  case in §8 and §10.
+  case in §8 and §10. When a new version changes the hook scripts, open Settings and choose
+  Reinstall after updating: the scripts in `~/.clawd/bin` are only refreshed by an install.
 - Signing: none. SmartScreen warns once for an exe extracted from a downloaded zip. An enterprise
   policy that blocks unsigned executables in user-writable directories blocks this too; a
   certificate is the fix, not a code change.
@@ -291,10 +321,11 @@ early; otherwise they are done after stage 6.
   fallback in.
 - **The export build.** `build/renderer.mjs` exits without a message when the Next build cannot be
   spawned, and a stale `apps/web/out/index.html` would pass its check. Print the spawn error, and
-  remove `apps/web/out` before building.
+  remove `apps/web/out` before building. Done in stage 6: the previous export is removed first and
+  a spawn failure is printed.
 - **Dev URLs in a packaged app.** `--dev-url` and `CLAWD_DESKTOP_URL` are honoured when packaged,
   while §7 means production to load `app://clawd/`. Ignore both when `app.isPackaged`, or record
-  that they stay as a support tool.
+  that they stay as a support tool. Done in stage 6: both are ignored when packaged.
 - **The built-in `http://localhost:3000` origin.** It can no longer be removed through the config,
   so any local dev server on port 3000 can read the redacted stream and send focus commands, as
   default configs already allowed. Accept that in the decision log, or add an opt-out.
@@ -313,6 +344,8 @@ and is settled in its plan; the rest wait like the items above.
   and read `~/.clawd/desktop.json`. Once the packaged app has `openAtLogin: true`, a development run
   re-applies the login item to the repository's `electron.exe`, and the next packaged run points it
   back. Give development its own value name and login choice, or never re-apply when not packaged.
+  Done in stage 6: a development run has its own value name, its toggle is not remembered, and
+  nothing is applied at launch unless packaged.
 - **An unreadable `desktop.json`.** A read that fails for a reason other than a missing file counts
   as nothing remembered, so the next change overwrites the real file, and a packaged first run would
   turn the login item on against a stored off. A failed write is dropped with no log code. Tell
@@ -323,7 +356,10 @@ and is settled in its plan; the rest wait like the items above.
   every display. Clamp the size to the chosen work area.
 - **The Start on login checkbox and Task Manager.** The tray checkbox reads `openAtLogin`, which
   ignores an entry disabled in Task Manager's startup list. Stage 5's settings toggle faces the same
-  choice; `executableWillLaunchAtLogin` or `launchItems[].enabled` would show it.
+  choice; `executableWillLaunchAtLogin` or `launchItems[].enabled` would show it. Check them against
+  the packaged app first: stage 6's automated walk saw `launchItems` empty and
+  `executableWillLaunchAtLogin` false for the packaged exe, whose path has spaces, while the Run
+  value was right and `openAtLogin` was true.
 - **Ctrl+Q on other keyboard layouts.** `isQuitShortcut` matches `input.key`, so on a layout where
   that key types another letter the shortcut never fires. Also accept `input.code === "KeyQ"`.
 - **Tearing the tray down before a quit is certain.** `before-quit` destroys the tray, so a quit
@@ -331,13 +367,29 @@ and is settled in its plan; the rest wait like the items above.
   registers `beforeunload` today; destroying the tray in `will-quit` removes the risk.
 - **Tray icon scaling.** At 125% and 150% display scaling Windows resamples the 16 or 32 px PNG and
   blurs the pixel art. An ICO with 16, 20, 24 and 32 px images fixes it, with stage 6's icons, along
-  with a check that the checked-in icons still match the sprite.
+  with a check that the checked-in icons still match the sprite. Done in stage 6: ICOs at 16, 20, 24
+  and 32 px, and `pnpm test` checks the files against the sprite.
 - **Stage 4's manual checks: done.** The maintainer walked them on 16 September 2026: the tray icon
   and its tooltip, clicking it, the menu's Open, Start on login and Quit, the waiting badge,
   unticking Start on login, and Ctrl+Q. Stage 4's automated run had already covered closing, second
   launches, bounds, `--hidden`, the login item's re-apply and the development loop. Worth repeating
   once stage 6 packages the app: a real sign-out and sign-in with the login item on, since the
   packaged entry differs from the development one.
+- **Stage 6's manual checks: partly done.** On 17 September 2026 the maintainer marked a copy of the
+  zip as downloaded, extracted it with Explorer and saw SmartScreen's warning, ran the app against
+  scratch folders, set the hooks up from the settings window, saw a real Claude Code session's Clawd
+  and its status line, and saw the tray icon crisp at 125% and 150% after relaunching at each scale.
+  The same day an automated walk of the zip against scratch folders loaded the window and the
+  settings page from inside the archive, moved the folder and saw the hooks and the login item
+  repaired with the Run value quoted, ran a development run beside the packaged app without either
+  disturbing the other, and removed the hooks with a backup left. One hook under the packaged exe
+  took 85 to 87 ms, and the whole installed command about 140 to 190 ms through Git Bash; the exe
+  starts as Node in about 85 ms once Windows has seen it, and took 593 ms on the first launch of a
+  fresh build. Still to walk, on the next packaged install: a real sign-out and sign-in with the
+  login item on, with Task Manager's Startup apps list, which is the only proof that Windows starts
+  the app from the Run value; and deleting the folder while a session runs. That one is checked only
+  at the command: a hook naming a missing exe fails in about 50 ms with exit code 127 and no dialog,
+  which Claude Code treats as a non-blocking error.
 
 Found in the reviews of stage 5 (16 September 2026).
 
@@ -379,6 +431,84 @@ Found in the reviews of stage 5 (16 September 2026).
   the design says the settings window should show beside the log directory and the retry button. The
   directory is now rendered, but the reason has no route to the page: it is not part of the state the
   bridge carries. Add it when the bridge next changes.
+
+Found in the overall review of the desktop app at stage 5 (17 September 2026). Three were taken into
+stage 6: the launch repair no longer runs unattended in development, the folder picker belongs to the
+settings window, and the detail setter is caught and logged. The rest wait for the hardening pass.
+
+- **Attached mode applies nothing.** `addFolder`, `removeFolder` and `setDetail` save the config and
+  call `host.restart()`, but while the host is attached to another process's agent `release()` is a
+  no-op and `attempt()` re-attaches, so the other agent keeps its allowlist and detail level while the
+  page lists the change as applied, with no log code. Detect attached in the actions, log a code, and
+  carry a notice into the state when the bridge next changes.
+- **An unreadable config or settings file reads as "not installed".** `hookOptions()` maps a
+  `ConfigError` to null, and `currentHookStatus()` maps that, an invalid-JSON settings file, or a
+  settings file that is a JSON array (cast without `isJsonObject`) to `missing`. The page then hides
+  Remove, the launch repair is skipped, and the offered Install fails silently. Add an `unreadable`
+  status and use `isJsonObject` on the read.
+- **`install()` saves the config before the hooks can still fail.** The allowlist and port are written
+  through `setAllowlist()` before `installHooks()` copies the scripts and re-reads the settings file;
+  a copy failure, or a settings file rewritten between the dry-run check and the real read, leaves
+  the config changed while "nothing was changed" is printed, and a config change between the two reads
+  can save the empty allowlist the pre-check meant to forbid. Save the config once inside
+  `installHooks` after the copy, passing the merged allowlist in; that also removes the four config
+  reads per install, the second merge, the unreachable guard after `setAllowlist`, and the unread
+  `HooksResult.allowlist` field.
+- **An install from the app can mint a token the serving agent lacks.** With no config in the app's
+  home the installer falls back to a default config with a fresh token, and the agent is not
+  restarted; attached to an agent running from a different home, the written hooks carry a token that
+  agent refuses while the page says installed. Refuse or warn when installing hooks without owning the
+  agent, and never create a config from the settings window.
+- **The settings page rebuilds itself on every push.** `render()` replaces every node when the text
+  differs, which is what drops the button's `aria-busy` guard (a second Add folder during the picker,
+  now modal but still a second request once it closes), resets an in-flight radio for the moment
+  between a coalesced push and the answer, wipes a text selection, and swallows a click split across
+  old and new nodes. Patch counters and `checked` in place and rebuild only the folder list, with the
+  page test harness this list already calls for.
+- **Every state build reads the config twice.** `currentState()` reads and parses `config.json`, then
+  `currentHookStatus()` reads it again before the settings file, in series; at startup the fallback
+  build is followed by a second `currentHookStatus()` for the launch repair. Read once and pass the
+  config into a `hookStatusFor(config)`, and reuse the startup state's `hooks` for the repair.
+- **The login toggle from the page builds the state twice.** `setOpenAtLogin()` ends with
+  `pushState()`, and the IPC action then returns a second `currentState()`; the page renders both.
+  Split apply from push.
+- **The bridge is typed by hand in three places.** `Api` in the page, `SettingsActions` in the
+  handlers and an untyped literal in the preload, with nothing linking them; the unions copied into
+  `settings/state.ts` are checked one way only. One `SettingsApi` in the import-free `settings/state.ts`,
+  `satisfies` on the preload literal, and `Omit` for the actions.
+- **Two copies of the window hardening and of show-or-create.** `createSettingsWindow` repeats
+  `createMainWindow`'s options and guards, and `showWindow` and `showSettings` already diverge
+  (`showSettings` has no quitting guard and no `restore()`). One hardened-window factory and one
+  show-or-create helper.
+- **The desktop calls the CLI-shaped uninstall with a no-op printer.** `uninstall()` returns 0 for
+  three outcomes and reports refusals only through `print`, so the desktop cannot tell removed from
+  nothing-to-remove or log which refusal happened. Split it the way install was: a result-returning
+  core with the CLI's printing on top, and the same for `setDetail`.
+- **Two host tables in `scheme.ts`.** Host to directory and host to policy are two ternaries, the URL
+  is parsed twice per request, and `settingsPolicy()` rebuilds a constant. One per-host table
+  consulted once, which is also where the "handler that can reject" item above belongs.
+- **The detail default duplicates `detailLevel()`.** `currentState` writes `config?.detail ?? "none"`
+  while the agent uses `detailLevel()`, which the agent package does not export. Export it and call it.
+
+Found in the final review of stage 6 (17 September 2026). They wait for the hardening pass.
+
+- **An update does not refresh the hook scripts.** An in-place update (quit, unzip over, launch)
+  keeps `process.execPath`, the port and the token, so the hook status stays `current` and the
+  launch repair finds nothing to do; the three scripts the installer copied into `~/.clawd/bin` are
+  left at the old version. The real fix is to compare the scripts bundled beside the archive with
+  the copies in `~/.clawd/bin` at launch, or stamp them with the version, and copy them again when
+  they differ. Until then, the documents tell the maintainer to choose Reinstall from Settings after
+  an update that changes the scripts.
+- **The icon check compares bytes.** `build/icons.mjs --check` compares the checked-in ICOs with a
+  fresh render byte for byte, and the PNGs inside come from `node:zlib`, so a Node upgrade that
+  changes zlib's output fails `pnpm test` with no sprite change. Compare decoded pixels instead,
+  which `icons.test.ts` already knows how to do.
+- **Two fuses the app does not need are still on.** `EnableNodeOptionsEnvironmentVariable` and
+  `EnableNodeCliInspectArguments` are separate from `runAsNode`, so turning them off would not
+  affect the hooks. Consider them with signing.
+- **The smoke check can be answered by another agent.** If a CLI agent already holds the port, the
+  packaged app attaches and the health answer comes from that agent. The app logs
+  `desktop.attached` then, so the smoke script can fail or say so when the newest log contains it.
 
 Asked for while stage 5 was finishing (16 September 2026). Not a review finding; the shape below was
 settled in conversation, so whoever picks it up does not have to decide it again.

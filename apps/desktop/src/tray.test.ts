@@ -1,7 +1,7 @@
 import type { MenuItemConstructorOptions } from "electron";
 import { describe, expect, it } from "vitest";
 import { TRAY_ICONS } from "./icons";
-import { trayIconFile, trayMenuTemplate } from "./tray";
+import { trayIconFile, trayMenuTemplate, trayTooltip } from "./tray";
 
 const click = (item: MenuItemConstructorOptions | undefined): void => (item?.click as (() => void) | undefined)?.();
 
@@ -20,9 +20,9 @@ function recorder() {
 
 describe("trayIconFile", () => {
   it("is the badged icon while any session waits, and a file the icon build writes", () => {
-    expect(trayIconFile(0)).toBe("tray.png");
-    expect(trayIconFile(1)).toBe("tray-waiting.png");
-    expect(trayIconFile(3)).toBe("tray-waiting.png");
+    expect(trayIconFile(0)).toBe("tray.ico");
+    expect(trayIconFile(1)).toBe("tray-waiting.ico");
+    expect(trayIconFile(3)).toBe("tray-waiting.ico");
     const files = TRAY_ICONS.map((icon) => icon.file as string);
     expect(files).toContain(trayIconFile(0));
     expect(files).toContain(trayIconFile(1));
@@ -50,5 +50,11 @@ describe("trayMenuTemplate", () => {
     const off = recorder();
     click(trayMenuTemplate(false, off.actions)[2]);
     expect(off.calls).toEqual(["login true"]);
+  });
+});
+
+describe("trayTooltip", () => {
+  it("is the status line with the app's version after it", () => {
+    expect(trayTooltip({ mode: "own", port: 4750, sessions: 2, waiting: 1, error: null }, "0.1.0")).toBe("Clawd Visualiser · 2 sessions · 1 waiting · v0.1.0");
   });
 });

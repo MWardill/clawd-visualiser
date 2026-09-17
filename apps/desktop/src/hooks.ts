@@ -13,9 +13,15 @@ export function expectedCommands(opts: InstallOptions): { hook: string; status: 
   return { hook: hookCommand(opts), status: statusCommand(opts) };
 }
 
-/** Only our own hooks pointing elsewhere are rewritten; missing hooks wait for the settings window. */
-export function repairOnLaunch(status: HookStatus): boolean {
-  return status === "stale";
+/**
+ * Only our own hooks pointing elsewhere are rewritten, and only by the packaged app: on the
+ * maintainer's machine the hooks may belong to the CLI's install or to another checkout, and a
+ * development launch rewriting them unattended would flip them on every run and leave a backup each
+ * time. A development run still shows `stale` in the settings window, where Reinstall is a choice.
+ * Missing hooks wait for the settings window either way.
+ */
+export function repairOnLaunch(status: HookStatus, packaged: boolean): boolean {
+  return packaged && status === "stale";
 }
 
 export { hookStatus, type HookStatus };

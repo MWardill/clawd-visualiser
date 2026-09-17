@@ -815,10 +815,39 @@ git commit -m "fix(desktop): the folder picker belongs to the settings window, a
 
 ### Task 5: The package
 
+> **Erratum, found in review.** The task's text below differs from what shipped in five ways.
+>
+> 1. **The smoke script wrote a real login item.** The plan's scratch `desktop.json` said nothing
+>    about `openAtLogin`, so the packaged app's first-run rule would write a real Windows Run
+>    value pointing at `release/win-unpacked`, starting at the next sign-in against the real
+>    `~/.clawd`. What shipped writes `desktop.json` with `openAtLogin: false` into the scratch
+>    home first (commit `b9061f9`).
+> 2. **Stale tray files.** The plan's `build/bundle.mjs` copied the tray icons and the hook
+>    scripts without clearing their destinations first, so an old icon set left in `dist/tray`
+>    would be packaged beside the new one. What shipped clears `dist/tray` and `dist/hooks` before
+>    copying into them, so `apps/desktop/build/bundle.mjs` joins the files below (commit
+>    `b9061f9`).
+> 3. **The packaged app shared a name with development.** Without a `productName` in the archive's
+>    own `package.json`, the packaged app's Electron name was `@clawd/desktop`, the same as a
+>    development run, so the profile folder and the single-instance lock Electron derives from
+>    that name collided, and one build could not start while the other ran. What shipped adds
+>    `extraMetadata: { productName: Clawd Visualiser }` to `electron-builder.yml`, so only the
+>    archive's copy of `package.json` gets the name (commit `28f2d91`).
+> 4. **The smoke script's failure paths.** The plan's script did not check the exe existed first,
+>    could keep waiting past a spawn error instead of stopping at once, awaited the app's exit
+>    with a listener that could reject, and left the scratch Claude folder in place after a Claude
+>    CLI call that outlives the stopped app wrote into it late. What shipped fixes all four
+>    (commits `28f2d91`, `4fe3b48`, `65c8293`).
+> 5. **`electron-winstaller`.** It arrives with electron-builder, and pnpm would not run its
+>    install script unasked, which only serves a Squirrel installer target this app does not
+>    build. What shipped lists it under `allowBuilds` in `pnpm-workspace.yaml` as `false`, with a
+>    comment saying what it builds (commits `b9061f9`, `28f2d91`).
+
 **Files:**
 - Modify: `apps/desktop/package.json` (electron-builder, the `package` and `smoke` scripts)
 - Create: `apps/desktop/electron-builder.yml`
 - Modify: `apps/desktop/build/renderer.mjs`
+- Modify: `apps/desktop/build/bundle.mjs`
 - Create: `apps/desktop/build/smoke-packaged.mjs`
 - Modify: `.gitignore` (root)
 
@@ -1308,9 +1337,9 @@ Expand-Archive apps\desktop\release\Clawd-Visualiser-0.1.0-win-x64.zip "$env:USE
 
 Stop any CLI agent and any development run of the app first. Check each:
 
-- **First run.** SmartScreen warns once (More info, Run anyway). The tray icon appears with the Clawd, and its tooltip ends in `· v0.1.0`. The window opens on the scene. `Get-ItemProperty HKCU:\Software\Microsoft\Windows\CurrentVersion\Run` shows `io.github.mwardill.clawd-visualiser` naming the exe with `--hidden`: the first packaged run turned the login item on.
+- **First run.** SmartScreen warns once (More info, Run anyway). The tray icon appears with the Clawd, and its tooltip ends in `· v0.1.0`. The window opens on the scene. This is the first time a page is served from inside the archive, so treat it, and Settings opening below, as this stage's gate. `Get-ItemProperty HKCU:\Software\Microsoft\Windows\CurrentVersion\Run` shows `io.github.mwardill.clawd-visualiser` naming the exe, quoted since its path has spaces, with `--hidden`: the first packaged run turned the login item on.
 - **Set up from the app alone.** Settings: add a repository folder, install the hooks. `$env:CLAUDE_CONFIG_DIR\settings.json` holds commands beginning `ELECTRON_RUN_AS_NODE=1 "C:/Users/<you>/Apps/Clawd Visualiser/Clawd Visualiser.exe"`. Start a Claude Code session in that folder with the scratch Claude directory: its Clawd appears, and the status line renders. Time one hook under the packaged exe with `Measure-Command { "" | & "...\Clawd Visualiser.exe" "$env:CLAWD_HOME\bin\clawd-hook.mjs" }` with `$env:ELECTRON_RUN_AS_NODE = "1"` set for that command only; record the number.
-- **Tray icon scaling.** Settings, Display, Scale at 125% and then 150%: the tray Clawd stays crisp, plain and with the waiting dot (leave a session waiting on a permission prompt to see it). Back to 100%.
+- **Tray icon scaling.** Settings, Display, Scale at 125%, then quit the app from the tray and launch it again: the tray Clawd stays crisp, plain and with the waiting dot (leave a session waiting on a permission prompt to see it). Repeat at 150%. Back to 100%.
 - **Move the folder and relaunch.** Quit from the tray. Rename the folder to `Clawd Visualiser 2` and run the exe from there. The log (`$env:CLAWD_HOME\logs\desktop-<date>.log`) gains `desktop.hooksRepaired` and `desktop.loginItemReapplied`; the settings file's commands and the Run value both name the new place.
 - **Sign out and in** with the login item on: the app returns with only the tray icon, and the agent is up (the tooltip counts sessions once one starts). Task Manager's Startup apps list shows Clawd Visualiser.
 - **Remove the hooks** from Settings: the settings file is restored and a backup sits beside it.

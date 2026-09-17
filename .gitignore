@@ -9,6 +9,7 @@ clawd-animation/
 node_modules/
 .next/
 dist/
+release/
 coverage/
 *.tsbuildinfo
 .env*
