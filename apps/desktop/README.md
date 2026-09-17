@@ -307,3 +307,13 @@ slower, about 600 ms, while it is scanned.
 
 What stage 6 leaves in place: the whole design. What the stage reviews deferred is listed in the
 design's §12.1 for the hardening pass.
+
+### Stage 6.1: the review's fixes
+
+Nothing new in Electron. Two things worth knowing. A development run and the packaged app now keep
+separate state files (`desktop-dev.json` and `desktop.json`, version 2), so a toggle made in one
+never decides the other's behaviour; the old version 1 file is ignored. And the smoke script runs the
+packaged app with `--user-data-dir` pointing at a scratch profile: Electron derives the
+single-instance lock from that directory, so the copy under test never collides with an installed
+copy sitting in the tray. The smoke also stops the app by ending its whole process tree, so a Claude
+CLI call still in flight cannot write into the scratch folder after the script has removed it.
