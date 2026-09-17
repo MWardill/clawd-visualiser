@@ -66,9 +66,16 @@ agent answers. `pnpm --filter @clawd/desktop icons` redraws the tray and app ico
 
 A development run and the packaged app stay out of each other's way: they have their own names, so
 their own profile folders and single-instance locks, and neither blocks the other from starting; the
-development login item has its own name and is never remembered, a development launch never rewrites
-the hooks unattended (the settings window shows `stale` and offers Reinstall), and the packaged app
-ignores `--dev-url` and `CLAWD_DESKTOP_URL`.
+development login item has its own name and its choice is remembered in its own `desktop-dev.json`, a
+development launch never rewrites the hooks unattended (the settings window shows `stale` and offers
+Reinstall), and the packaged app ignores `--dev-url` and `CLAWD_DESKTOP_URL`.
+
+Two things a development run from before stage 6 may have left behind. A Run value named
+`io.github.mwardill.clawd-visualiser` pointing at this repository's `electron.exe`: the development
+toggle no longer sees it, so remove it by hand (`Remove-ItemProperty
+HKCU:\Software\Microsoft\Windows\CurrentVersion\Run io.github.mwardill.clawd-visualiser`) or let a
+packaged run overwrite it. And a `~/.clawd/desktop.json` at version 1: the packaged app ignores it,
+and development keeps `desktop-dev.json` since stage 6.1.
 
 ## Stage notes
 
@@ -178,12 +185,10 @@ icon by the clock are the app, and the window is a view you open and put away.
 
 **The tray.** `new Tray(image)` puts an icon in the notification area, with a tooltip and a context
 menu built with `Menu.buildFromTemplate`. A tray that nothing references any more can be garbage
-collected and vanish, so main keeps it in a variable for the life of the app. The icons are PNGs
-drawn from the canonical Clawd sprite by `build/icons.mjs` and checked in under `resources/tray`;
-`tray@2x.png` beside `tray.png` is picked up automatically on a display scaled to 200%. At 125% and
-150%, the common laptop settings, Windows resamples the nearer image instead, which softens the
-pixel art; stage 6's icon file fixes that. While any session waits, the icon is the variant with an
-amber dot.
+collected and vanish, so main keeps it in a variable for the life of the app. The icons are ICO files
+drawn from the canonical Clawd sprite by `build/icons.mjs` and checked in under `resources/tray`,
+each holding 16, 20, 24 and 32 px images so Windows picks a crisp one at every display scale (stage 6
+replaced the PNGs). While any session waits, the icon is the variant with an amber dot.
 
 **Close and quit are now different things.** Electron's default is to quit when the last window
 closes. The app listens for `window-all-closed` and does nothing, and the window's `close` handler
@@ -203,7 +208,8 @@ this stage a second copy of the app attached to the first copy's agent; now it n
 
 **The login item.** `app.setLoginItemSettings({ openAtLogin, path, args })` writes a value under the
 current user's `Run` registry key; Windows starts that command line at sign-in. The value is named
-by the app's AppUserModelId, which main sets to `io.github.mwardill.clawd-visualiser`. In
+by the app's AppUserModelId, which main sets to `io.github.mwardill.clawd-visualiser` when packaged
+and to that id with `.dev` appended in development, so the two never share an entry (stage 6). In
 development the command is Electron's `electron.exe` with this folder and `--hidden`; packaged, it
 is the app's own exe. `getLoginItemSettings({ path, args })` only reports a value holding exactly
 that command, so after the folder moves Windows has no entry for the new path. `desktop.json`

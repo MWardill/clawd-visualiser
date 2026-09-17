@@ -65,7 +65,7 @@ function run(): void {
     if (!app.isPackaged) process.stdout.write(line);
   });
 
-  const store = createDesktopStore(desktopStatePath(home));
+  const store = createDesktopStore(desktopStatePath(home, app.isPackaged));
   const login = loginItemTarget(app.isPackaged, process.execPath, app.getAppPath());
   // Packaged, the bundle and the pages are inside resources/app.asar and the icons and scripts beside it.
   const dist = distPaths(__dirname, app.isPackaged ? process.resourcesPath : __dirname);
@@ -154,8 +154,7 @@ function run(): void {
 
   function setOpenAtLogin(on: boolean): void {
     app.setLoginItemSettings({ ...login, openAtLogin: on });
-    // Only the packaged app's choice is remembered; a development toggle is a testing convenience.
-    if (app.isPackaged) store.update({ openAtLogin: on });
+    store.update({ openAtLogin: on });
     refreshMenu();
     pushState();
   }

@@ -17,22 +17,27 @@ async function tempDir(): Promise<string> {
 const BOUNDS = { x: 100, y: 80, width: 1280, height: 800 };
 
 describe("desktopStatePath", () => {
-  it("is desktop.json in the home directory", () => {
-    expect(desktopStatePath(join("C:", "home"))).toBe(join("C:", "home", "desktop.json"));
+  it("is desktop.json for the packaged app and desktop-dev.json for a development run, in the home directory", () => {
+    expect(desktopStatePath(join("C:", "home"), true)).toBe(join("C:", "home", "desktop.json"));
+    expect(desktopStatePath(join("C:", "home"), false)).toBe(join("C:", "home", "desktop-dev.json"));
   });
 });
 
 describe("parseDesktopState", () => {
-  it("keeps valid bounds and a boolean openAtLogin from a version 1 file", () => {
-    expect(parseDesktopState({ version: 1, bounds: BOUNDS, openAtLogin: false })).toEqual({ bounds: BOUNDS, openAtLogin: false });
-    expect(parseDesktopState({ version: 1 })).toEqual({});
+  it("keeps valid bounds and a boolean openAtLogin from a version 2 file", () => {
+    expect(parseDesktopState({ version: 2, bounds: BOUNDS, openAtLogin: false })).toEqual({ bounds: BOUNDS, openAtLogin: false });
+    expect(parseDesktopState({ version: 2 })).toEqual({});
+  });
+
+  it("reads a version 1 file, which only development runs before stage 6 wrote, as nothing remembered", () => {
+    expect(parseDesktopState({ version: 1, bounds: BOUNDS, openAtLogin: false })).toEqual({});
   });
 
   it("drops each invalid field on its own, and everything from another version or a non-object", () => {
-    expect(parseDesktopState({ version: 1, bounds: { ...BOUNDS, x: "100" }, openAtLogin: true })).toEqual({ openAtLogin: true });
-    expect(parseDesktopState({ version: 1, bounds: { ...BOUNDS, width: 0 }, openAtLogin: "yes" })).toEqual({});
-    expect(parseDesktopState({ version: 1, bounds: { ...BOUNDS, height: 10.5 } })).toEqual({});
-    expect(parseDesktopState({ version: 2, bounds: BOUNDS })).toEqual({});
+    expect(parseDesktopState({ version: 2, bounds: { ...BOUNDS, x: "100" }, openAtLogin: true })).toEqual({ openAtLogin: true });
+    expect(parseDesktopState({ version: 2, bounds: { ...BOUNDS, width: 0 }, openAtLogin: "yes" })).toEqual({});
+    expect(parseDesktopState({ version: 2, bounds: { ...BOUNDS, height: 10.5 } })).toEqual({});
+    expect(parseDesktopState({ version: 3, bounds: BOUNDS })).toEqual({});
     expect(parseDesktopState(null)).toEqual({});
     expect(parseDesktopState([BOUNDS])).toEqual({});
   });
@@ -51,9 +56,9 @@ describe("createDesktopStore", () => {
     expect(damaged.get()).toEqual({});
   });
 
-  it("loads what was saved, merges each update and writes the whole file as version 1", async () => {
+  it("loads what was saved, merges each update and writes the whole file as version 2", async () => {
     const path = join(await tempDir(), "desktop.json");
-    await writeFile(path, JSON.stringify({ version: 1, bounds: BOUNDS }));
+    await writeFile(path, JSON.stringify({ version: 2, bounds: BOUNDS }));
     const store = createDesktopStore(path);
     await store.load();
     expect(store.get()).toEqual({ bounds: BOUNDS });
@@ -62,12 +67,12 @@ describe("createDesktopStore", () => {
     store.update({ bounds: { ...BOUNDS, x: 200 } });
     await store.flush();
     expect(store.get()).toEqual({ bounds: { ...BOUNDS, x: 200 }, openAtLogin: true });
-    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ version: 1, bounds: { ...BOUNDS, x: 200 }, openAtLogin: true });
+    expect(JSON.parse(await readFile(path, "utf8"))).toEqual({ version: 2, bounds: { ...BOUNDS, x: 200 }, openAtLogin: true });
   });
 
   it("lets an update made before the load finishes win over the file", async () => {
     const path = join(await tempDir(), "desktop.json");
-    await writeFile(path, JSON.stringify({ version: 1, bounds: BOUNDS, openAtLogin: false }));
+    await writeFile(path, JSON.stringify({ version: 2, bounds: BOUNDS, openAtLogin: false }));
     const store = createDesktopStore(path);
     const loading = store.load();
     store.update({ openAtLogin: true });

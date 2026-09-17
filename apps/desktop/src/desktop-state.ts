@@ -1,22 +1,28 @@
 // ~/.clawd/desktop.json: what the app remembers between runs that is not the agent's config. The
 // window's bounds, and whether the user wants the app at login, absent until a first packaged run or
-// the tray decides. A missing or damaged file reads as nothing remembered; a failed write is dropped,
-// since the next change writes the whole file again.
+// a toggle. A missing or damaged file reads as nothing remembered; a failed write is dropped, since
+// the next change writes the whole file again. A development run keeps its own file, so what it
+// remembers never steers the packaged app.
 import { readJsonFile, writeJsonAtomic } from "@clawd/agent";
 import { join } from "node:path";
 
 export type Bounds = { x: number; y: number; width: number; height: number };
 export type DesktopState = { bounds?: Bounds; openAtLogin?: boolean };
 
-const VERSION = 1;
+/**
+ * Version 2 since stage 6.1. Version 1 files were only ever written by development runs before
+ * stage 6, when both shared one file, and their login choice must not decide the packaged app's
+ * first run; they read as nothing remembered, which costs the saved bounds once.
+ */
+const VERSION = 2;
 
-export function desktopStatePath(home: string): string {
-  return join(home, "desktop.json");
+export function desktopStatePath(home: string, packaged: boolean): string {
+  return join(home, packaged ? "desktop.json" : "desktop-dev.json");
 }
 
 const whole = (value: unknown): value is number => Number.isInteger(value);
 
-/** The valid fields of a version 1 file, each judged on its own; anything else is dropped. */
+/** The valid fields of a version 2 file, each judged on its own; anything else is dropped. */
 export function parseDesktopState(value: unknown): DesktopState {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
   const file = value as { version?: unknown; bounds?: unknown; openAtLogin?: unknown };
