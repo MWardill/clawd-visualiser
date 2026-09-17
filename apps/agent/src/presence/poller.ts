@@ -11,9 +11,10 @@ export type Exec = (command: string, opts: { timeoutMs: number; maxBuffer: numbe
 
 /**
  * Runs a constant command through the shell (on Windows `claude` is a .cmd shim). stdout is
- * captured and stderr discarded, never inherited, and the error itself is never looked at. An
- * aborted signal ends the command's whole process tree, because ending only the shell would leave
- * the CLI the shim started running, and it could still write into the Claude directory.
+ * captured and stderr discarded, never inherited, and the error itself is never looked at. A
+ * timeout or an aborted signal ends the command's whole process tree, because ending only the
+ * shell would leave the CLI the shim started running, and it could still write into the Claude
+ * directory.
  */
 export const nodeExec: Exec = (command, opts) =>
   new Promise((resolve) => {
@@ -21,19 +22,23 @@ export const nodeExec: Exec = (command, opts) =>
       resolve({ ok: false });
       return;
     }
-    const child = exec(command, { timeout: opts.timeoutMs, maxBuffer: opts.maxBuffer, windowsHide: true, encoding: "utf8" }, (err, stdout) => {
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      opts.signal?.removeEventListener("abort", end);
+    };
+    const end = (): void => {
+      cleanup();
+      if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
+        execFile("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true }, () => {});
+      }
+      resolve({ ok: false });
+    };
+    const child = exec(command, { maxBuffer: opts.maxBuffer, windowsHide: true, encoding: "utf8" }, (err, stdout) => {
+      cleanup();
       resolve(err ? { ok: false } : { ok: true, stdout });
     });
-    opts.signal?.addEventListener(
-      "abort",
-      () => {
-        if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
-          execFile("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true }, () => {});
-        }
-        resolve({ ok: false });
-      },
-      { once: true },
-    );
+    const timer = setTimeout(end, opts.timeoutMs);
+    opts.signal?.addEventListener("abort", end, { once: true });
   });
 
 export type FocusTarget = { pid: number; cwd: string };

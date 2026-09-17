@@ -285,19 +285,36 @@ describe("presence poller", () => {
   });
 });
 
-describe("nodeExec", () => {
+describe.concurrent("nodeExec", () => {
   it("kills the whole process tree on abort, so a grandchild the shim's shell started cannot outlive it", async () => {
     const dir = await mkdtemp(join(tmpdir(), "clawd-nodeexec-"));
     try {
-      const file = join(dir, "written.txt").replace(/\\/g, "/");
-      const command = `"${process.execPath}" -e "setTimeout(() => require('fs').writeFileSync('${file}', 'x'), 1500)"`;
+      const started = join(dir, "started.txt").replace(/\\/g, "/");
+      const delayed = join(dir, "delayed.txt").replace(/\\/g, "/");
+      const command = `"${process.execPath}" -e "require('fs').writeFileSync('${started}', 'x'); setTimeout(() => require('fs').writeFileSync('${delayed}', 'x'), 1500)"`;
       const controller = new AbortController();
       const pending = nodeExec(command, { timeoutMs: 15_000, maxBuffer: 4 * 1024 * 1024, signal: controller.signal });
       await new Promise((resolve) => setTimeout(resolve, 300));
       controller.abort();
       expect(await pending).toEqual({ ok: false });
+      expect(existsSync(started)).toBe(true);
       await new Promise((resolve) => setTimeout(resolve, 2_500));
-      expect(existsSync(file)).toBe(false);
+      expect(existsSync(delayed)).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true, maxRetries: 3 });
+    }
+  }, 10_000);
+
+  it("kills the whole process tree on its own timeout, so a hung CLI cannot outlive it either", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "clawd-nodeexec-"));
+    try {
+      const started = join(dir, "started.txt").replace(/\\/g, "/");
+      const delayed = join(dir, "delayed.txt").replace(/\\/g, "/");
+      const command = `"${process.execPath}" -e "require('fs').writeFileSync('${started}', 'x'); setTimeout(() => require('fs').writeFileSync('${delayed}', 'x'), 1500)"`;
+      expect(await nodeExec(command, { timeoutMs: 300, maxBuffer: 4 * 1024 * 1024 })).toEqual({ ok: false });
+      expect(existsSync(started)).toBe(true);
+      await new Promise((resolve) => setTimeout(resolve, 2_500));
+      expect(existsSync(delayed)).toBe(false);
     } finally {
       await rm(dir, { recursive: true, force: true, maxRetries: 3 });
     }
@@ -311,7 +328,7 @@ describe("nodeExec", () => {
       const controller = new AbortController();
       controller.abort();
       expect(await nodeExec(command, { timeoutMs: 15_000, maxBuffer: 4 * 1024 * 1024, signal: controller.signal })).toEqual({ ok: false });
-      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
       expect(existsSync(file)).toBe(false);
     } finally {
       await rm(dir, { recursive: true, force: true, maxRetries: 3 });
