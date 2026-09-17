@@ -16,7 +16,7 @@ import {
   uninstall,
   type JsonObject,
 } from "@clawd/agent";
-import { Menu, Tray, app, dialog, ipcMain, nativeImage, protocol, screen, shell, type BrowserWindow, type NativeImage } from "electron";
+import { Menu, Tray, app, dialog, ipcMain, nativeImage, protocol, screen, shell, type BrowserWindow, type NativeImage, type OpenDialogOptions } from "electron";
 import { join } from "node:path";
 import { fetchCounts, probeHealth } from "./agent-client";
 import { createAgentHost, statusText, type HostState } from "./agent-host";
@@ -242,7 +242,10 @@ function run(): void {
           // re-renders the page unchanged, so every one is caught here and logged before answering.
           async addFolder() {
             try {
-              const picked = await dialog.showOpenDialog({ properties: ["openDirectory"], title: "Watch a folder" });
+              // The picker belongs to the settings window, so it is modal to it and a second click cannot open another.
+              const options: OpenDialogOptions = { properties: ["openDirectory"], title: "Watch a folder" };
+              const parent = settingsWin !== null && !settingsWin.isDestroyed() ? settingsWin : null;
+              const picked = parent === null ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(parent, options);
               const dir = picked.canceled ? null : (picked.filePaths[0] ?? null);
               if (dir !== null) {
                 const saved = await setAllowlist({ home, add: [dir], cwd: home });
@@ -286,9 +289,13 @@ function run(): void {
             return await currentState();
           },
           async setDetail(level) {
-            await setDetail({ home, level, print: () => {} });
-            host.restart();
-            return currentState();
+            try {
+              await setDetail({ home, level, print: () => {} });
+              host.restart();
+            } catch {
+              log("desktop.detailFailed");
+            }
+            return await currentState();
           },
           async setOpenAtLogin(on) {
             setOpenAtLogin(on);

@@ -18,6 +18,7 @@ export type LogCode =
   | "desktop.hooksRepaired"
   | "desktop.hooksFailed"
   | "desktop.folderFailed"
+  | "desktop.detailFailed"
   | "ingest.counts"
   | "ingest.failed"
   | "presence.failed"
