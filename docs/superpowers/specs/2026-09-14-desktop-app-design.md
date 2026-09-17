@@ -356,7 +356,10 @@ and is settled in its plan; the rest wait like the items above.
   every display. Clamp the size to the chosen work area.
 - **The Start on login checkbox and Task Manager.** The tray checkbox reads `openAtLogin`, which
   ignores an entry disabled in Task Manager's startup list. Stage 5's settings toggle faces the same
-  choice; `executableWillLaunchAtLogin` or `launchItems[].enabled` would show it.
+  choice; `executableWillLaunchAtLogin` or `launchItems[].enabled` would show it. Check them against
+  the packaged app first: stage 6's automated walk saw `launchItems` empty and
+  `executableWillLaunchAtLogin` false for the packaged exe, whose path has spaces, while the Run
+  value was right and `openAtLogin` was true.
 - **Ctrl+Q on other keyboard layouts.** `isQuitShortcut` matches `input.key`, so on a layout where
   that key types another letter the shortcut never fires. Also accept `input.code === "KeyQ"`.
 - **Tearing the tray down before a quit is certain.** `before-quit` destroys the tray, so a quit
@@ -372,6 +375,21 @@ and is settled in its plan; the rest wait like the items above.
   launches, bounds, `--hidden`, the login item's re-apply and the development loop. Worth repeating
   once stage 6 packages the app: a real sign-out and sign-in with the login item on, since the
   packaged entry differs from the development one.
+- **Stage 6's manual checks: partly done.** On 17 September 2026 the maintainer marked a copy of the
+  zip as downloaded, extracted it with Explorer and saw SmartScreen's warning, ran the app against
+  scratch folders, set the hooks up from the settings window, saw a real Claude Code session's Clawd
+  and its status line, and saw the tray icon crisp at 125% and 150% after relaunching at each scale.
+  The same day an automated walk of the zip against scratch folders loaded the window and the
+  settings page from inside the archive, moved the folder and saw the hooks and the login item
+  repaired with the Run value quoted, ran a development run beside the packaged app without either
+  disturbing the other, and removed the hooks with a backup left. One hook under the packaged exe
+  took 85 to 87 ms, and the whole installed command about 140 to 190 ms through Git Bash; the exe
+  starts as Node in about 85 ms once Windows has seen it, and took 593 ms on the first launch of a
+  fresh build. Still to walk, on the next packaged install: a real sign-out and sign-in with the
+  login item on, with Task Manager's Startup apps list, which is the only proof that Windows starts
+  the app from the Run value; and deleting the folder while a session runs. That one is checked only
+  at the command: a hook naming a missing exe fails in about 50 ms with exit code 127 and no dialog,
+  which Claude Code treats as a non-blocking error.
 
 Found in the reviews of stage 5 (16 September 2026).
 
