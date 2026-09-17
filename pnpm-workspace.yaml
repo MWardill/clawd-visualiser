@@ -9,3 +9,5 @@ allowBuilds:
   unrs-resolver: true
   # electron downloads its binary in a postinstall step.
   electron: true
+  # electron-builder's Squirrel installer dependency; it fetches its own native tooling in a postinstall step.
+  electron-winstaller: true

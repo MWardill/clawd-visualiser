@@ -1,0 +1,37 @@
+# electron-builder: the unpacked folder teammates get, and that folder zipped. No installer, no
+# updater, no signing (design §11). Run through `pnpm --filter @clawd/desktop package`.
+appId: io.github.mwardill.clawd-visualiser
+productName: Clawd Visualiser
+directories:
+  # Not the default `dist`, which is the bundle's own directory.
+  output: release
+  buildResources: resources
+# Only the bundle's output goes into the archive; the package has no runtime dependencies. The
+# source maps stay out: the app logs codes, never stack traces, so nothing reads them.
+files:
+  - dist/**
+  - "!dist/tray/**"
+  - "!dist/hooks/**"
+  - "!dist/**/*.map"
+# The tray icons and the hook scripts are used as files, so they live beside the archive, where
+# paths.ts looks for them under process.resourcesPath.
+extraResources:
+  - from: dist/tray
+    to: tray
+  - from: dist/hooks
+    to: hooks
+asar: true
+# No native modules and no dependencies to rebuild.
+npmRebuild: false
+# Fuses are switches baked into the binary. runAsNode stays on because every installed hook runs
+# the exe as Node; the other two close doors the app never uses.
+electronFuses:
+  runAsNode: true
+  enableCookieEncryption: true
+  onlyLoadAppFromAsar: true
+win:
+  target:
+    - dir
+    - zip
+  icon: resources/icon.ico
+  artifactName: Clawd-Visualiser-${version}-win-${arch}.${ext}
