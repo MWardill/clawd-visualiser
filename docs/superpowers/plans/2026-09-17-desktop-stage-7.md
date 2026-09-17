@@ -4,11 +4,11 @@
 
 **Goal:** The settings window and the installer stop losing events and stop lying: the hook check compares everything an install writes, an update refreshes the scripts, an unreadable file says so, a refusal and a failed agent's reason reach the page, a change while attached says it was not applied, the install never leaves the config half-changed, and development runs leave nothing behind for the packaged app to trip over.
 
-**Architecture:** The agent's installer saves the config once, inside `installHooks`, and gains result-returning cores for uninstall and the detail level. `hookStatus` compares the whole set an install would write, and the desktop's `hooks.ts` adds the scripts check and the `unreadable` classification. The settings actions move out of `main.ts` into `settings/actions.ts`, a tested module over injected doubles, and the bridge's state gains a `notice` and the agent's `error`. `desktop.json` moves to version 2 and development gets its own file. The stage 6 review's smoke, build, tray and poller items close.
+**Architecture:** The agent's installer saves the config once, inside `installHooks`, and gains result-returning cores for uninstall and the detail level. `hookStatus` compares the whole set an install would write, and the desktop's `hooks.ts` adds the scripts check and the `unreadable` classification. The settings actions move out of `main.ts` into `settings/actions.ts`, a tested module over injected doubles, and the bridge's state gains a `notice` and the agent's `error`. Stage 6.1 has already closed the stage 6 review's items, so this stage builds on version 2 of `desktop.json` and a smoke script with its own profile.
 
 **Tech Stack:** Electron 44, electron-builder 26, esbuild 0.28, zod 4, vitest 5, TypeScript 5.9, pnpm 12 workspaces.
 
-**Spec:** `docs/superpowers/specs/2026-09-14-desktop-app-design.md`, §5, §8, §9, §11, and these §12.1 items: from stage 5's review the settings actions in untested glue, the status line removed by hand, the hook check ignoring port and token, the bridge unable to say an action was refused, the failed agent's reason; from the 17 September overall review attached mode, unreadable config or settings, `install()` saving before the hooks, the minted token, the double config read, the double login build, the CLI-shaped uninstall, the detail default; from stage 6's final review the update not refreshing the scripts, the icon byte check, the smoke answered by another agent; and from the 17 September stage 6 review (recorded by Task 6) the stale dev login choice, the smoke's shared lock, the cleanup that can throw, the orphaned Run value, the tray rebuilds, the product name typed twice, the dead 2× renderer, the smoke's re-spelled formats, and the three `rm` calls. Everything else in §12.1 is stage 8's (Task 6 lists it).
+**Spec:** `docs/superpowers/specs/2026-09-14-desktop-app-design.md`, §5, §8, §9, §11, and these §12.1 items: from stage 5's review the settings actions in untested glue, the status line removed by hand, the hook check ignoring port and token, the bridge unable to say an action was refused, the failed agent's reason; from the 17 September overall review attached mode, unreadable config or settings, `install()` saving before the hooks, the minted token, the double config read, the double login build, the CLI-shaped uninstall, the detail default; from stage 6's final review the update not refreshing the scripts, the icon byte check, the smoke answered by another agent. The 17 September review of stage 6's merge is stage 6.1's, done before this stage. Everything else in §12.1 is stage 8's (Task 4 lists it).
 
 **Stage idea:** none new in Electron. This is the first half of the post-dev hardening row: the items where the app loses events, misleads the user, or corrupts its own state. The second half, the page's rendering and tests, the shell's edge cases and the scheme, is stage 8.
 
@@ -24,11 +24,10 @@
 - A saved config change is applied by restarting the agent the app owns. While attached to another agent, the change is saved, not applied, logged as `desktop.attachedChange`, and the page says the attached agent must be restarted.
 - Installing hooks from the app while attached and without a config of its own is refused: the hooks would carry a token the other agent does not hold.
 - `install()` validates the settings file, copies the scripts, then saves the config and writes the settings file, in that order, in one `installHooks` call; a failure before the save leaves the config untouched. An install whose settings content would not change writes no backup and no file.
-- `desktop.json` is version 2. A version 1 file, which only development runs before stage 6 ever wrote, reads as nothing remembered. Development uses `desktop-dev.json`; the packaged app uses `desktop.json`. `loginOnLaunch` still acts only when packaged.
 - Log lines carry a time, a code and numbers or booleans only. New code this stage: `desktop.attachedChange`. Notices shown on the page are never logged.
 - Automated checks never run the packaged app against the real `~/.clawd` or `~/.claude`: the smoke script uses scratch folders and its own profile directory.
 - Commits: one-line messages, no Co-Authored-By trailer. Never push.
-- Branch `feat/desktop-stage-7` in the worktree `C:\mw\visualiser-desktop`, cut from `main` (stage 6 is merged at `5aa85ee`; this plan is committed on `main` after it). That worktree has `feat/desktop-stage-6` checked out, which is merged: `git -C C:\mw\visualiser-desktop checkout -b feat/desktop-stage-7 main`. Run package tests from the package directory: `npx vitest run <file>`.
+- Branch `feat/desktop-stage-7` in the worktree `C:\mw\visualiser-desktop`, cut from `main` once stage 6.1 is merged. That worktree will have `feat/desktop-stage-6.1` checked out, merged by then: `git -C C:mwisualiser-desktop checkout -b feat/desktop-stage-7 main`. Run package tests from the package directory: `npx vitest run <file>`.
 - If `electron --version` prints a Node version, `ELECTRON_RUN_AS_NODE` is set in the shell; unset it before running the app or the packager.
 
 ## File structure
@@ -40,20 +39,13 @@
 | `apps/agent/src/detail.ts` | `saveDetail` core; `setDetail` prints. |
 | `apps/agent/src/index.ts` | Exports `uninstallHooks`, `saveDetail`, `detailLevel`, `isJsonObject`. |
 | `apps/agent/src/log.ts` | `desktop.attachedChange` joins the closed set. |
-| `apps/agent/src/presence/poller.ts` | `stop()` aborts the list command in flight. |
 | `apps/desktop/src/hooks.ts` | `readConfigState`, `scriptsMatch`, `currentHookStatus`. |
 | `apps/desktop/src/settings/actions.ts` | `createSettingsActions(deps)`: the rules, with notices. |
 | `apps/desktop/src/settings/state.ts`, `settings-state.ts` | `notice` and `agent.error`; `unreadable`. |
 | `apps/desktop/src/settings/page.ts`, `page.css` | Renders the notice, the reason, the unreadable status. |
-| `apps/desktop/src/desktop-state.ts` | Version 2; `desktopStatePath(home, packaged)`. |
-| `apps/desktop/src/icons.ts` | `renderTrayIcon` goes. |
-| `apps/desktop/src/main.ts` | Wiring only: deps for the actions, the store path, the tray cache. |
-| `apps/desktop/build/smoke-packaged.mjs` | Own profile directory, exit watch, bundled helpers, retrying cleanup, attached check. |
-| `apps/desktop/build/icons.mjs` | `--check` compares decoded pixels. |
-| `apps/desktop/build/clean.mjs`, `bundle.mjs`, `package.json` | One clean step; the `rm` calls go; the icon check follows vitest. |
-| `apps/desktop/electron-builder.yml` | The product name once. |
+| `apps/desktop/src/main.ts` | Wiring only: the deps for the actions. |
 | `docs/superpowers/specs/2026-09-14-desktop-app-design.md` | The decisions, the done items, the stage 8 list. |
-| `apps/desktop/README.md`, `README.md` | Stage 4 note corrected; the dev note; the stage 7 note; the update sentence. |
+| `apps/desktop/README.md`, `README.md` | The stage 7 note; the update sentence. |
 
 ---
 
@@ -1247,7 +1239,7 @@ type SettingsState = {
 
 and after the paragraph ending `The detail section is present only once the detail levels design has landed.` add: `\`notice\` is one sentence about the last action when it was refused, failed, or was saved but not applied, and null otherwise; \`agent.error\` is the failed agent's reason, which names a field and never a value. The actions that decide them live in \`settings/actions.ts\`, tested over doubles (stage 7).`
 
-6. In §10, in the login item bullet, the sentence beginning `In development the Run value has its own name` says the toggle is not remembered in `desktop.json` (it wraps across lines, around line 228). Change that clause so the sentence reads: `In development the Run value has its own name (\`<appId>.dev\`), its toggle is remembered in its own \`desktop-dev.json\`, and nothing is enabled or re-applied at launch, so a development run cannot disturb the packaged app's entry (stages 6 and 7).` In the logs bullet's list of codes add `\`desktop.attachedChange\` (a config change saved while attached to another agent, which will not see it)` before `\`desktop.loginItemReapplied\``.
+6. In §10, in the logs bullet's list of codes add `\`desktop.attachedChange\` (a config change saved while attached to another agent, which will not see it)` before `\`desktop.loginItemReapplied\``.
 
 7. In §11, the Updating bullet (around line 264, wrapped over four lines) currently reads: quit, unzip over, launch; the hooks and the login item point at the same path, so nothing is repaired; unzipping to a new place is the moved-folder case; and a final sentence beginning `When a new version changes the hook scripts, open Settings and choose Reinstall`. Replace the whole bullet with:
 
@@ -1266,41 +1258,9 @@ In §12's stages table, replace the `Post-dev Hardening` row with two rows:
 | 8 Hardening II | The page's rendering and tests, the shell's edge cases, the scheme, the stale wait (§12.1) | None new | Every remaining §12.1 item is done or dropped with a reason in the decision log |
 ```
 
-In §12.1, append `Done in stage 7.` with a clause to each of these items: stage 5's `The settings actions are rules living in untested glue` (`: \`settings/actions.ts\``), `A status line removed by hand is reinstated at every launch` (`: decided, it is stale and the packaged app repairs it`), `The hook check ignores the port and the token` (`: the whole set is compared`), `The bridge cannot tell the user an action was refused` (`: the state's \`notice\``), `The failed agent's reason is never shown` (`: \`agent.error\``); from the 17 September overall review `Attached mode applies nothing`, `An unreadable config or settings file reads as "not installed"`, `\`install()\` saves the config before the hooks can still fail`, `An install from the app can mint a token the serving agent lacks`, `Every state build reads the config twice`, `The login toggle from the page builds the state twice`, `The desktop calls the CLI-shaped uninstall with a no-op printer`, `The detail default duplicates \`detailLevel()\``; from stage 6's final review `An update does not refresh the hook scripts` (`: the scripts are compared at launch`), `The icon check compares bytes` (`: pixels`), `The smoke check can be answered by another agent` (`: it fails on \`desktop.attached\``).
+In §12.1, append `Done in stage 7.` with a clause to each of these items: stage 5's `The settings actions are rules living in untested glue` (`: \`settings/actions.ts\``), `A status line removed by hand is reinstated at every launch` (`: decided, it is stale and the packaged app repairs it`), `The hook check ignores the port and the token` (`: the whole set is compared`), `The bridge cannot tell the user an action was refused` (`: the state's \`notice\``), `The failed agent's reason is never shown` (`: \`agent.error\``); from the 17 September overall review `Attached mode applies nothing`, `An unreadable config or settings file reads as "not installed"`, `\`install()\` saves the config before the hooks can still fail`, `An install from the app can mint a token the serving agent lacks`, `Every state build reads the config twice`, `The login toggle from the page builds the state twice`, `The desktop calls the CLI-shaped uninstall with a no-op printer`, `The detail default duplicates \`detailLevel()\``; from stage 6's final review `An update does not refresh the hook scripts` (`: the scripts are compared at launch`).
 
-Then, after the `Found in the final review of stage 6` list, insert:
-
-```markdown
-Found in the review of stage 6's merge (17 September 2026). Stage 7 takes the first nine; the last
-three are recorded decisions.
-
-- **A stale development login choice steered the packaged first run.** Development runs before
-  stage 6 wrote `openAtLogin` into the one `desktop.json`, and this machine's held `false`, so the
-  packaged app's first run would never have enabled the login item. Done in stage 7: version 2, and
-  `desktop-dev.json` for development.
-- **The smoke shared the installed app's lock and missed an early exit.** Done in stage 7: its own
-  profile directory, and the waits stop when the process exits.
-- **The smoke's cleanup could throw out of its `finally`.** Done in stage 7: `rm` retries and warns.
-- **A pre-stage-6 development Run value is orphaned by the `.dev` rename.** Nothing in the app can
-  see it now. Recorded in the desktop README's development note with the one-line removal.
-- **The tray was rebuilt on every snapshot.** Done in stage 7: the tooltip is compared and the two
-  images are cached.
-- **The product name was typed twice in `electron-builder.yml`.** Done in stage 7: `extraMetadata`
-  alone.
-- **The 2× renderer had no caller and its test compared it with itself.** Done in stage 7: gone.
-- **The smoke re-spelled five private formats.** Done in stage 7: bundled from the TypeScript.
-- **Three targeted `rm` calls instead of one clean step.** Done in stage 7: `build/clean.mjs` first.
-- **`packaged` stands in for "the only installer on this machine".** Two packaged copies, or a
-  packaged app beside the CLI's install, still take turns rewriting the hooks. Accepted for now: the
-  package is for teammates without the CLI, and the maintainer's machine uses one or the other. The
-  cure, if wanted, is install identity in the hook command, so the repair fires only for this app's
-  own previous location.
-- **The poller's stop left an in-flight CLI call running.** Done in stage 7: an abort signal ends it.
-- **The `distPaths` tests spell Windows paths.** By the design's rule that nothing is tested
-  elsewhere. Accepted.
-```
-
-After that, add:
+Then, after the stage 6.1 list (`Found in the review of stage 6's merge`), add:
 
 ```markdown
 Stage 8 takes what remains: the settings page rebuilding on every push, its missing tests (a DOM
@@ -1377,9 +1337,7 @@ Stop any CLI agent and any development run first. Check each:
 - **An update refreshes the scripts.** Quit. Append a comment line to `$env:CLAWD_HOME\bin\clawd-hook.mjs`. Launch: `desktop.hooksRepaired`, and the file matches the shipped one again.
 - **Attached.** Start the CLI agent (`pnpm --filter @clawd/agent start`) against the same scratch home, then launch the app: the tray says attached. Add a folder: the notice says the attached agent keeps its own settings, and the log has `desktop.attachedChange`. Stop the CLI agent; the app takes over.
 - **Refused install while attached without a config.** With the CLI agent running from a different `CLAWD_HOME` and this app's scratch home empty, Install hooks: the notice says the app has no config of its own, and nothing is written.
-- **The first packaged run enables login on this machine.** With the real home, once: launch the packaged app with no scratch variables; `Get-ItemProperty HKCU:\Software\Microsoft\Windows\CurrentVersion\Run` shows the entry, which stage 6 could not show here. Turn it off from the tray afterwards if unwanted, and check `~/.clawd/desktop.json` is at version 2.
 - **The two checks stage 6 left.** A real sign-out and sign-in with the login item on: the app returns hidden, and Task Manager's Startup apps list shows Clawd Visualiser. And deleting the folder while a Claude Code session runs: no dialog, the session carries on.
-- **A development run** from the repository remembers its own toggle in `~/.clawd/desktop-dev.json` and leaves `desktop.json` alone.
 - Delete both scratch folders and the unzipped folder, and remove `Env:CLAWD_HOME` and `Env:CLAUDE_CONFIG_DIR`.
 
 - [ ] **Step 6: Record the checks and hand the branch back**
@@ -1389,8 +1347,7 @@ In §12.1, after the `Stage 6's manual checks: partly done` item, add:
 ```markdown
 - **Stage 6's remaining checks and stage 7's: done.** On <date> the maintainer walked them: the
   refusals and the attached notice on the page, the unreadable config, the port, the status line and
-  a changed script all repaired at launch, the refused install without a config, the first packaged
-  run enabling the login item on this machine, a sign-out and sign-in with the login item on, and the
+  a changed script all repaired at launch, the refused install without a config, a sign-out and sign-in with the login item on, and the
   folder deleted under a running session.
 ```
 
