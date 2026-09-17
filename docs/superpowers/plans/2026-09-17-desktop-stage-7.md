@@ -1763,7 +1763,7 @@ In `docs/superpowers/specs/2026-09-14-desktop-app-design.md`:
 
 2. In §5, after the `- **attached.**` bullet's last sentence, add: `A folder or detail-level change made while attached is saved but not applied, since the other agent read its config at its own start: the page says so and \`desktop.attachedChange\` is logged. Installing hooks while attached with no config of this app's own is refused, since they would carry a token the other agent does not hold (stage 7).`
 
-3. In §6, change the sentence `\`hookStatus(settingsPath, expectedCommand)\` returns \`missing\`, \`current\` or \`stale\`.` to `\`hookStatus(settings, options)\` compares everything an install would write, the http hooks with their port and token, the SessionStart command and the status line, and returns \`missing\`, \`current\` or \`stale\`; \`uninstallHooks()\` and \`saveDetail()\` are the result-returning cores the CLI's \`uninstall\` and \`detail\` print (stage 7).`
+3. In §6, the last bullet ends with a sentence beginning `\`hookStatus(settingsPath, expectedCommand)\` returns` (it wraps across two lines, around line 121). Replace that whole sentence with: `\`hookStatus(settings, options)\` compares everything an install would write, the http hooks with their port and token, the SessionStart command and the status line, and returns \`missing\`, \`current\` or \`stale\`; \`uninstallHooks()\` and \`saveDetail()\` are the result-returning cores the CLI's \`uninstall\` and \`detail\` print (stage 7).`
 
 4. In §8, in the bullet beginning `On launch, \`hooks.ts\` reads the settings file.`, replace `\`stale\` (our hook present with a different command, as after the folder moved or a new version was unzipped elsewhere)` with `\`stale\` (ours present with any part different from what an install would write now: the commands after the folder moved or a new version was unzipped elsewhere, an http hook's port or token, a status line removed by hand, or a script in \`~/.clawd/bin\` that differs from the one shipped beside the archive, which is how an update refreshes the scripts)`, and after the sentence ending `the settings window offers to install.` add `\`unreadable\`: the config exists but cannot be used, or the settings file is not a JSON object; nothing is repaired and the page offers no buttons (stage 7).`
 
@@ -1784,9 +1784,15 @@ type SettingsState = {
 
 and after the paragraph ending `The detail section is present only once the detail levels design has landed.` add: `\`notice\` is one sentence about the last action when it was refused, failed, or was saved but not applied, and null otherwise; \`agent.error\` is the failed agent's reason, which names a field and never a value. The actions that decide them live in \`settings/actions.ts\`, tested over doubles (stage 7).`
 
-6. In §10, in the login item bullet, replace `the toggle is not remembered in \`desktop.json\`, and nothing is enabled or re-applied at launch` with `its toggle is remembered in its own \`desktop-dev.json\`, and nothing is enabled or re-applied at launch`, and in the logs bullet's list of codes add `\`desktop.attachedChange\` (a config change saved while attached to another agent, which will not see it)` before `\`desktop.loginItemReapplied\``.
+6. In §10, in the login item bullet, the sentence beginning `In development the Run value has its own name` says the toggle is not remembered in `desktop.json` (it wraps across lines, around line 228). Change that clause so the sentence reads: `In development the Run value has its own name (\`<appId>.dev\`), its toggle is remembered in its own \`desktop-dev.json\`, and nothing is enabled or re-applied at launch, so a development run cannot disturb the packaged app's entry (stages 6 and 7).` In the logs bullet's list of codes add `\`desktop.attachedChange\` (a config change saved while attached to another agent, which will not see it)` before `\`desktop.loginItemReapplied\``.
 
-7. In §11, in the Updating bullet, replace `The hooks and the login item point at the same path, so nothing is repaired.` with `The hooks and the login item point at the same path; the launch repair copies the scripts again when the new version changed them (stage 7).`
+7. In §11, the Updating bullet (around line 264, wrapped over four lines) currently reads: quit, unzip over, launch; the hooks and the login item point at the same path, so nothing is repaired; unzipping to a new place is the moved-folder case; and a final sentence beginning `When a new version changes the hook scripts, open Settings and choose Reinstall`. Replace the whole bullet with:
+
+```markdown
+- Updating: quit the app, unzip the new version over the folder, launch. The hooks and the login
+  item point at the same path; the launch repair copies the scripts again when the new version
+  changed them (stage 7). Unzipping to a new place is the moved-folder case in §8 and §10.
+```
 
 - [ ] **Step 2: The design records what stage 7 closed, what stage 6's review found, and what stage 8 takes**
 
