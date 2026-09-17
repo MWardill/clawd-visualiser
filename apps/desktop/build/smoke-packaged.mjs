@@ -46,10 +46,27 @@ const { agentPaths, readConfig, DESKTOP_ORIGIN, ENDPOINTS, createDesktopStore, d
 const home = await mkdtemp(join(tmpdir(), "clawd-smoke-home-"));
 const claudeDir = await mkdtemp(join(tmpdir(), "clawd-smoke-claude-"));
 const profile = await mkdtemp(join(tmpdir(), "clawd-smoke-profile-"));
+
+/** Removes the scratch folders, with retries while a process that has just ended still holds a file. */
+async function removeScratch() {
+  for (const dir of [home, claudeDir, profile]) {
+    await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }).catch((err) => console.warn(`smoke: could not remove ${dir} (${err.code ?? err.message}); delete it by hand`));
+  }
+}
+
 // A remembered choice of off keeps the packaged app's first-run rule from writing a real Run key entry.
+// The store drops a failed write, so the file is read back the way the app reads it at launch, where a
+// missing, damaged or other-version file remembers nothing; without the choice nothing is started.
 const seed = createDesktopStore(desktopStatePath(home, true));
 seed.update({ openAtLogin: false });
 await seed.flush();
+const seeded = createDesktopStore(desktopStatePath(home, true));
+await seeded.load();
+if (seeded.get().openAtLogin !== false) {
+  console.error("smoke: the scratch desktop.json does not read back as a choice of off, so the app could write a real Run key entry; nothing was started");
+  await removeScratch();
+  process.exit(1);
+}
 const env = { ...process.env, CLAWD_HOME: home, CLAUDE_CONFIG_DIR: claudeDir };
 delete env.ELECTRON_RUN_AS_NODE;
 
@@ -81,7 +98,7 @@ app.on("exit", (code, signal) => {
 async function waitFor(what, read, timeoutMs) {
   const until = Date.now() + timeoutMs;
   while (Date.now() < until) {
-    if (ended !== null) throw new Error(ended instanceof Error ? `the app failed to start: ${ended.message}` : `the app exited with code ${ended.code} before ${what}`);
+    if (ended !== null) throw new Error(ended instanceof Error ? `the app failed to start: ${ended.message}` : `the app exited with ${ended.code === null ? `signal ${ended.signal}` : `code ${ended.code}`} before ${what}`);
     const value = await read().catch(() => null);
     if (value) return value;
     await sleep(250);
@@ -89,30 +106,57 @@ async function waitFor(what, read, timeoutMs) {
   throw new Error(`gave up waiting for ${what} after ${timeoutMs} ms`);
 }
 
-const logPath = join(agentPaths(home).logs, logFileName(Date.now()));
-const logText = () => readFile(logPath, "utf8").catch(() => "");
+// The app picks its log file by each line's UTC day, so a run that crosses midnight spans two files.
+const logDir = agentPaths(home).logs;
+const firstLog = logFileName(Date.now());
+const logText = async () => {
+  const names = [...new Set([firstLog, logFileName(Date.now())])];
+  return (await Promise.all(names.map((name) => readFile(join(logDir, name), "utf8").catch(() => "")))).join("\n");
+};
+/** The log's lines as records, in order; a line still being written is skipped. */
+const logRecords = async () =>
+  (await logText()).split("\n").flatMap((line) => {
+    try {
+      return [JSON.parse(line)];
+    } catch {
+      return [];
+    }
+  });
 
 try {
   await waitFor("desktop.started in the log", async () => (await logText()).includes('"code":"desktop.started","packaged":true'), 20_000);
   console.log("smoke: the app started, and knows it is packaged");
+  // Who serves the port, from the log and never from a missing line: the app's own agent logs
+  // agent.started with the port it bound, and an app that found another agent answering there logs
+  // desktop.attached. The config is written before the port is tried, so neither can be judged sooner.
+  const owner = await waitFor(
+    "the log to say whose agent serves the port (agent.started or desktop.attached)",
+    async () => (await logRecords()).find((record) => record.code === "agent.started" || record.code === "desktop.attached"),
+    10_000,
+  );
+  if (owner.code === "desktop.attached") throw new Error(`another agent holds port ${owner.port} and answered instead; stop it (the CLI's, or a development run) and run the smoke again`);
   const config = await waitFor("config.json", () => readConfig(agentPaths(home)), 10_000);
-  const health = await waitFor(`health on port ${config.port}`, async () => {
-    const res = await fetch(`http://127.0.0.1:${config.port}${ENDPOINTS.health}`, { headers: { origin: DESKTOP_ORIGIN } });
+  if (owner.port !== config.port) throw new Error(`the app's agent started on port ${owner.port}, but its config says ${config.port}`);
+  const health = await waitFor(`health on port ${owner.port}`, async () => {
+    const res = await fetch(`http://127.0.0.1:${owner.port}${ENDPOINTS.health}`, { headers: { origin: DESKTOP_ORIGIN }, signal: AbortSignal.timeout(2_000) });
     return res.ok ? res.json() : null;
   }, 10_000);
-  if ((await logText()).includes('"code":"desktop.attached"')) throw new Error(`another agent holds port ${config.port} and answered instead; stop it (the CLI's, or a development run) and run the smoke again`);
-  console.log(`smoke: the app's own agent on port ${config.port} answers ${JSON.stringify(health)} to the visualiser's origin`);
+  console.log(`smoke: the app's own agent on port ${owner.port} answers ${JSON.stringify(health)} to the visualiser's origin`);
 } catch (err) {
   fail(err instanceof Error ? err.message : String(err));
 } finally {
   // The app's own process tree, nothing else: the app and everything it started, such as a Claude CLI
   // call still in flight that would otherwise write into the scratch folder after it is gone. No quit
-  // sequence: the scratch home is about to go.
+  // sequence: the scratch home is about to go. If the tree is still there, taskkill is missing or
+  // timed out: the app is killed by its own id, and the smoke fails, since what it started may live on.
   if (ended === null) {
-    spawnSync("taskkill", ["/pid", String(app.pid), "/T", "/F"], { windowsHide: true, timeout: 10_000 });
+    const kill = spawnSync("taskkill", ["/pid", String(app.pid), "/T", "/F"], { windowsHide: true, timeout: 10_000 });
     await once(app, "exit", { signal: AbortSignal.timeout(5_000) }).catch(() => {});
+    if (ended === null) {
+      app.kill();
+      await once(app, "exit", { signal: AbortSignal.timeout(5_000) }).catch(() => {});
+      fail(`the app did not stop when its process tree was ended (taskkill ${kill.error?.message ?? `exit ${kill.status}`}); it was killed by its own id, and what it started may still be running`);
+    }
   }
-  for (const dir of [home, claudeDir, profile]) {
-    await rm(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 }).catch((err) => console.warn(`smoke: could not remove ${dir} (${err.code ?? err.message}); delete it by hand`));
-  }
+  await removeScratch();
 }
