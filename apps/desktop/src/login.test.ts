@@ -1,9 +1,16 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { APP_ID, appUserModelId, loginItemTarget, loginOnLaunch } from "./login";
 
 describe("APP_ID", () => {
   it("is the design's appId", () => {
     expect(APP_ID).toBe("io.github.mwardill.clawd-visualiser");
+  });
+
+  it("matches electron-builder.yml's appId", async () => {
+    const yml = await readFile(new URL("../electron-builder.yml", import.meta.url), "utf8");
+    const match = yml.match(/^appId:\s*(\S+)\s*$/m);
+    expect(match?.[1]).toBe(APP_ID);
   });
 });
 

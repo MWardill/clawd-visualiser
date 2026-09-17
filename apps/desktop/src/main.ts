@@ -46,8 +46,9 @@ function run(): void {
   const url = resolveRendererUrl(args, process.env, app.isPackaged);
   const home = defaultHome();
 
-  // The id names the login item's Run key entry and groups the app in the taskbar. electron-builder
-  // sets the same id in the packaged app; a development run gets its own, so the two never share an entry.
+  // The id matches electron-builder.yml's appId, but for the dir and zip targets electron-builder
+  // does not set an AppUserModelId itself: this call is what names the login item's Run value and
+  // groups the app in the taskbar. A development run uses its own name, so the two never share an entry.
   app.setAppUserModelId(appUserModelId(app.isPackaged));
 
   // A custom scheme is declared before `ready`, with what it may do. `standard` makes app://clawd/

@@ -2,8 +2,10 @@
 // decisions; main makes the Electron calls.
 
 /**
- * The app's id (spec §11 appId). Stage 6's electron-builder appId is the same, so the packaged app's
- * Run key entry is named after it. A development run uses `appUserModelId(false)` instead.
+ * The app's id (spec §11 appId), matching electron-builder.yml's appId. electron-builder does not set
+ * the packaged app's AppUserModelId itself for the dir and zip targets; main's `app.setAppUserModelId`
+ * call is what names the login item's Run key entry. A development run uses `appUserModelId(false)`
+ * instead.
  */
 export const APP_ID = "io.github.mwardill.clawd-visualiser";
 

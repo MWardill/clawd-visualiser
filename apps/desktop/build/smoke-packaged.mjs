@@ -99,7 +99,12 @@ try {
   // A plain listener, not events.once, which would reject on an 'error' event and skip the cleanup.
   const exited = new Promise((resolve) => app.once("exit", resolve));
   app.kill();
-  if (running) await Promise.race([exited, sleep(5_000)]);
+  let cap;
+  const capped = new Promise((resolve) => {
+    cap = setTimeout(resolve, 5_000);
+  });
+  if (running) await Promise.race([exited, capped]);
+  clearTimeout(cap);
   await rm(home, { recursive: true, force: true });
   await removeUntilGone(claudeDir);
 }

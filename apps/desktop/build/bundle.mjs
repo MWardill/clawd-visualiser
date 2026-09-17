@@ -19,6 +19,10 @@ await build({
   logLevel: "info",
 });
 
+// Cleared first so a leftover settings file from an older build is never packaged (electron-builder
+// takes dist/**).
+await rm(here("../dist/settings"), { recursive: true, force: true });
+
 // The preload runs in Electron's preload world, which is CommonJS; the page is an ordinary script.
 await build({
   entryPoints: [here("../src/settings/preload.ts")],
