@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { crc32, inflateSync } from "node:zlib";
 import { describe, expect, it } from "vitest";
-import { APP_ICON, BADGE_ORIGIN, ICON_GRID, SPRITE_ORIGIN, TRAY_ICONS, TRAY_SIZES, encodeIco, encodePng, renderIcon, renderTrayIcon, type Sprite } from "./icons";
+import { APP_ICON, BADGE_ORIGIN, ICON_GRID, SPRITE_ORIGIN, TRAY_ICONS, TRAY_SIZES, encodeIco, encodePng, renderIcon, type Sprite } from "./icons";
 
 const COLOURS = { body: "#cd6e58", eye: "#000000", badge: "#f2c35b" };
 const BODY = [205, 110, 88, 255];
@@ -46,9 +46,9 @@ function icoEntries(ico: Buffer): IcoEntry[] {
   });
 }
 
-describe("renderTrayIcon", () => {
+describe("renderIcon at the grid's own sizes", () => {
   it("draws the sprite's body and eyes at the origin on a clear 16-pixel grid", () => {
-    const rgba = renderTrayIcon(SPRITE, COLOURS, 1, false);
+    const rgba = renderIcon(SPRITE, COLOURS, 16, false);
     expect(rgba.length).toBe(ICON_GRID * ICON_GRID * 4);
     const { x, y } = SPRITE_ORIGIN;
     expect(pixel(rgba, 16, x, y)).toEqual(EYE);
@@ -61,7 +61,7 @@ describe("renderTrayIcon", () => {
   });
 
   it("draws each grid cell as a 2×2 block at 2×", () => {
-    const rgba = renderTrayIcon(SPRITE, COLOURS, 2, false);
+    const rgba = renderIcon(SPRITE, COLOURS, 32, false);
     expect(rgba.length).toBe(32 * 32 * 4);
     const { x, y } = SPRITE_ORIGIN;
     expect(pixel(rgba, 32, 2 * x + 1, 2 * y + 1)).toEqual(EYE);
@@ -70,8 +70,8 @@ describe("renderTrayIcon", () => {
   });
 
   it("adds a rounded amber dot in the top-right corner only when asked", () => {
-    const plain = renderTrayIcon(SPRITE, COLOURS, 1, false);
-    const badged = renderTrayIcon(SPRITE, COLOURS, 1, true);
+    const plain = renderIcon(SPRITE, COLOURS, 16, false);
+    const badged = renderIcon(SPRITE, COLOURS, 16, true);
     const { x, y } = BADGE_ORIGIN;
     expect(pixel(plain, 16, x + 1, y)).toEqual(CLEAR);
     expect(pixel(badged, 16, x + 1, y)).toEqual(AMBER);
@@ -80,10 +80,10 @@ describe("renderTrayIcon", () => {
   });
 
   it("refuses a sprite that does not fit, a colour that is not #rrggbb, and a scale that is not a whole number above zero", () => {
-    expect(() => renderTrayIcon({ ...SPRITE, width: 16, data: [Array<number>(16).fill(1), Array<number>(16).fill(1)] }, COLOURS, 1, false)).toThrow();
-    expect(() => renderTrayIcon(SPRITE, { ...COLOURS, body: "coral" }, 1, false)).toThrow();
-    expect(() => renderTrayIcon(SPRITE, COLOURS, 0, false)).toThrow();
-    expect(() => renderTrayIcon(SPRITE, COLOURS, 1.5, false)).toThrow();
+    expect(() => renderIcon({ ...SPRITE, width: 16, data: [Array<number>(16).fill(1), Array<number>(16).fill(1)] }, COLOURS, 16, false)).toThrow();
+    expect(() => renderIcon(SPRITE, { ...COLOURS, body: "coral" }, 16, false)).toThrow();
+    expect(() => renderIcon(SPRITE, COLOURS, 0, false)).toThrow();
+    expect(() => renderIcon(SPRITE, COLOURS, 24.5, false)).toThrow();
   });
 });
 
@@ -100,10 +100,6 @@ describe("renderIcon", () => {
     expect(pixel(rgba, 24, 2, 10)).toEqual(BODY);
     expect(pixel(rgba, 24, 3, 9)).toEqual(CLEAR);
     expect(opaque(rgba)).toBe(8);
-  });
-
-  it("at 32 pixels is exactly the 2× tray render", () => {
-    expect(Buffer.from(renderIcon(SPRITE, COLOURS, 32, true)).equals(Buffer.from(renderTrayIcon(SPRITE, COLOURS, 2, true)))).toBe(true);
   });
 
   it("refuses a size below the grid or not a whole number", () => {
@@ -142,7 +138,7 @@ describe("encodeIco", () => {
 
 describe("encodePng", () => {
   it("writes an 8-bit RGBA PNG whose chunks check out and whose rows inflate back to the pixels", () => {
-    const rgba = renderTrayIcon(SPRITE, COLOURS, 1, true);
+    const rgba = renderIcon(SPRITE, COLOURS, 16, true);
     const png = encodePng(16, 16, rgba);
     expect(png.subarray(0, 8).equals(PNG_SIGNATURE)).toBe(true);
     const parts = chunks(png);
