@@ -10,7 +10,7 @@
     "icons": "node build/icons.mjs",
     "dev": "node build/bundle.mjs && electron . --dev-url http://localhost:3000",
     "start": "node build/renderer.mjs && node build/bundle.mjs && electron .",
-    "test": "vitest run --passWithNoTests",
+    "test": "node build/icons.mjs --check && vitest run --passWithNoTests",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.page.json"
   },
   "devDependencies": {

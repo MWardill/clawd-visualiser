@@ -1,17 +1,21 @@
-// Draws the tray icons from the canonical Clawd sprite and writes them to resources/tray, where they
-// are checked in. Run it when the sprite or the palette changes: pnpm --filter @clawd/desktop icons
+// Draws the icons from the canonical Clawd sprite and writes them under resources, where they are
+// checked in: two tray ICOs (plain and badged) at the sizes Windows asks for, and the app's ICO up to
+// 256 px for the packager. `--check` renders them again and exits 1 if a checked-in file differs, so
+// the icons cannot drift from the sprite. Run it when the sprite or the palette changes:
+// pnpm --filter @clawd/desktop icons
 import { build } from "esbuild";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const root = fileURLToPath(new URL("..", import.meta.url));
+const check = process.argv.includes("--check");
 
 // The sprite lives in @clawd/scene and the drawing in src/icons.ts, both TypeScript, so esbuild
 // bundles the two into one module first and Node imports it from memory.
 const bundled = await build({
   stdin: {
-    contents: 'export { CLAWD_BODY, PALETTE } from "@clawd/scene";\nexport { ICON_GRID, TRAY_ICONS, encodePng, renderTrayIcon } from "./src/icons.ts";',
+    contents: 'export { CLAWD_BODY, PALETTE } from "@clawd/scene";\nexport { APP_ICON, TRAY_ICONS, TRAY_SIZES, encodeIco, encodePng, renderIcon } from "./src/icons.ts";',
     resolveDir: root,
     sourcefile: "icons-entry.mjs",
     loader: "js",
@@ -22,13 +26,25 @@ const bundled = await build({
   write: false,
   logLevel: "warning",
 });
-const { CLAWD_BODY, PALETTE, ICON_GRID, TRAY_ICONS, encodePng, renderTrayIcon } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
+const { CLAWD_BODY, PALETTE, APP_ICON, TRAY_ICONS, TRAY_SIZES, encodeIco, encodePng, renderIcon } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
 
 const colours = { body: PALETTE.clawd.body, eye: PALETTE.clawd.eye, badge: PALETTE.state.amber };
-const outDir = join(root, "resources", "tray");
-await mkdir(outDir, { recursive: true });
-for (const icon of TRAY_ICONS) {
-  const size = ICON_GRID * icon.scale;
-  await writeFile(join(outDir, icon.file), encodePng(size, size, renderTrayIcon(CLAWD_BODY, colours, icon.scale, icon.badge)));
-  console.log(`icons: wrote resources/tray/${icon.file} (${size}x${size})`);
+const ico = (sizes, badge) => encodeIco(sizes.map((size) => ({ size, png: encodePng(size, size, renderIcon(CLAWD_BODY, colours, size, badge)) })));
+
+const files = [...TRAY_ICONS.map((icon) => ({ path: join("tray", icon.file), bytes: ico(TRAY_SIZES, icon.badge) })), { path: APP_ICON.file, bytes: ico(APP_ICON.sizes, false) }];
+
+let differ = 0;
+for (const file of files) {
+  const target = join(root, "resources", file.path);
+  if (check) {
+    const current = await readFile(target).catch(() => null);
+    const same = current !== null && current.equals(file.bytes);
+    if (!same) differ++;
+    console.log(`icons: resources/${file.path} ${same ? "matches the sprite" : "DIFFERS from the sprite; run pnpm --filter @clawd/desktop icons (a new Node can also change zlib's output)"}`);
+  } else {
+    await mkdir(join(root, "resources", "tray"), { recursive: true });
+    await writeFile(target, file.bytes);
+    console.log(`icons: wrote resources/${file.path} (${file.bytes.length} bytes)`);
+  }
 }
+if (differ > 0) process.exit(1);
