@@ -1301,8 +1301,6 @@ scripts, saves the config, then writes the settings file, in one call and in tha
 before the save leaves the config untouched, and an install that would change nothing writes no
 backup.
 
-**What development leaves behind.** `desktop.json` is version 2 and a development run keeps
-`desktop-dev.json`, so a toggle from before stage 6 cannot decide the packaged app's first run.
 ```
 
 In the root `README.md`, in the Run section, delete the sentence `If the new version changes the hook scripts, open Settings and choose Reinstall afterwards, since an update alone does not refresh the copies in \`~/.clawd/bin\`.`
