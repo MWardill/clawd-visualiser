@@ -84,7 +84,7 @@ async function matches(target, sizes, badge) {
     const entries = icoEntries(ico);
     if (entries.length !== sizes.length) return false;
     const end = Math.max(...entries.map((entry) => entry.offset + entry.bytes));
-    if (end !== ico.length || entries.some((entry) => entry.offset + entry.bytes > ico.length)) return false;
+    if (end !== ico.length) return false;
     for (let i = 0; i < sizes.length; i++) {
       const entry = entries[i];
       const image = decodeRgba(ico.subarray(entry.offset, entry.offset + entry.bytes));
