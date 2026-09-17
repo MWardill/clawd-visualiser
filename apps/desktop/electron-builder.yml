@@ -2,6 +2,11 @@
 # updater, no signing (design §11). Run through `pnpm --filter @clawd/desktop package`.
 appId: io.github.mwardill.clawd-visualiser
 productName: Clawd Visualiser
+# The packaged app's own name, which Electron uses for its profile folder and its single-instance
+# lock. Only the archive's package.json gets it, so a development run keeps @clawd/desktop and the
+# two never block or share with each other.
+extraMetadata:
+  productName: Clawd Visualiser
 directories:
   # Not the default `dist`, which is the bundle's own directory.
   output: release

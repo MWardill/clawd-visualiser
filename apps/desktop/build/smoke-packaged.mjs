@@ -3,12 +3,19 @@
 // from the visualiser's origin. Then the process is stopped by its own id. Nothing under the real
 // ~/.clawd or ~/.claude is touched. pnpm --filter @clawd/desktop smoke
 import { spawn, spawnSync } from "node:child_process";
+import { once } from "node:events";
+import { existsSync } from "node:fs";
 import { mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const exe = fileURLToPath(new URL("../release/win-unpacked/Clawd Visualiser.exe", import.meta.url));
+if (!existsSync(exe)) {
+  console.error(`smoke: no packaged app at ${exe}; run pnpm --filter @clawd/desktop package first`);
+  process.exit(1);
+}
+
 const home = await mkdtemp(join(tmpdir(), "clawd-smoke-home-"));
 const claudeDir = await mkdtemp(join(tmpdir(), "clawd-smoke-claude-"));
 // A remembered choice of off keeps the packaged app's first-run rule from writing a real Run key entry.
@@ -42,10 +49,13 @@ async function newestLog() {
 
 const before = Date.now();
 const asNode = spawnSync(exe, ["-e", "process.exit(0)"], { env: { ...env, ELECTRON_RUN_AS_NODE: "1" }, timeout: 10_000 });
-if (asNode.status !== 0) fail(`the exe did not run as Node (exit ${asNode.status}); is the runAsNode fuse on?`);
-else console.log(`smoke: the exe ran as Node and exited in ${Date.now() - before} ms`);
+if (asNode.status !== 0) {
+  const cause = asNode.error?.message ?? (asNode.signal ? `signal ${asNode.signal}` : undefined);
+  fail(`the exe did not run as Node (exit ${asNode.status}${cause ? `, ${cause}` : ""}); is the runAsNode fuse on?`);
+} else console.log(`smoke: the exe ran as Node and exited in ${Date.now() - before} ms`);
 
 const app = spawn(exe, ["--hidden"], { env, stdio: "ignore" });
+app.on("error", (err) => fail(`the app failed to start: ${err.message}`));
 try {
   await waitFor("desktop.started in the log", async () => (await newestLog()).includes('"code":"desktop.started","packaged":true'), 20_000);
   console.log("smoke: the app started, and knows it is packaged");
@@ -59,8 +69,9 @@ try {
   fail(err instanceof Error ? err.message : String(err));
 } finally {
   // The app's own process id, nothing else. No quit sequence: the scratch home is about to go.
+  const alreadyExited = app.exitCode !== null || app.signalCode !== null;
   app.kill();
-  await sleep(1_000);
+  if (!alreadyExited) await Promise.race([once(app, "exit"), sleep(5_000)]);
   await rm(home, { recursive: true, force: true });
   await rm(claudeDir, { recursive: true, force: true });
 }
