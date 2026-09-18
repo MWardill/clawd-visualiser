@@ -98,6 +98,25 @@ function ourInstalled(settings: JsonObject): { byEvent: Map<string, Set<string>>
 }
 
 /**
+ * The executable our SessionStart command hook runs, as an install wrote it: the quoted path after
+ * an optional `ELECTRON_RUN_AS_NODE=1` prefix, with forward slashes. Null when the file holds no
+ * command hook of ours, or one not in that shape.
+ */
+export function installedRuntimeExe(settings: JsonObject): string | null {
+  const hooks = settings.hooks;
+  if (!isJsonObject(hooks) || !Array.isArray(hooks.SessionStart)) return null;
+  for (const group of hooks.SessionStart) {
+    if (!isJsonObject(group) || !Array.isArray(group.hooks)) continue;
+    for (const hook of group.hooks) {
+      if (!isOurHook(hook) || (hook as JsonObject).type !== "command") continue;
+      const match = /^(?:ELECTRON_RUN_AS_NODE=1 )?"([^"]+)"/.exec(String((hook as JsonObject).command));
+      return match?.[1] ?? null;
+    }
+  }
+  return null;
+}
+
+/**
  * Whether the settings file already holds everything an install with these options would write: the
  * http hook for each event with its port and token, the SessionStart command, and the status line.
  * `stale` is ours present with any part different or missing: a moved folder, an edited port, a

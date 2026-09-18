@@ -6,6 +6,7 @@ import {
   applyUninstall,
   hookCommand,
   hookStatus,
+  installedRuntimeExe,
   isOurHook,
   isOurStatusLine,
   nodeRuntime,
@@ -173,5 +174,22 @@ describe("hookStatus", () => {
   it("ignores hooks that are not ours beside ours", () => {
     const withMine = edit(installed(), (s) => ((s.hooks as JsonObject).Stop as unknown[]).unshift({ hooks: [{ type: "command", command: "mine.sh" }] }));
     expect(hookStatus(withMine, opts)).toBe("current");
+  });
+});
+
+describe("installedRuntimeExe", () => {
+  const withCommand = (command: string): JsonObject => ({
+    hooks: { SessionStart: [{ hooks: [{ type: "http", url: "http://127.0.0.1:4750/ingest/hook" }, { type: "command", command }] }] },
+  });
+
+  it("is the quoted executable of our SessionStart command, under either prefix", () => {
+    expect(installedRuntimeExe(withCommand('"C:/Program Files/nodejs/node.exe" "C:/h/bin/clawd-hook.mjs"'))).toBe("C:/Program Files/nodejs/node.exe");
+    expect(installedRuntimeExe(withCommand('ELECTRON_RUN_AS_NODE=1 "C:/Apps/Clawd Visualiser/Clawd Visualiser.exe" "C:/h/bin/clawd-hook.mjs"'))).toBe("C:/Apps/Clawd Visualiser/Clawd Visualiser.exe");
+  });
+
+  it("is null with no command hook of ours, or one in another shape", () => {
+    expect(installedRuntimeExe({})).toBeNull();
+    expect(installedRuntimeExe({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "other.mjs" }] }] } })).toBeNull();
+    expect(installedRuntimeExe(withCommand("node C:/h/bin/clawd-hook.mjs"))).toBeNull();
   });
 });

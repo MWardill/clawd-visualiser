@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { applyInstall, defaultConfig, type InstallOptions } from "@clawd/agent";
-import { currentHookStatus, readConfigState, repairOnLaunch, runtimePrefix, scriptsMatch, type ConfigRead } from "./hooks";
+import { currentHookStatus, installedExe, readConfigState, repairOnLaunch, runtimePrefix, samePath, scriptsMatch, type ConfigRead } from "./hooks";
 import { agentPaths, saveConfig } from "@clawd/agent";
 
 const made: string[] = [];
@@ -37,13 +37,48 @@ describe("runtimePrefix", () => {
   });
 });
 
+describe("samePath", () => {
+  it("compares the way Windows does: slashes either way, no case, no trailing slash", () => {
+    expect(samePath("C:\\Apps\\Clawd Visualiser\\Clawd Visualiser.exe", "c:/apps/clawd visualiser/clawd visualiser.exe")).toBe(true);
+    expect(samePath("C:/Apps/", "C:\\Apps")).toBe(true);
+    expect(samePath("C:/Apps/One/app.exe", "C:/Apps/Two/app.exe")).toBe(false);
+  });
+});
+
 describe("repairOnLaunch", () => {
-  it("rewrites only hooks of ours that differ, and only from the packaged app", () => {
-    expect(repairOnLaunch("stale", true)).toBe(true);
-    expect(repairOnLaunch("current", true)).toBe(false);
-    expect(repairOnLaunch("missing", true)).toBe(false);
-    expect(repairOnLaunch("unreadable", true)).toBe(false);
-    expect(repairOnLaunch("stale", false)).toBe(false);
+  const base = { status: "stale" as const, packaged: true, installedExe: "C:/Apps/Clawd Visualiser/Clawd Visualiser.exe", installedExeExists: true, thisExe: "C:\\Apps\\Clawd Visualiser\\Clawd Visualiser.exe" };
+
+  it("repairs stale hooks that name this exe, however the path is spelled", () => {
+    expect(repairOnLaunch(base)).toBe(true);
+    expect(repairOnLaunch({ ...base, installedExe: "c:/apps/clawd visualiser/clawd visualiser.exe" })).toBe(true);
+  });
+
+  it("repairs stale hooks that name an exe that no longer exists, as after the folder moved", () => {
+    expect(repairOnLaunch({ ...base, installedExe: "C:/Apps/Old/Clawd Visualiser.exe", installedExeExists: false })).toBe(true);
+  });
+
+  it("leaves a live install by another exe alone, so two installs never take turns", () => {
+    expect(repairOnLaunch({ ...base, installedExe: "C:/Program Files/nodejs/node.exe" })).toBe(false);
+    expect(repairOnLaunch({ ...base, installedExe: "D:/Other/Clawd Visualiser.exe" })).toBe(false);
+  });
+
+  it("repairs stale hooks with no command of ours, and never anything that is not stale or not packaged", () => {
+    expect(repairOnLaunch({ ...base, installedExe: null, installedExeExists: false })).toBe(true);
+    for (const status of ["current", "missing", "unreadable"] as const) expect(repairOnLaunch({ ...base, status })).toBe(false);
+    expect(repairOnLaunch({ ...base, packaged: false })).toBe(false);
+  });
+});
+
+describe("installedExe", () => {
+  it("reads the exe our command names, and null when the file is missing, unreadable or has no command of ours", async () => {
+    const settingsPath = join(await tempDir(), "settings.json");
+    expect(await installedExe(settingsPath)).toBeNull();
+    await writeFile(settingsPath, "{ nope");
+    expect(await installedExe(settingsPath)).toBeNull();
+    await writeFile(settingsPath, "{}");
+    expect(await installedExe(settingsPath)).toBeNull();
+    await writeFile(settingsPath, JSON.stringify(applyInstall({}, { port: 4750, token: "c".repeat(64), binDir: "C:\\h\\bin", runtime: runtimePrefix("C:\\Apps\\app.exe") }).settings));
+    expect(await installedExe(settingsPath)).toBe("C:/Apps/app.exe");
   });
 });
 

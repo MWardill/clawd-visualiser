@@ -16,13 +16,14 @@ import {
   uninstall,
 } from "@clawd/agent";
 import { Menu, Tray, app, dialog, ipcMain, nativeImage, protocol, screen, shell, type BrowserWindow, type NativeImage, type OpenDialogOptions } from "electron";
+import { access } from "node:fs/promises";
 import { join } from "node:path";
 import { fetchCounts, probeHealth } from "./agent-client";
 import { createAgentHost, statusText, type HostState } from "./agent-host";
 import { ownArgs, parseArgs, resolveRendererUrl } from "./args";
 import { restoredBounds } from "./bounds";
 import { createDesktopStore, desktopStatePath } from "./desktop-state";
-import { currentHookStatus, readConfigState, repairOnLaunch, runtimePrefix } from "./hooks";
+import { currentHookStatus, installedExe, readConfigState, repairOnLaunch, runtimePrefix } from "./hooks";
 import { isQuitShortcut } from "./keys";
 import { createFileSink, readRetentionDays } from "./log";
 import { appUserModelId, loginItemTarget, loginOnLaunch } from "./login";
@@ -318,8 +319,11 @@ function run(): void {
     refreshTray(host.state());
     refreshMenu();
 
-    // Our hooks pointing at another folder are rewritten by the packaged app, so a moved app keeps receiving events.
-    if (repairOnLaunch(fallback.hooks, app.isPackaged)) {
+    // The packaged app rewrites our hooks when what they name is this exe or an exe that is gone; a
+    // live install by another exe is left alone, and the settings window shows it as stale instead.
+    const named = fallback.hooks === "stale" && app.isPackaged ? await installedExe(settingsPath) : null;
+    const namedExists = named !== null && (await access(named).then(() => true, () => false));
+    if (repairOnLaunch({ status: fallback.hooks, packaged: app.isPackaged, installedExe: named, installedExeExists: namedExists, thisExe: process.execPath })) {
       try {
         const repaired = await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
         if (repaired.ok) log("desktop.hooksRepaired");

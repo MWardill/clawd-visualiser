@@ -3,7 +3,7 @@
 // commands follow the app wherever its folder is. This module also decides what the hooks' status
 // is: it reads the config, the settings file and the installed scripts, so main only wires it.
 // Electron-free, so every classification is tested.
-import { HOOK_SCRIPTS, hookStatus, isJsonObject, nodeRuntime, readConfig, readJsonFile, type AgentConfig, type AgentPaths, type HookStatus } from "@clawd/agent";
+import { HOOK_SCRIPTS, hookStatus, installedRuntimeExe, isJsonObject, nodeRuntime, readConfig, readJsonFile, type AgentConfig, type AgentPaths, type HookStatus } from "@clawd/agent";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -12,9 +12,44 @@ export function runtimePrefix(execPath: string): string {
   return `ELECTRON_RUN_AS_NODE=1 ${nodeRuntime(execPath)}`;
 }
 
-/** Only our own hooks that differ are rewritten, and only by the packaged app (see stage 6); missing and unreadable wait for the settings window. */
-export function repairOnLaunch(status: HookStatus, packaged: boolean): boolean {
-  return packaged && status === "stale";
+export type RepairInput = {
+  status: HookStatus;
+  packaged: boolean;
+  /** The executable the installed SessionStart command names, or null when there is no command of ours. */
+  installedExe: string | null;
+  /** Whether that executable exists on disk; ignored when `installedExe` is null. */
+  installedExeExists: boolean;
+  /** This app's own executable, `process.execPath`. */
+  thisExe: string;
+};
+
+/** Paths compared the way Windows does: slashes either way, no case, no trailing slash. */
+export function samePath(a: string, b: string): boolean {
+  const norm = (p: string) => p.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+  return norm(a) === norm(b);
+}
+
+/**
+ * Whether the packaged app rewrites the hooks at launch. Only `stale` is ever repaired, and only when
+ * the repair is ours to make: the installed command names this exe (so what drifted is the port, the
+ * token, the status line or a script), or an exe that no longer exists (the folder moved or was
+ * deleted), or there is no command of ours at all. A command naming another exe that still exists
+ * is a live install, the CLI's or another copy's, and is left alone: the settings window shows
+ * `stale` and offers Reinstall, and no two installs take turns rewriting the file. A development run
+ * never repairs unattended (stage 6).
+ */
+export function repairOnLaunch(input: RepairInput): boolean {
+  if (!input.packaged || input.status !== "stale") return false;
+  if (input.installedExe === null) return true;
+  if (samePath(input.installedExe, input.thisExe)) return true;
+  return !input.installedExeExists;
+}
+
+/** The executable the installed SessionStart command names, read from the settings file; null when the file is missing, unreadable or has none of ours. */
+export async function installedExe(settingsPath: string): Promise<string | null> {
+  const file = await readJsonFile(settingsPath).catch(() => null);
+  if (file === null || !file.found || !file.ok || !isJsonObject(file.value)) return null;
+  return installedRuntimeExe(file.value);
 }
 
 export type ConfigRead = { kind: "ok"; config: AgentConfig } | { kind: "missing" } | { kind: "unreadable" };
