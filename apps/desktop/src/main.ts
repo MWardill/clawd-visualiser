@@ -223,8 +223,8 @@ function run(): void {
     log,
   });
 
-  // A push main makes on its own (a host snapshot, a hooks repair) carries whatever notice the last
-  // action left, so it never erases a refusal or ATTACHED_NOTICE the page has not shown yet.
+  // A push main makes on its own (a host snapshot, the tray's login toggle) carries whatever notice
+  // the last action left, so it never erases a refusal or ATTACHED_NOTICE the page has not shown yet.
   function pushState(): void {
     if (settingsWin === null || settingsWin.isDestroyed()) return;
     void settingsActions.pushedState().then((state) => {

@@ -167,10 +167,15 @@ describe("createSettingsActions", () => {
     expect(calls).toEqual(["login true", "retry", "logs"]);
   });
 
+  it("pins the fresh state's pushedState before any action", async () => {
+    const { actions } = harness();
+    expect(await actions.pushedState()).toEqual(STATE);
+  });
+
   it("carries a refused action's notice to a push main makes on its own, across repeated pushes", async () => {
     const { actions } = harness({ setAllowlist: async () => ({ ok: false, message: "refusing to allow a whole filesystem root: C:\\" }) });
     await actions.addFolder();
-    expect((await actions.pushedState()).notice).toBe("refusing to allow a whole filesystem root: C:\\");
+    expect(await actions.pushedState()).toEqual({ ...STATE, notice: "refusing to allow a whole filesystem root: C:\\" });
     expect((await actions.pushedState()).notice).toBe("refusing to allow a whole filesystem root: C:\\");
   });
 
@@ -192,5 +197,27 @@ describe("createSettingsActions", () => {
     const { actions } = harness({ mode: "attached" });
     await actions.addFolder();
     expect((await actions.pushedState()).notice).toBe(ATTACHED_NOTICE);
+  });
+
+  it("forgets the attached notice once this app's own agent has taken over, and stays forgotten if the host reads attached again", async () => {
+    let mode: HostMode = "attached";
+    const { actions } = harness({ hostMode: () => mode });
+    await actions.addFolder();
+    expect((await actions.pushedState()).notice).toBe(ATTACHED_NOTICE);
+    mode = "own";
+    expect((await actions.pushedState()).notice).toBeNull();
+    mode = "attached";
+    expect((await actions.pushedState()).notice).toBeNull();
+  });
+
+  it("does not drop a refusal's notice when the host stops being attached", async () => {
+    let mode: HostMode = "attached";
+    const { actions } = harness({
+      hostMode: () => mode,
+      setAllowlist: async () => ({ ok: false, message: "refusing to allow a whole filesystem root: C:\\" }),
+    });
+    await actions.addFolder();
+    mode = "own";
+    expect((await actions.pushedState()).notice).toBe("refusing to allow a whole filesystem root: C:\\");
   });
 });

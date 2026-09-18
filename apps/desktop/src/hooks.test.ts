@@ -2,9 +2,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { applyInstall, defaultConfig, type InstallOptions } from "@clawd/agent";
+import { agentPaths, applyInstall, defaultConfig, saveConfig } from "@clawd/agent";
 import { currentHookStatus, installedExe, readConfigState, repairOnLaunch, runtimePrefix, samePath, scriptsMatch, type ConfigRead } from "./hooks";
-import { agentPaths, saveConfig } from "@clawd/agent";
 
 const made: string[] = [];
 afterEach(async () => {

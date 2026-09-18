@@ -34,22 +34,27 @@ export const NO_CONFIG_TO_CHANGE = "there is no config to change yet";
 export const SEE_LOG = "see the log";
 
 /**
- * `SettingsActions` plus `pushedState`, for a push main makes on its own (a host snapshot, a hooks
- * repair) rather than in answer to something the page asked for.
+ * `SettingsActions` plus `pushedState`, for a push main makes on its own (a host snapshot, the
+ * tray's login toggle) rather than in answer to something the page asked for.
  */
 export type SettingsActionsWithPush = SettingsActions & {
   /**
    * The state for a push main makes on its own. Carries whatever notice the last action's answer
    * left, so a background push cannot erase a refusal or ATTACHED_NOTICE before the page has shown
    * it. The notice lasts until the next action answers (a success clears it, a refusal or failure
-   * replaces it) or until the page loads again (`getState` answers with none and so clears it);
-   * `pushedState` itself never changes it.
+   * replaces it) or until the page loads again (`getState` answers with none and so clears it).
+   * The one case `pushedState` itself changes what is remembered: once the notice is
+   * ATTACHED_NOTICE and the host is no longer attached, this app's own agent has read the saved
+   * config, so the change did apply; `pushedState` forgets the notice and answers with none.
    */
   pushedState(): Promise<SettingsState>;
 };
 
 export function createSettingsActions(deps: ActionDeps): SettingsActionsWithPush {
-  /** The notice the last action's answer carried; see `pushedState`. */
+  /**
+   * The notice the last action's answer carried; see `pushedState`, whose one exception forgets
+   * ATTACHED_NOTICE once the host is no longer attached.
+   */
   let lastNotice: string | null = null;
   const answer = async (notice: string | null = null): Promise<SettingsState> => {
     lastNotice = notice;
@@ -139,6 +144,9 @@ export function createSettingsActions(deps: ActionDeps): SettingsActionsWithPush
       return answer();
     },
     openLogs: () => deps.openLogs(),
-    pushedState: async () => ({ ...(await deps.state()), notice: lastNotice }),
+    pushedState: async () => {
+      if (lastNotice === ATTACHED_NOTICE && deps.hostMode() !== "attached") lastNotice = null;
+      return { ...(await deps.state()), notice: lastNotice };
+    },
   };
 }
