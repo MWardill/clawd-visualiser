@@ -13,18 +13,20 @@ const INPUT = {
   detail: "none" as const,
   openAtLogin: false,
   logDir: "C:\\Users\\me\\.clawd\\logs",
+  notice: null,
 };
 
 describe("settingsState", () => {
   it("carries the agent, the app, the folders, the hooks, the level and the login choice", () => {
     expect(settingsState(INPUT)).toEqual({
-      agent: { mode: "own", port: 4750, version: "0.1.0", sessions: 3, waiting: 1 },
+      agent: { mode: "own", port: 4750, version: "0.1.0", sessions: 3, waiting: 1, error: null },
       app: { version: "0.1.0", exe: INPUT.exe },
       allowlist: ["C:\\repos\\one"],
       hooks: "current",
       detail: "none",
       openAtLogin: false,
       logDir: INPUT.logDir,
+      notice: null,
     });
   });
 
@@ -33,5 +35,10 @@ describe("settingsState", () => {
     for (const mode of ["own", "attached", "restarting", "failed"] as const) {
       expect(settingsState({ ...INPUT, host: { ...HOST, mode } }).agent.mode).toBe(mode);
     }
+  });
+
+  it("carries the failed agent's reason and a notice", () => {
+    expect(settingsState({ ...INPUT, host: { ...HOST, mode: "failed", error: "config.json is invalid at: port" } }).agent.error).toBe("config.json is invalid at: port");
+    expect(settingsState({ ...INPUT, notice: "saved" }).notice).toBe("saved");
   });
 });

@@ -6,6 +6,7 @@ import {
   applyUninstall,
   hookCommand,
   hookStatus,
+  installedRuntimeExe,
   isOurHook,
   isOurStatusLine,
   nodeRuntime,
@@ -137,28 +138,58 @@ describe("nodeRuntime", () => {
 });
 
 describe("hookStatus", () => {
-  const expected = { hook: '"node" "C:/h/bin/clawd-hook.mjs"', status: '"node" "C:/h/bin/clawd-statusline.mjs"' };
-  const withCommands = (hook: string, status: string): JsonObject => ({
-    hooks: { SessionStart: [{ hooks: [{ type: "command", command: hook, timeout: 2 }] }] },
-    statusLine: { type: "command", command: status },
-  });
+  const opts: InstallOptions = { port: 4750, token: "a".repeat(64), binDir: "C:\\h\\bin", runtime: '"node"' };
+  /** A settings file as an install with `opts` leaves it, beside a setting of the user's own. */
+  const installed = (): JsonObject => applyInstall({ model: "opus" }, opts).settings;
+  const edit = (settings: JsonObject, change: (s: JsonObject) => void): JsonObject => {
+    const copy = JSON.parse(JSON.stringify(settings)) as JsonObject;
+    change(copy);
+    return copy;
+  };
 
   it("is missing when nothing of ours is there", () => {
-    expect(hookStatus(null, expected)).toBe("missing");
-    expect(hookStatus({}, expected)).toBe("missing");
-    expect(hookStatus({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "other.mjs" }] }] } }, expected)).toBe("missing");
+    expect(hookStatus(null, opts)).toBe("missing");
+    expect(hookStatus({}, opts)).toBe("missing");
+    expect(hookStatus({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "other.mjs" }] }] } }, opts)).toBe("missing");
   });
 
-  it("is current when both commands are the ones we would write", () => {
-    expect(hookStatus(withCommands(expected.hook, expected.status), expected)).toBe("current");
+  it("is current when every hook and the status line are what an install would write now", () => {
+    expect(hookStatus(installed(), opts)).toBe("current");
   });
 
-  it("is stale when ours are there with another command, as after the folder moved", () => {
-    expect(hookStatus(withCommands('"D:/old/electron.exe" "C:/h/bin/clawd-hook.mjs"', expected.status), expected)).toBe("stale");
-    expect(hookStatus(withCommands(expected.hook, '"D:/old/electron.exe" "C:/h/bin/clawd-statusline.mjs"'), expected)).toBe("stale");
+  it("is stale when the commands point elsewhere, as after the folder moved", () => {
+    expect(hookStatus(installed(), { ...opts, runtime: '"D:/old/electron.exe"' })).toBe("stale");
   });
 
-  it("is stale when our hook is there but the status line was removed by hand, since an install would write it back", () => {
-    expect(hookStatus({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: expected.hook }] }] } }, expected)).toBe("stale");
+  it("is stale when the http hooks carry another port or another token", () => {
+    expect(hookStatus(installed(), { ...opts, port: 4800 })).toBe("stale");
+    expect(hookStatus(installed(), { ...opts, token: "b".repeat(64) })).toBe("stale");
+  });
+
+  it("is stale when part of the set was removed by hand: the status line, or one event's hook", () => {
+    expect(hookStatus(edit(installed(), (s) => delete s.statusLine), opts)).toBe("stale");
+    expect(hookStatus(edit(installed(), (s) => delete (s.hooks as JsonObject).Stop), opts)).toBe("stale");
+  });
+
+  it("ignores hooks that are not ours beside ours", () => {
+    const withMine = edit(installed(), (s) => ((s.hooks as JsonObject).Stop as unknown[]).unshift({ hooks: [{ type: "command", command: "mine.sh" }] }));
+    expect(hookStatus(withMine, opts)).toBe("current");
+  });
+});
+
+describe("installedRuntimeExe", () => {
+  const withCommand = (command: string): JsonObject => ({
+    hooks: { SessionStart: [{ hooks: [{ type: "http", url: "http://127.0.0.1:4750/ingest/hook" }, { type: "command", command }] }] },
+  });
+
+  it("is the quoted executable of our SessionStart command, under either prefix", () => {
+    expect(installedRuntimeExe(withCommand('"C:/Program Files/nodejs/node.exe" "C:/h/bin/clawd-hook.mjs"'))).toBe("C:/Program Files/nodejs/node.exe");
+    expect(installedRuntimeExe(withCommand('ELECTRON_RUN_AS_NODE=1 "C:/Apps/Clawd Visualiser/Clawd Visualiser.exe" "C:/h/bin/clawd-hook.mjs"'))).toBe("C:/Apps/Clawd Visualiser/Clawd Visualiser.exe");
+  });
+
+  it("is null with no command hook of ours, or one in another shape", () => {
+    expect(installedRuntimeExe({})).toBeNull();
+    expect(installedRuntimeExe({ hooks: { SessionStart: [{ hooks: [{ type: "command", command: "other.mjs" }] }] } })).toBeNull();
+    expect(installedRuntimeExe(withCommand("node C:/h/bin/clawd-hook.mjs"))).toBeNull();
   });
 });
