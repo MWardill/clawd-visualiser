@@ -27,7 +27,8 @@ the app run its own.
 The app lives in the tray. Closing the window hides it and the agent keeps running; click the tray
 icon to bring it back, and quit from the tray menu or with Ctrl+Q. Only one copy runs: starting it
 again shows the running copy's window. `--hidden` starts it with only the tray icon, as the login
-item does. The window's position and the login choice are kept in `~/.clawd/desktop.json`.
+item does. The window's position and the login choice are kept in `~/.clawd/desktop-dev.json` (the
+packaged app's are in `desktop.json`).
 
 Settings opens from the tray. It watches folders, installs Claude Code's hooks under this app's own
 binary, sets the detail level and toggles start on login, so a machine can be set up from the app
@@ -66,9 +67,16 @@ agent answers. `pnpm --filter @clawd/desktop icons` redraws the tray and app ico
 
 A development run and the packaged app stay out of each other's way: they have their own names, so
 their own profile folders and single-instance locks, and neither blocks the other from starting; the
-development login item has its own name and is never remembered, a development launch never rewrites
-the hooks unattended (the settings window shows `stale` and offers Reinstall), and the packaged app
-ignores `--dev-url` and `CLAWD_DESKTOP_URL`.
+development login item has its own name and its choice is remembered in its own `desktop-dev.json`, a
+development launch never rewrites the hooks unattended (the settings window shows `stale` and offers
+Reinstall), and the packaged app ignores `--dev-url` and `CLAWD_DESKTOP_URL`.
+
+Two things a development run from before stage 6 may have left behind. A Run value named
+`io.github.mwardill.clawd-visualiser` pointing at this repository's `electron.exe`: the development
+toggle no longer sees it, so remove it by hand (`Remove-ItemProperty
+HKCU:\Software\Microsoft\Windows\CurrentVersion\Run io.github.mwardill.clawd-visualiser`) or let a
+packaged run overwrite it. And a `~/.clawd/desktop.json` at version 1: the packaged app ignores it,
+and development keeps `desktop-dev.json` since stage 6.1.
 
 ## Stage notes
 
@@ -178,12 +186,10 @@ icon by the clock are the app, and the window is a view you open and put away.
 
 **The tray.** `new Tray(image)` puts an icon in the notification area, with a tooltip and a context
 menu built with `Menu.buildFromTemplate`. A tray that nothing references any more can be garbage
-collected and vanish, so main keeps it in a variable for the life of the app. The icons are PNGs
-drawn from the canonical Clawd sprite by `build/icons.mjs` and checked in under `resources/tray`;
-`tray@2x.png` beside `tray.png` is picked up automatically on a display scaled to 200%. At 125% and
-150%, the common laptop settings, Windows resamples the nearer image instead, which softens the
-pixel art; stage 6's icon file fixes that. While any session waits, the icon is the variant with an
-amber dot.
+collected and vanish, so main keeps it in a variable for the life of the app. The icons are ICO files
+drawn from the canonical Clawd sprite by `build/icons.mjs` and checked in under `resources/tray`,
+each holding 16, 20, 24 and 32 px images so Windows picks a crisp one at every display scale (stage 6
+replaced the PNGs). While any session waits, the icon is the variant with an amber dot.
 
 **Close and quit are now different things.** Electron's default is to quit when the last window
 closes. The app listens for `window-all-closed` and does nothing, and the window's `close` handler
@@ -203,7 +209,8 @@ this stage a second copy of the app attached to the first copy's agent; now it n
 
 **The login item.** `app.setLoginItemSettings({ openAtLogin, path, args })` writes a value under the
 current user's `Run` registry key; Windows starts that command line at sign-in. The value is named
-by the app's AppUserModelId, which main sets to `io.github.mwardill.clawd-visualiser`. In
+by the app's AppUserModelId, which main sets to `io.github.mwardill.clawd-visualiser` when packaged
+and to that id with `.dev` appended in development, so the two never share an entry (stage 6). In
 development the command is Electron's `electron.exe` with this folder and `--hidden`; packaged, it
 is the app's own exe. `getLoginItemSettings({ path, args })` only reports a value holding exactly
 that command, so after the folder moves Windows has no entry for the new path. `desktop.json`
@@ -301,3 +308,13 @@ slower, about 600 ms, while it is scanned.
 
 What stage 6 leaves in place: the whole design. What the stage reviews deferred is listed in the
 design's §12.1 for the hardening pass.
+
+### Stage 6.1: the review's fixes
+
+Nothing new in Electron. Two things worth knowing. A development run and the packaged app now keep
+separate state files (`desktop-dev.json` and `desktop.json`, version 2), so a toggle made in one
+never decides the other's behaviour; the old version 1 file is ignored. And the smoke script runs the
+packaged app with `--user-data-dir` pointing at a scratch profile: Electron derives the
+single-instance lock from that directory, so the copy under test never collides with an installed
+copy sitting in the tray. The smoke also stops the app by ending its whole process tree, so a Claude
+CLI call still in flight cannot write into the scratch folder after the script has removed it.

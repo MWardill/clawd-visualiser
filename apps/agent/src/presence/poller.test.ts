@@ -1,10 +1,14 @@
 import { DEFAULT_CONFIG, emptyAliasMap, paneKey, type DetailLevel, type RedactedEvent } from "@clawd/core";
+import { existsSync } from "node:fs";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 import { FleetHost } from "../host/host";
 import { silentLogger } from "../log";
 import { T0, ev } from "../testing/events";
 import { ALLOWED_ROOT, SESSION_CWD, OUTSIDE_CWD, rawAgentEntry } from "../testing/raw";
-import { createPresencePoller, type Exec, type ExecResult } from "./poller";
+import { createPresencePoller, nodeExec, type Exec, type ExecResult } from "./poller";
 import type { TranscriptStats } from "./transcripts";
 
 function setup(readTranscript?: (sessionId: string) => Promise<TranscriptStats | null>, paneNames = false, detail?: DetailLevel) {
@@ -34,7 +38,7 @@ describe("presence poller", () => {
     const t = setup();
     t.list(rawAgentEntry("s1"), rawAgentEntry("s2", { cwd: OUTSIDE_CWD, pid: 7 }));
     expect(await t.poller.pollOnce()).toBe(true);
-    expect(t.exec).toHaveBeenCalledWith("claude agents --json", { timeoutMs: 15_000, maxBuffer: 4 * 1024 * 1024 });
+    expect(t.exec).toHaveBeenCalledWith("claude agents --json", { timeoutMs: 15_000, maxBuffer: 4 * 1024 * 1024, signal: expect.any(AbortSignal) });
     expect([...t.host.sessions().keys()]).toEqual(["s1"]);
     expect(t.host.sessions().get("s1")?.state).toBe("idle");
   });
@@ -247,6 +251,22 @@ describe("presence poller", () => {
     expect(t.log).not.toHaveBeenCalledWith("presence.failed");
   });
 
+  it("aborts the list command in flight when stopped, so no child outlives the poller", async () => {
+    const t = setup();
+    let seen: AbortSignal | undefined;
+    t.exec.mockImplementationOnce(
+      (_command, opts) =>
+        new Promise((resolve) => {
+          seen = opts.signal;
+          opts.signal?.addEventListener("abort", () => resolve({ ok: false }));
+        }),
+    );
+    const pending = t.poller.pollOnce();
+    t.poller.stop();
+    expect(seen?.aborted).toBe(true);
+    expect(await pending).toBe(false);
+  });
+
   it("polls on its interval until stopped", async () => {
     vi.useFakeTimers();
     try {
@@ -263,4 +283,55 @@ describe("presence poller", () => {
       vi.useRealTimers();
     }
   });
+});
+
+describe.concurrent("nodeExec", () => {
+  it("kills the whole process tree on abort, so a grandchild the shim's shell started cannot outlive it", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "clawd-nodeexec-"));
+    try {
+      const started = join(dir, "started.txt").replace(/\\/g, "/");
+      const delayed = join(dir, "delayed.txt").replace(/\\/g, "/");
+      const command = `"${process.execPath}" -e "require('fs').writeFileSync('${started}', 'x'); setTimeout(() => require('fs').writeFileSync('${delayed}', 'x'), 1500)"`;
+      const controller = new AbortController();
+      const pending = nodeExec(command, { timeoutMs: 15_000, maxBuffer: 4 * 1024 * 1024, signal: controller.signal });
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      controller.abort();
+      expect(await pending).toEqual({ ok: false });
+      expect(existsSync(started)).toBe(true);
+      await new Promise((resolve) => setTimeout(resolve, 2_500));
+      expect(existsSync(delayed)).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true, maxRetries: 3 });
+    }
+  }, 10_000);
+
+  it("kills the whole process tree on its own timeout, so a hung CLI cannot outlive it either", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "clawd-nodeexec-"));
+    try {
+      const started = join(dir, "started.txt").replace(/\\/g, "/");
+      const delayed = join(dir, "delayed.txt").replace(/\\/g, "/");
+      const command = `"${process.execPath}" -e "require('fs').writeFileSync('${started}', 'x'); setTimeout(() => require('fs').writeFileSync('${delayed}', 'x'), 1500)"`;
+      expect(await nodeExec(command, { timeoutMs: 300, maxBuffer: 4 * 1024 * 1024 })).toEqual({ ok: false });
+      expect(existsSync(started)).toBe(true);
+      await new Promise((resolve) => setTimeout(resolve, 2_500));
+      expect(existsSync(delayed)).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true, maxRetries: 3 });
+    }
+  }, 10_000);
+
+  it("resolves false without running anything when the signal is already aborted", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "clawd-nodeexec-"));
+    try {
+      const file = join(dir, "written.txt").replace(/\\/g, "/");
+      const command = `"${process.execPath}" -e "require('fs').writeFileSync('${file}', 'x')"`;
+      const controller = new AbortController();
+      controller.abort();
+      expect(await nodeExec(command, { timeoutMs: 15_000, maxBuffer: 4 * 1024 * 1024, signal: controller.signal })).toEqual({ ok: false });
+      await new Promise((resolve) => setTimeout(resolve, 1_000));
+      expect(existsSync(file)).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true, maxRetries: 3 });
+    }
+  }, 10_000);
 });

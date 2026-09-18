@@ -43,6 +43,7 @@ apps/desktop/
   electron-builder.yml    dir and zip targets, asar, fuses, extraResources for the icons and the scripts
   build/
     bundle.mjs            esbuild: main, preload, settings page script; copies the tray icons and the hook scripts
+    clean.mjs             removes dist before every build
     icons.mjs             renders the canonical Clawd matrix to ICO files, dependency-free; --check compares them
     renderer.mjs          the Next static export, copied to dist/renderer
     smoke-packaged.mjs    runs the packaged app once against scratch folders
@@ -125,7 +126,7 @@ attached.
 
 - One `BrowserWindow`: 1280 by 800, black background, `autoHideMenuBar`, `webPreferences: {
   sandbox: true, contextIsolation: true, nodeIntegration: false }`, no preload. Bounds persist in
-  `~/.clawd/desktop.json`.
+  the packaged app's `~/.clawd/desktop.json` and a development run's `desktop-dev.json` (§10).
 - The window loads `--dev-url`, else `CLAWD_DESKTOP_URL`, else `app://clawd/`. The desktop
   package's `dev` script passes `--dev-url http://localhost:3000` for the hot-reload loop, and
   `start` loads the export (changed in the stage 3 plan, so the export runs before packaging).
@@ -225,8 +226,10 @@ matching the app. The detail section is present only once the detail levels desi
   time the packaged app runs (a flag in `desktop.json`). The settings toggle and the tray checkbox
   read `getLoginItemSettings()`. On every launch, when it is on, `login.ts` applies it again so the
   registered path follows a moved folder. In development the Run value has its own name
-  (`<appId>.dev`), the toggle is not remembered in `desktop.json`, and nothing is enabled or
-  re-applied at launch, so a development run cannot disturb the packaged app's entry (stage 6).
+  (`<appId>.dev`), its toggle is remembered in its own `desktop-dev.json`, and nothing is enabled or
+  re-applied at launch, so a development run cannot disturb the packaged app's entry (stages 6 and
+  6.1). `desktop.json` is version 2 since stage 6.1; a version 1 file, which only development runs
+  before stage 6 wrote, reads as nothing remembered.
 - Logs: `~/.clawd/logs/desktop-YYYY-MM-DD.log`, one JSON line per entry, written by the agent's
   `createLogger` with a file sink, so the codes-only rule holds for the desktop. New codes:
   `desktop.started`, `desktop.attached`, `desktop.takeover`, `desktop.agentFault`,
@@ -238,27 +241,30 @@ matching the app. The detail section is present only once the detail levels desi
 ## 11. Packaging and distribution
 
 - electron-builder, configured in `electron-builder.yml`: `appId: io.github.mwardill.clawd-visualiser`,
-  `productName: Clawd Visualiser`, `win.target: ["dir", "zip"]`, output in `release/` (its default,
-  `dist`, is the bundle's directory), asar on, `npmRebuild: false`, fuses `runAsNode: true`,
-  `enableCookieEncryption: true`, `onlyLoadAppFromAsar: true`. `extraMetadata` gives the archive's
-  `package.json` the `productName`, so the packaged app's name, and with it its profile folder
-  under `%APPDATA%` and its single-instance lock, differ from a development run's `@clawd/desktop`
-  and neither blocks the other from starting. The archive holds `dist/main.cjs`, `dist/renderer/`
-  and `dist/settings/`, without source maps; the tray icons and the hook scripts go beside it
-  through `extraResources`, under `resources/tray/` and `resources/hooks/`, because the tray loads
-  its icon by path and the installer copies the scripts as files, and an asar is read-only and
-  transparent only to Node's read calls. `paths.ts` finds them under `process.resourcesPath`. The
-  artifact is `Clawd-Visualiser-<version>-win-x64.zip`, holding the unpacked folder's files;
-  Windows' Extract All puts them in a folder named after the zip.
+  `win.target: ["dir", "zip"]`, output in `release/` (its default, `dist`, is the bundle's directory),
+  asar on, `npmRebuild: false`, fuses `runAsNode: true`, `enableCookieEncryption: true`,
+  `onlyLoadAppFromAsar: true`. The archive's `package.json` gets `productName: Clawd Visualiser`
+  through `extraMetadata`, the only place the name is written, so the packaged app's name, and
+  with it its profile folder under `%APPDATA%` and its single-instance lock, differ from a
+  development run's `@clawd/desktop` and neither blocks the other from starting. The archive holds
+  `dist/main.cjs`, `dist/renderer/` and `dist/settings/`, without source maps; the tray icons and the
+  hook scripts go beside it through `extraResources`, under `resources/tray/` and `resources/hooks/`,
+  because the tray loads its icon by path and the installer copies the scripts as files, and an asar
+  is read-only and transparent only to Node's read calls. `paths.ts` finds them under
+  `process.resourcesPath`. The artifact is `Clawd-Visualiser-<version>-win-x64.zip`, holding the
+  unpacked folder's files; Windows' Extract All puts them in a folder named after the zip.
 - `pnpm --filter @clawd/desktop package` runs the export, the bundle (§3) and electron-builder.
   `pnpm --filter @clawd/desktop smoke` runs the packaged app once against scratch folders: the exe
   as Node, the packaged start, the agent's health from the visualiser's origin. Its scratch home
   remembers the login item as off, so the packaged app's first-run rule writes no real Run value.
-  The agent checks which sessions are alive by running the Claude CLI, and a call still running
-  when the app stops can write into the scratch Claude folder late, so the script removes that
-  folder again until it stays gone. `build/bundle.mjs` clears `dist/tray` and `dist/hooks` before
-  copying, so nothing stale is packaged. The zip is shared by hand or attached to a GitHub release
-  by the maintainer; nothing is automated.
+  The script reads that seed back and stops before starting the app if it would not hold. The smoke
+  runs the app with its own profile directory (`--user-data-dir`), so an installed copy's
+  single-instance lock is not its own. It waits for the log to say whether the app's agent started
+  or attached to another one, and fails if it attached. It stops the app by ending its process tree,
+  so a Claude CLI call still in flight cannot write into the scratch Claude folder after cleanup.
+  `build/clean.mjs` removes `dist` before every development, start and package build, so nothing
+  stale is bundled or packaged. The zip is shared by hand or attached to a GitHub release by the
+  maintainer; nothing is automated.
 - Version: `apps/desktop/package.json`, shown in the settings window and after the status in the
   tray tooltip.
 - Updating: quit the app, unzip the new version over the folder, launch. The hooks and the login
@@ -283,6 +289,7 @@ matching the app. The detail section is present only once the detail levels desi
 | 4 Tray | Tray, badge, tooltip, hide on close, the single-instance lock, `--hidden`, the login item | `Tray`, `Menu`, the single-instance lock, login items | Closing the window keeps the agent up; the app returns hidden at login |
 | 5 Settings | The settings window, preload, IPC, the folder picker, hook install and repair with the runtime prefix | Preload, `contextBridge`, `ipcMain`, dialogs, process-model security | A fresh machine is set up from the app alone |
 | 6 Package | Icons, electron-builder with the `dir` and `zip` targets, fuses | Packaging, asar, fuses, `process.execPath` in a packaged app | A teammate unzips the folder, runs the exe, and sets up hooks from the settings window; moving the folder and relaunching repairs the hooks and the login item |
+| 6.1 Review fixes | The findings of the review of stage 6's merge (§12.1) | None new | Each is done or recorded with a reason |
 | Post-dev Hardening | The fixes and checks deferred from the stage reviews (§12.1) | None new | Each item in §12.1 is fixed, or dropped with a reason in the decision log |
 
 Each stage has its own plan and branch and is merged before the next starts. Stage 5's detail
@@ -345,7 +352,8 @@ and is settled in its plan; the rest wait like the items above.
   re-applies the login item to the repository's `electron.exe`, and the next packaged run points it
   back. Give development its own value name and login choice, or never re-apply when not packaged.
   Done in stage 6: a development run has its own value name, its toggle is not remembered, and
-  nothing is applied at launch unless packaged.
+  nothing is applied at launch unless packaged. Stage 6.1 remembers that toggle too, in its own
+  `desktop-dev.json`.
 - **An unreadable `desktop.json`.** A read that fails for a reason other than a missing file counts
   as nothing remembered, so the next change overwrites the real file, and a packaged first run would
   turn the login item on against a stored off. A failed write is dropped with no log code. Tell
@@ -502,13 +510,83 @@ Found in the final review of stage 6 (17 September 2026). They wait for the hard
 - **The icon check compares bytes.** `build/icons.mjs --check` compares the checked-in ICOs with a
   fresh render byte for byte, and the PNGs inside come from `node:zlib`, so a Node upgrade that
   changes zlib's output fails `pnpm test` with no sprite change. Compare decoded pixels instead,
-  which `icons.test.ts` already knows how to do.
+  which `icons.test.ts` already knows how to do. Done in stage 6.1: pixels, after vitest.
 - **Two fuses the app does not need are still on.** `EnableNodeOptionsEnvironmentVariable` and
   `EnableNodeCliInspectArguments` are separate from `runAsNode`, so turning them off would not
   affect the hooks. Consider them with signing.
 - **The smoke check can be answered by another agent.** If a CLI agent already holds the port, the
   packaged app attaches and the health answer comes from that agent. The app logs
   `desktop.attached` then, so the smoke script can fail or say so when the newest log contains it.
+  Done in stage 6.1: it waits for the log to say which agent serves the port.
+
+Found in the review of stage 6's merge (17 September 2026), and taken as stage 6.1.
+
+- **A stale development login choice steered the packaged first run.** Development runs before
+  stage 6 wrote `openAtLogin` into the one `desktop.json`, and this machine's held `false`, so the
+  packaged app's first run would never have enabled the login item. Done: version 2, and
+  `desktop-dev.json` for development.
+- **A pre-stage-6 development Run value is orphaned by the `.dev` rename.** Nothing in the app can
+  see it now. Recorded in the desktop README's development note with the one-line removal.
+- **The smoke shared the installed app's lock and missed an early exit.** Done: its own profile
+  directory, and the waits stop when the process exits.
+- **The smoke's cleanup could throw out of its `finally`.** Done: `rm` retries and warns.
+- **The smoke re-spelled five private formats.** Done: bundled from the TypeScript.
+- **The smoke could be answered by another agent.** Done: the smoke waits for the log to say
+  whether the app's agent started or attached, and fails if it attached.
+- **The poller's stop left an in-flight CLI call running.** Done: stopping the poller, or its
+  timeout, ends the command's whole process tree, since ending only the shell left the CLI the
+  `.cmd` shim started. The smoke ends the app's own tree the same way, which is why its re-delete
+  loop went.
+- **The icon check compared bytes and gated the whole test run.** Done: pixels, after vitest.
+- **The 2× renderer had no caller and its test compared it with itself.** Done: gone.
+- **Three targeted `rm` calls instead of one clean step.** Done: `build/clean.mjs` first.
+- **The product name was typed twice in `electron-builder.yml`.** Done: `extraMetadata` alone.
+- **The tray was rebuilt on every snapshot.** Done: the tooltip is compared and the two images
+  are cached.
+- **The stage 4 README note still described PNG icons and the bare id.** Done.
+- **`packaged` stands in for "the only installer on this machine".** The launch repair rewrites any
+  hook of ours whose command is not this exe's, so two packaged copies, or a packaged app beside the
+  CLI's install, take turns rewriting the hooks and leaving a backup each. Accepted for now: the
+  package is for teammates without the CLI, and the maintainer's machine runs one or the other. The
+  cure, if wanted, goes with stage 7's hook-status rework: repair only when the installed command's
+  exe is this one or no longer exists, and otherwise show `stale` and offer Reinstall.
+- **The `distPaths` tests spell Windows paths.** By the design's rule that nothing is tested
+  elsewhere. Accepted.
+
+Found while stage 6.1 was built, and done in it.
+
+- **`exec`'s own timeout also ended only the shell.** Done with the same tree kill.
+- **Decoding pixels made the icon check crash on a truncated file.** Done: a damaged or padded file
+  reads as different.
+- **The smoke's seed could fail silently, and the packaged app's first-run rule would then write a
+  real Run value.** Done: the smoke reads the seed back and stops before starting the app.
+
+Found in the final review of stage 6.1 (17 September 2026). They wait for the hardening pass.
+
+- **A restarted poller logs a false failure.** A `stop()` followed at once by `start()` shares the
+  run still in flight. That run was aborted, so it logs `presence.failed` and skips a poll, and the
+  same sequence can leave two loops (older). No caller restarts the poller today. The cure is for
+  `start()` to wait for, or refuse, a stopped run still in flight.
+- **`taskkill` is found by searching.** `nodeExec` and the smoke script run `taskkill` by name, so
+  Windows searches the working directory and `PATH` for it, the same kind of lookup as `cmd.exe` and
+  `claude`. Call it by its full path under `%SystemRoot%\System32` at both sites.
+- **An output overflow still ends only the shell.** When `claude agents --json` writes more than
+  `maxBuffer` (4 MB), Node kills `cmd.exe` itself and the CLI lives on. That is far off. A
+  spawn-based runner with its own cap could end the tree here too.
+- **The real-process `nodeExec` tests abort at 300 ms.** They run concurrently and expect the
+  started file by then. The chain starts in about 60 to 70 ms on the maintainer's machine, but a
+  loaded machine could flake. Poll for the started file before aborting, and give the timeout test
+  about 1 s.
+- **The smoke's kill fallback can hang.** If `app.kill()` also fails to end the app, the child's
+  handle keeps Node running. The fallback should check again whether the app exited and `unref()`
+  it. A partial tree kill, where a child survives, also goes unreported.
+- **A CLI call can outlive an app that exits on its own.** If the packaged app exits mid-poll during
+  the smoke, the tree kill is skipped and its children are no longer its tree. The cost is a
+  leftover scratch folder, which the script warns about.
+- **The smoke still spells one log line.** It finds `desktop.started` by the raw substring
+  `"code":"desktop.started","packaged":true`, while the ownership check parses records. It should
+  parse this line too. Change it together with the `taskkill` path, in one edit that runs the smoke
+  again.
 
 Asked for while stage 5 was finishing (16 September 2026). Not a review finding; the shape below was
 settled in conversation, so whoever picks it up does not have to decide it again.

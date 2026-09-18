@@ -65,7 +65,7 @@ function run(): void {
     if (!app.isPackaged) process.stdout.write(line);
   });
 
-  const store = createDesktopStore(desktopStatePath(home));
+  const store = createDesktopStore(desktopStatePath(home, app.isPackaged));
   const login = loginItemTarget(app.isPackaged, process.execPath, app.getAppPath());
   // Packaged, the bundle and the pages are inside resources/app.asar and the icons and scripts beside it.
   const dist = distPaths(__dirname, app.isPackaged ? process.resourcesPath : __dirname);
@@ -133,14 +133,27 @@ function run(): void {
     win = created;
   }
 
-  /** The ICO file holds one image per size and Windows picks the one matching the display scale. */
+  const version = app.getVersion();
+  let trayTip = "";
+  /** The two images, loaded once: a waiting flip swaps them rather than reading the ICO again. */
+  const trayImages = new Map<string, NativeImage>();
   function trayImage(file: string): NativeImage {
-    return nativeImage.createFromPath(join(dist.tray, file));
+    let image = trayImages.get(file);
+    if (image === undefined) {
+      image = nativeImage.createFromPath(join(dist.tray, file));
+      trayImages.set(file, image);
+    }
+    return image;
   }
 
+  /** The host's change callback fires on every snapshot; the tray is touched only when its text or its image changes. */
   function refreshTray(state: HostState): void {
     if (tray === null) return;
-    tray.setToolTip(trayTooltip(state, app.getVersion()));
+    const tip = trayTooltip(state, version);
+    if (tip !== trayTip) {
+      trayTip = tip;
+      tray.setToolTip(tip);
+    }
     const file = trayIconFile(state.waiting);
     if (file !== trayFile) {
       trayFile = file;
@@ -154,8 +167,7 @@ function run(): void {
 
   function setOpenAtLogin(on: boolean): void {
     app.setLoginItemSettings({ ...login, openAtLogin: on });
-    // Only the packaged app's choice is remembered; a development toggle is a testing convenience.
-    if (app.isPackaged) store.update({ openAtLogin: on });
+    store.update({ openAtLogin: on });
     refreshMenu();
     pushState();
   }

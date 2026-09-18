@@ -32,11 +32,12 @@ export type LoginOnLaunch = "none" | "enableFirstRun" | "reapply";
 
 /**
  * What the login item needs at launch, packaged only: a development run never touches the entry at
- * launch, since its toggle is a testing convenience and the packaged app owns the real choice.
- * `remembered` is desktop.json's openAtLogin, absent until the first packaged run or a packaged toggle;
- * `registered` is whether Windows has an entry for this exe and these arguments. The first packaged
- * run turns it on. After that, an entry the user wants but Windows lacks for this path, as after the
- * folder moved, is written again. An entry Windows already has, and a choice of off, are left alone.
+ * launch, since nothing acts on its toggle in development and the packaged app owns the real
+ * choice. `remembered` comes from this build's own state file's openAtLogin, absent until its first
+ * packaged run or a toggle; `registered` is whether Windows has an entry for this exe and these
+ * arguments. The first packaged run turns it on. After that, an entry the user wants but Windows
+ * lacks for this path, as after the folder moved, is written again. An entry Windows already has,
+ * and a choice of off, are left alone.
  */
 export function loginOnLaunch(s: { packaged: boolean; remembered: boolean | undefined; registered: boolean }): LoginOnLaunch {
   if (!s.packaged) return "none";

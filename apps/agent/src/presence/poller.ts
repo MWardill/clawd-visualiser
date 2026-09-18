@@ -1,5 +1,5 @@
 import { RedactedEventSchema, isAllowed, paneName, type DetailLevel } from "@clawd/core";
-import { exec } from "node:child_process";
+import { exec, execFile } from "node:child_process";
 import { z } from "zod";
 import type { FleetHost } from "../host/host";
 import type { Logger } from "../log";
@@ -7,17 +7,38 @@ import { listedIds, reconcile, type ListedDetail } from "./reconcile";
 import type { TranscriptStats } from "./transcripts";
 
 export type ExecResult = { ok: true; stdout: string } | { ok: false };
-export type Exec = (command: string, opts: { timeoutMs: number; maxBuffer: number }) => Promise<ExecResult>;
+export type Exec = (command: string, opts: { timeoutMs: number; maxBuffer: number; signal?: AbortSignal }) => Promise<ExecResult>;
 
 /**
  * Runs a constant command through the shell (on Windows `claude` is a .cmd shim). stdout is
- * captured and stderr discarded, never inherited, and the error itself is never looked at.
+ * captured and stderr discarded, never inherited, and the error itself is never looked at. A
+ * timeout or an aborted signal ends the command's whole process tree, because ending only the
+ * shell would leave the CLI the shim started running, and it could still write into the Claude
+ * directory.
  */
 export const nodeExec: Exec = (command, opts) =>
   new Promise((resolve) => {
-    exec(command, { timeout: opts.timeoutMs, maxBuffer: opts.maxBuffer, windowsHide: true, encoding: "utf8" }, (err, stdout) => {
+    if (opts.signal?.aborted) {
+      resolve({ ok: false });
+      return;
+    }
+    const cleanup = (): void => {
+      clearTimeout(timer);
+      opts.signal?.removeEventListener("abort", end);
+    };
+    const end = (): void => {
+      cleanup();
+      if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
+        execFile("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true }, () => {});
+      }
+      resolve({ ok: false });
+    };
+    const child = exec(command, { maxBuffer: opts.maxBuffer, windowsHide: true, encoding: "utf8" }, (err, stdout) => {
+      cleanup();
       resolve(err ? { ok: false } : { ok: true, stdout });
     });
+    const timer = setTimeout(end, opts.timeoutMs);
+    opts.signal?.addEventListener("abort", end, { once: true });
   });
 
 export type FocusTarget = { pid: number; cwd: string };
@@ -80,6 +101,7 @@ export function createPresencePoller(deps: {
   let timer: ReturnType<typeof setTimeout> | null = null;
   let running = false;
   let stopped = false;
+  let listing: AbortController | null = null;
 
   /**
    * Transcript figures for the allowlisted, listed sessions not counted in this run and not ended,
@@ -102,7 +124,14 @@ export function createPresencePoller(deps: {
   }
 
   async function run(): Promise<boolean> {
-    const result = await deps.exec(`${deps.command} agents --json`, { timeoutMs: POLL_TIMEOUT_MS, maxBuffer: POLL_MAX_BUFFER });
+    const aborter = new AbortController();
+    listing = aborter;
+    let result: ExecResult;
+    try {
+      result = await deps.exec(`${deps.command} agents --json`, { timeoutMs: POLL_TIMEOUT_MS, maxBuffer: POLL_MAX_BUFFER, signal: aborter.signal });
+    } finally {
+      if (listing === aborter) listing = null;
+    }
     if (stopped) return false;
     const entries = result.ok ? parseArray(result.stdout) : null;
     if (entries === null) {
@@ -181,6 +210,8 @@ export function createPresencePoller(deps: {
     stop() {
       stopped = true;
       running = false;
+      listing?.abort();
+      listing = null;
       if (timer !== null) {
         clearTimeout(timer);
         timer = null;

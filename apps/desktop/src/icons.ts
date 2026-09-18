@@ -98,12 +98,6 @@ export function renderIcon(sprite: Sprite, colours: IconColours, size: number, b
   return pixels;
 }
 
-/** The grid at a whole-number scale: 16 px at 1×, 32 at 2×. */
-export function renderTrayIcon(sprite: Sprite, colours: IconColours, scale: number, badge: boolean): Uint8Array {
-  if (!Number.isInteger(scale) || scale < 1) throw new Error("the scale must be a whole number above zero");
-  return renderIcon(sprite, colours, ICON_GRID * scale, badge);
-}
-
 const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
   let c = n;
   for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
