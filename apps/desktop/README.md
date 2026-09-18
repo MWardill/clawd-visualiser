@@ -337,9 +337,10 @@ not applied, and the failed agent's reason. The rules that decide them live in
 `settings/actions.ts`, tested with doubles for the picker, the installer, the host and the log;
 `main.ts` only wires. A change made while attached to another agent is saved but not applied, and
 the notice says so. Installing hooks while attached with no config of this app's own is refused;
-by then, though, the app's own refused start has usually already created that config, so the
-refusal is reached only if it is deleted afterwards, and an agent served from another `CLAWD_HOME`
-still accepts hooks carrying a token it does not hold. The notice persists across the pushes main
+by then, though, the app's own refused start has already created that config, so the refusal is
+reached only if it is deleted afterwards, and hooks installed while attached to an agent served
+from another `CLAWD_HOME` still carry a token that agent answers with 401 (design §12.1, stage
+8). The notice persists across the pushes main
 makes on its own, such as a host change or the tray's login toggle, since the actions remember it
 until the next action answers or the page loads again, and it shows in a permanent live region so a
 screen reader can announce it, not yet checked with one.
