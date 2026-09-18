@@ -1526,8 +1526,9 @@ Stop any CLI agent and any development run first. Check each:
 - **The whole set is stale.** Install the hooks. Quit. In `$env:CLAUDE_CONFIG_DIR\settings.json`, change one http hook's port to 4800. Launch: the log gains `desktop.hooksRepaired` and the port is back. Do the same by deleting the `statusLine`: repaired.
 - **A live other install is left alone.** Quit. Install the CLI's hooks into the scratch settings (`pnpm --filter @clawd/agent agent install --allow <the folder>` with the two scratch variables set): the commands now name `node.exe`. Launch the packaged app: no `desktop.hooksRepaired` in the log, and Settings says stale and offers Reinstall. Quit, edit the settings file so the command names a folder that does not exist, launch: repaired.
 - **An update refreshes the scripts.** Quit. Append a comment line to `$env:CLAWD_HOME\bin\clawd-hook.mjs`. Launch: `desktop.hooksRepaired`, and the file matches the shipped one again.
-- **Attached.** Start the CLI agent (`pnpm --filter @clawd/agent start`) against the same scratch home, then launch the app: the tray says attached. Add a folder: the notice says the attached agent keeps its own settings, and the log has `desktop.attachedChange`. Stop the CLI agent; the app takes over.
-- **Refused install while attached without a config.** With the CLI agent running from a different `CLAWD_HOME` and this app's scratch home empty, Install hooks: the notice says the app has no config of its own, and nothing is written.
+- **Attached.** Start the CLI agent (`pnpm --filter @clawd/agent start`) against the same scratch home, then launch the app: the tray says attached. Add a folder: the notice says the attached agent keeps its own settings, and the log has `desktop.attachedChange`. Stop the CLI agent; the app takes over. The attached notice goes from the page once the app's own agent is running.
+- **Attached to an agent from another home.** With the CLI agent running from a different `CLAWD_HOME`, launch the app with its scratch home: the tray says attached, and `$env:CLAWD_HOME\config.json` exists already, written by the app's own refused start. Install hooks proceeds (the refusal needs the config deleted after attaching, so it is not reachable here). This is the known gap recorded in §12.1 for stage 8: the installed hooks carry a token the serving agent answers with 401.
+- **The notice is announced.** With Narrator on, pick `C:\` as a folder: Narrator reads the refusal. If it does not, record it for stage 8 with the live region item.
 - **The two checks stage 6 left.** A real sign-out and sign-in with the login item on: the app returns hidden, and Task Manager's Startup apps list shows Clawd Visualiser. And deleting the folder while a Claude Code session runs: no dialog, the session carries on.
 - Delete both scratch folders and the unzipped folder, and remove `Env:CLAWD_HOME` and `Env:CLAUDE_CONFIG_DIR`.
 
@@ -1538,8 +1539,9 @@ In §12.1, after the `Stage 6's manual checks: partly done` item, add:
 ```markdown
 - **Stage 6's remaining checks and stage 7's: done.** On <date> the maintainer walked them: the
   refusals and the attached notice on the page, the unreadable config, the port, the status line and
-  a changed script all repaired at launch, the CLI's install left alone and a missing exe repaired, the refused install without a config, a sign-out and sign-in with the login item on, and the
-  folder deleted under a running session.
+  a changed script all repaired at launch, the CLI's install left alone and a missing exe repaired,
+  the attached-to-another-home gap confirmed (§12.1, stage 8), the notice read by Narrator, a
+  sign-out and sign-in with the login item on, and the folder deleted under a running session.
 ```
 
 with the real date, then:

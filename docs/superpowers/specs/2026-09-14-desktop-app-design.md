@@ -97,7 +97,10 @@ States: `starting → own | attached | failed`; `own → restarting → own | fa
   stops answering, starts its own (takeover). A folder or detail-level change made while attached is
   saved but not applied, since the other agent read its config at its own start: the page says so
   and `desktop.attachedChange` is logged. Installing hooks while attached with no config of this
-  app's own is refused, since they would carry a token the other agent does not hold (stage 7).
+  app's own is refused, since they would carry a token the other agent does not hold (stage 7); by
+  then, though, this app's own refused start has already written that config, so the refusal is
+  reached only if it is deleted afterwards, and an agent served from a different `CLAWD_HOME` still
+  answers the installed hooks' token with 401 while the page says installed (§12.1).
 - **restarting.** A fault while own. The host stops what it can and calls `startAgent` again after a
   backoff of 1, 2, 4, 8 then 16 s. Five faults inside five minutes lead to failed.
 - **failed.** The tray shows the error state; the settings window shows the log directory and a
@@ -186,9 +189,9 @@ attached.
   longer exists; a command naming another exe that still exists is a live install and is left alone,
   shown as stale in the settings window (stage 7). Until the app is launched from its new place the
   hooks fail quietly, as hooks always do, and events for that interval are missed.
-- Uninstall from the app is the CLI's uninstall. Deleting the folder without it leaves the hooks
-  pointing at nothing; they keep failing quietly, and the CLI's uninstall or a fresh install repairs
-  the settings file.
+- Uninstall from the app calls `uninstallHooks()`, the result-returning core the CLI's `uninstall`
+  prints. Deleting the folder without it leaves the hooks pointing at nothing; they keep failing
+  quietly, and the CLI's uninstall or a fresh install repairs the settings file.
 
 ## 9. Settings window
 
@@ -234,7 +237,7 @@ pushes main makes on its own, a host change or the tray's login toggle, send `pu
 fresh state carrying the remembered notice, so a background push does not erase it; this matters
 because the host polls every ten seconds while attached. The page shows the notice in a permanent
 live region: `page.html` holds an always-present `<p id="notice" role="status">` above the
-sections, which `render` fills and hides, so a screen reader announces a refusal.
+sections, which `render` fills and hides, so a screen reader can announce it; not yet checked with one.
 
 ## 10. Tray, login item, logging
 
@@ -256,10 +259,11 @@ sections, which `render` fills and hides, so a screen reader announces a refusal
 - Logs: `~/.clawd/logs/desktop-YYYY-MM-DD.log`, one JSON line per entry, written by the agent's
   `createLogger` with a file sink, so the codes-only rule holds for the desktop. New codes:
   `desktop.started`, `desktop.attached`, `desktop.takeover`, `desktop.agentFault`,
-  `desktop.agentFailed`, `desktop.hooksRepaired`, `desktop.hooksFailed` (a hook write that failed or
-  threw, with a boolean for whether it was a launch repair), `desktop.folderFailed` (a watched-folder
-  change that was refused or threw), `desktop.attachedChange` (a config change saved while attached
-  to another agent, which will not see it), `desktop.loginItemReapplied`. Retention follows
+  `desktop.agentFailed`, `desktop.hooksRepaired`, `desktop.hooksFailed` (a hook write that failed,
+  was refused or threw, carrying `repair`, whether it was a launch repair, and `attached` when the
+  refusal was the attached one), `desktop.folderFailed` (a watched-folder change that was refused or
+  threw), `desktop.attachedChange` (a config change saved while attached to another agent, which
+  will not see it), `desktop.loginItemReapplied`. Retention follows
   `logRetentionDays`.
 
 ## 11. Packaging and distribution
@@ -492,7 +496,11 @@ settings window, and the detail setter is caught and logged. The rest wait for t
   home the installer falls back to a default config with a fresh token, and the agent is not
   restarted; attached to an agent running from a different home, the written hooks carry a token that
   agent refuses while the page says installed. Refuse or warn when installing hooks without owning the
-  agent, and never create a config from the settings window. Done in stage 7.
+  agent, and never create a config from the settings window. Partly done in stage 7: the guard covers
+  a config deleted after this app attached, the only way the refusal in `installHooks` is reached,
+  since `startAgent` writes a fresh config before the app's own refused start reports attached. It
+  does not cover an agent served from a different `CLAWD_HOME`: hooks are installed carrying a token
+  that agent lacks, and the page still says installed. The cure is stage 8's.
 - **The settings page rebuilds itself on every push.** `render()` replaces every node when the text
   differs, which is what drops the button's `aria-busy` guard (a second Add folder during the picker,
   now modal but still a second request once it closes), resets an in-flight radio for the moment
@@ -581,34 +589,6 @@ Found in the review of stage 6's merge (17 September 2026), and taken as stage 6
 - **The `distPaths` tests spell Windows paths.** By the design's rule that nothing is tested
   elsewhere. Accepted.
 
-Stage 8 takes what remains: the settings page rebuilding on every push, its missing tests (a DOM
-environment for vitest), the bridge typed by hand in three places, the two window copies, the
-scheme's host table with the handler that can reject, Windows device names, the 404 body,
-`args.ts`'s dependency on `scheme.ts`, `connect-src 'self'`, one source for the agent's port, an
-unreadable `desktop.json`, restored bounds, the Start on login checkbox and Task Manager, Ctrl+Q on
-other layouts, tearing the tray down in `will-quit`, the settings window's font, the preload's
-bundle, zod's eval probe, the built-in `http://localhost:3000` origin, the restart that clears the
-fault budget, the two extra fuses, and the wait nobody answers.
-
-Found in stage 7's reviews.
-
-- **The plan's `currentState()` built `notice: null` for every push.** A notice was erased by the
-  next host snapshot, within ten seconds while attached. Done in stage 7: the actions remember the
-  last notice and pushes carry it.
-- **The notice was a node inserted on each render and never announced.** Done in stage 7: a
-  permanent `role="status"` region.
-- **The plan's backup-naming test edited a setting that an install does not write.** No second
-  backup could appear. Done in stage 7: the test changes a managed hook's port.
-- **The live region's text is rewritten on every render.** A notice that persists may be announced
-  again when an unrelated push redraws the page. Left for stage 8, with the page's tests: write the
-  text only when it differs, and unhide before writing.
-- **An unreadable config and a missing one refuse in the same words.** With an unreadable config,
-  `hasConfig` reads as no config, so the two refusals would word it as "no config". Accepted: the
-  page cannot reach either one, since an unreadable config shows no folders and no hook buttons.
-- **Uninstall's `missing` outcome shares its sentence with `nothing`'s.** No settings file and a
-  settings file with none of our hooks both answer "no hooks of ours were found; nothing was
-  changed". Accepted: the sentence is true either way.
-
 Found while stage 6.1 was built, and done in it.
 
 - **`exec`'s own timeout also ended only the shell.** Done with the same tree kill.
@@ -643,6 +623,70 @@ Found in the final review of stage 6.1 (17 September 2026). They wait for the ha
   `"code":"desktop.started","packaged":true`, while the ownership check parses records. It should
   parse this line too. Change it together with the `taskkill` path, in one edit that runs the smoke
   again.
+
+Found in stage 7's reviews.
+
+- **The plan's `currentState()` built `notice: null` for every push.** A notice was erased by the
+  next host snapshot, within ten seconds while attached. Done in stage 7: the actions remember the
+  last notice and pushes carry it, except that the attached notice is dropped once the host is no
+  longer attached, since the app's own agent has by then read the saved config.
+- **The notice was a node inserted on each render and never announced.** Done in stage 7: a
+  permanent `role="status"` region.
+- **The plan's backup-naming test edited a setting that an install does not write.** No second
+  backup could appear. Done in stage 7: the test changes a managed hook's port.
+- **The live region is a `hidden` node, outside the accessibility tree.** The case at risk is the
+  first notice, whose text is written and the node unhidden in the same task, and a repeat
+  announcement when an unrelated push redraws the page. The robust shape is an always-rendered
+  `role="status"` container with the styled paragraph put inside it. Nobody has yet run the page
+  with a screen reader, so the maintainer's walk includes a Narrator check. Left for stage 8, with
+  the page's tests.
+- **An unreadable config and a missing one refuse in the same words.** With an unreadable config,
+  `hasConfig` reads as no config, so the two refusals would word it as "no config". Accepted: the
+  page cannot reach either one, since an unreadable config shows no folders and no hook buttons.
+- **Uninstall's `missing` outcome shares its sentence with `nothing`'s.** No settings file and a
+  settings file with none of our hooks both answer "no hooks of ours were found; nothing was
+  changed". Accepted: the sentence is true either way.
+- **The attached-without-a-config refusal cannot be reached.** Found in the final review:
+  `startAgent` writes this home's config before the app's own refused start reports attached, so the
+  guard in `installHooks` fires only when that config is deleted afterwards, and hooks installed
+  while attached to an agent serving from a different `CLAWD_HOME` still carry a token it does not
+  hold. Stage 8's cure: ask the attached agent whether it holds this home's token before installing,
+  a `POST /ingest/status` with the token and an empty body answering 401 or 200, injected into the
+  actions as a dependency.
+- **Nothing stops a config minted after attaching either.** Related, and the same cure: "never
+  create a config from the settings window" is not enforced in `own` mode. With the config deleted
+  while the app runs, Install hooks mints a token the running agent lacks and nothing restarts it.
+  Stage 8.
+- **`applied()` reads the host's mode at the instant of the action.** During `starting` or
+  `restarting` a change is answered with no notice and a queued restart, and that restart can still
+  settle as attached, leaving the change saved but not applied with nothing said. Narrow; stage 8.
+- **The launch repair is decided while the host's first start may still be creating `config.json`.**
+  With the config deleted and the hooks left, the status most likely reads `missing` for that
+  launch, so the recreated-token case is repaired one launch late, the same order as stage 6. Stage
+  8: decide the repair after the host's first attempt settles.
+- **`hookCommand` and `statusCommand` have no consumer, and `main.ts` repeats a guard.** Both are
+  exported from the agent's index with nothing outside the package calling them, and `main.ts`
+  repeats `repairOnLaunch`'s first guard before reading the installed exe. A tested
+  `launchRepair(deps)` in `hooks.ts`, with the existence check injected, would hold both. Stage 8.
+
+Stage 8 takes what remains: the settings page rebuilding on every push, its missing tests (a DOM
+environment for vitest), the bridge typed by hand in three places, the two window copies, the
+scheme's host table with the handler that can reject, Windows device names, the 404 body,
+`args.ts`'s dependency on `scheme.ts`, `connect-src 'self'`, one source for the agent's port, an
+unreadable `desktop.json`, restored bounds, the Start on login checkbox and Task Manager, Ctrl+Q on
+other layouts, tearing the tray down in `will-quit`, the settings window's font, the preload's
+bundle, zod's eval probe, the built-in `http://localhost:3000` origin, the restart that clears the
+fault budget, the two extra fuses and the wait nobody answers. From the final review of stage 6.1: a
+restarted poller's false failure, `taskkill` found by searching rather than by its full path, an
+output overflow that still ends only the shell, the real-process `nodeExec` tests aborting at 300 ms,
+the smoke's kill fallback that can hang, a CLI call that can outlive an app that exits on its own,
+and the smoke still spelling one log line by substring. And stage 7's own left-overs: the live
+region's `hidden` node outside the accessibility tree, the attached-without-a-config refusal that no
+path reaches short of deleting the config afterwards, "never create a config from the settings
+window" left unenforced in `own` mode too, `applied()` reading the host's mode at the instant of the
+action, the launch repair decided before the host's first start has settled, and the exported
+`hookCommand` and `statusCommand` with no consumer, which a tested `launchRepair(deps)` in `hooks.ts`
+would join with the guard `main.ts` repeats.
 
 Asked for while stage 5 was finishing (16 September 2026). Not a review finding; the shape below was
 settled in conversation, so whoever picks it up does not have to decide it again.

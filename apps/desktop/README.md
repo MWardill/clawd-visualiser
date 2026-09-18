@@ -325,18 +325,24 @@ Nothing new in Electron. The settings window and the installer stop losing event
 for each event with its port and token, the SessionStart command, the status line, and the three
 scripts in `~/.clawd/bin` against the ones shipped beside the archive. Any difference is `stale`, so
 an edited port, a recreated token, a status line removed by hand and an update that changed a script
-are all repaired by the packaged app at launch, and offered as Reinstall in development. A config or
-settings file that exists but cannot be used reads `unreadable`, with no buttons.
+are all repaired by the packaged app at launch, and offered as Reinstall in development. The packaged
+app repairs at launch only when the installed command names this exe, an exe that no longer exists,
+or no command of ours; a command naming another exe that still exists, the CLI's or another copy's,
+is a live install and is left alone, shown as stale with Reinstall offered. A config or settings file
+that exists but cannot be used reads `unreadable`, with no buttons.
 
 **The page can say no.** Every answer over the bridge is still the whole state, but the state now
 carries a `notice`, one sentence about the last action when it was refused, failed, or was saved but
 not applied, and the failed agent's reason. The rules that decide them live in
 `settings/actions.ts`, tested with doubles for the picker, the installer, the host and the log;
 `main.ts` only wires. A change made while attached to another agent is saved but not applied, and
-the notice says so. Installing hooks while attached with no config of this app's own is refused. The
-notice persists across the pushes main makes on its own, such as a host change or the tray's login
-toggle, since the actions remember it until the next action answers or the page loads again, and it
-shows in a permanent live region so a screen reader announces it.
+the notice says so. Installing hooks while attached with no config of this app's own is refused;
+by then, though, the app's own refused start has usually already created that config, so the
+refusal is reached only if it is deleted afterwards, and an agent served from another `CLAWD_HOME`
+still accepts hooks carrying a token it does not hold. The notice persists across the pushes main
+makes on its own, such as a host change or the tray's login toggle, since the actions remember it
+until the next action answers or the page loads again, and it shows in a permanent live region so a
+screen reader can announce it, not yet checked with one.
 
 **The install saves once.** The installer validates Claude Code's settings file, copies the
 scripts, saves the config, then writes the settings file, in one call and in that order; a failure
