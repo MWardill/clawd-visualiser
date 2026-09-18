@@ -426,6 +426,12 @@ and is settled in its plan; the rest wait like the items above.
   the app from the Run value; and deleting the folder while a session runs. That one is checked only
   at the command: a hook naming a missing exe fails in about 50 ms with exit code 127 and no dialog,
   which Claude Code treats as a non-blocking error.
+- **Stage 6's remaining checks and stage 7's: done.** On 18 September 2026 the maintainer walked
+  them: the refusals and the attached notice on the page, the unreadable config, the port, the
+  status line and a changed script all repaired at launch, the CLI's install left alone and a
+  missing exe repaired, the attached-to-another-home gap confirmed (below, stage 8), the attached
+  notice gone once the app's own agent took over, the notice read by Narrator, a sign-out and
+  sign-in with the login item on, and the folder deleted under a running session.
 
 Found in the reviews of stage 5 (16 September 2026).
 
