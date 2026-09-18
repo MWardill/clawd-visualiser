@@ -27,8 +27,6 @@ export type InstallRequest = {
   probe?: (port: number) => Promise<boolean>;
 };
 
-export type UninstallRequest = { home: string; settingsPath: string; now: () => number; print: Print };
-
 export function mergeAllowlist(existing: readonly string[], additions: readonly string[], cwd: string): { ok: true; allowlist: string[] } | { ok: false; message: string } {
   const merged = [...existing];
   for (const raw of additions) {
@@ -131,28 +129,22 @@ export type HooksRequest = {
   settingsPath: string;
   /** The command prefix the written hooks run: a Node path, or the desktop's Electron prefix. */
   runtime: string;
-  /** Where the hook scripts are copied from: apps/agent/hooks, or the app's dist/hooks. */
+  /** Where the hook scripts are copied from: apps/agent/hooks, or the app's resources/hooks. */
   hooksDir: string;
   port?: number;
+  /** An allowlist to save with the port, when the caller has merged one; otherwise the config's stays. */
+  allowlist?: readonly string[];
   dryRun?: boolean;
   now: () => number;
 };
-export type HooksResult =
-  | {
-      ok: true;
-      statusLine: InstallResult["statusLine"];
-      events: readonly string[];
-      backup: string | null;
-      /** The allowlist as read at the top of this call, before it. A caller that has just saved a
-       * new allowlist should read the config again rather than trust this. */
-      allowlist: string[];
-      port: number;
-    }
-  | { ok: false; message: string };
+export type HooksResult = { ok: true; statusLine: InstallResult["statusLine"]; events: readonly string[]; backup: string | null; port: number } | { ok: false; message: string };
 
 /**
- * Copies the scripts to `<home>/bin` and writes Claude Code's settings file, backing up what was
- * there. The config is saved first, so the token the new hooks carry is on disk before they exist.
+ * Validates the settings file, copies the scripts to `<home>/bin`, saves the config, then writes the
+ * settings file with a backup of what was there. In that order: a settings file that cannot be used
+ * changes nothing, and a copy that fails leaves the config as it was. The config is saved before the
+ * settings file so the token the new hooks carry is on disk before they exist. A settings file that
+ * already holds exactly what would be written is left alone, with no backup.
  */
 export async function installHooks(req: HooksRequest): Promise<HooksResult> {
   const paths = agentPaths(req.home);
@@ -167,101 +159,101 @@ export async function installHooks(req: HooksRequest): Promise<HooksResult> {
     if (!(err instanceof SettingsShapeError)) throw err;
     return { ok: false, message: `${req.settingsPath} has an unexpected shape at ${err.message}; nothing was changed` };
   }
-  if (req.dryRun === true) return { ok: true, statusLine: result.statusLine, events: result.events, backup: null, allowlist: base.allowlist, port };
+  if (req.dryRun === true) return { ok: true, statusLine: result.statusLine, events: result.events, backup: null, port };
 
   await mkdir(paths.bin, { recursive: true });
   for (const script of HOOK_SCRIPTS) await copyFile(join(req.hooksDir, script), join(paths.bin, script));
   const wrapped = result.statusLine === "wrapped" ? result.newlyWrapped : result.statusLine === "kept" ? base.wrappedStatusLine : undefined;
   const { wrappedStatusLine: _wrapped, ...baseWithoutWrapped } = base;
-  await saveConfig(paths, { ...baseWithoutWrapped, port, ...(wrapped ? { wrappedStatusLine: wrapped } : {}) });
+  await saveConfig(paths, { ...baseWithoutWrapped, port, allowlist: req.allowlist === undefined ? base.allowlist : [...req.allowlist], ...(wrapped ? { wrappedStatusLine: wrapped } : {}) });
+  const unchanged = read.kind === "ok" && JSON.stringify(read.value) === JSON.stringify(result.settings);
+  if (unchanged) return { ok: true, statusLine: result.statusLine, events: result.events, backup: null, port };
   const saved = read.kind === "ok" ? await backup(req.settingsPath, req.now()) : null;
   await writeJsonAtomic(req.settingsPath, result.settings);
-  return { ok: true, statusLine: result.statusLine, events: result.events, backup: saved, allowlist: base.allowlist, port };
+  return { ok: true, statusLine: result.statusLine, events: result.events, backup: saved, port };
 }
 
-/** The CLI's install: the check, then the allowlist, then the hooks, then the report the user reads. */
+/** The CLI's install: the allowlist merged, then one installHooks call, then the report the user reads. */
 export async function install(req: InstallRequest): Promise<number> {
-  const common = {
+  // The command, unlike setAllowlist, insists on at least one folder: an empty --allow with an empty
+  // (or absent) config means the user named nothing to watch.
+  const existing = (await readConfig(agentPaths(req.home)))?.allowlist ?? [];
+  const merged = mergeAllowlist(existing, req.allow, req.cwd);
+  if (!merged.ok) {
+    req.print(merged.message);
+    return 1;
+  }
+  const hooks = await installHooks({
     home: req.home,
     settingsPath: req.settingsPath,
     runtime: req.runtime,
     hooksDir: req.hooksDir,
     ...(req.port === undefined ? {} : { port: req.port }),
+    allowlist: merged.allowlist,
+    dryRun: req.dryRun,
     now: req.now,
-  };
-  // A dry run writes nothing, so this reads and validates the settings file before anything is saved.
-  const check = await installHooks({ ...common, dryRun: true });
-  if (!check.ok) {
-    req.print(check.message);
-    return 1;
-  }
-  // The command, unlike setAllowlist itself, still insists on at least one folder: an empty
-  // --allow with an empty (or absent) config means the user named nothing to watch. Check that
-  // here, before anything is saved, reusing mergeAllowlist's own empty-result message.
-  const existingAllowlist = (await readConfig(agentPaths(req.home)))?.allowlist ?? [];
-  const merged = mergeAllowlist(existingAllowlist, req.allow, req.cwd);
-  if (!merged.ok) {
-    req.print(merged.message);
-    return 1;
-  }
-  const allow = req.dryRun
-    ? merged
-    : await setAllowlist({ home: req.home, add: req.allow, cwd: req.cwd, ...(req.port === undefined ? {} : { port: req.port }) });
-  if (!allow.ok) {
-    req.print(allow.message);
-    return 1;
-  }
-  if (req.dryRun) {
-    req.print(`dry run: would add hooks to ${req.settingsPath} for ${check.events.join(", ")}`);
-    req.print(`dry run: would ${STATUS_WORDS[check.statusLine]}`);
-    req.print(`dry run: the allowlist would be ${allow.allowlist.join(", ")}`);
-    return 0;
-  }
-  const hooks = await installHooks(common);
+  });
   if (!hooks.ok) {
     req.print(hooks.message);
     return 1;
   }
+  if (req.dryRun) {
+    req.print(`dry run: would add hooks to ${req.settingsPath} for ${hooks.events.join(", ")}`);
+    req.print(`dry run: would ${STATUS_WORDS[hooks.statusLine]}`);
+    req.print(`dry run: the allowlist would be ${merged.allowlist.join(", ")}`);
+    return 0;
+  }
   req.print(`installed the Clawd hooks into ${req.settingsPath}; ${STATUS_DONE[hooks.statusLine]}`);
-  req.print(hooks.backup ? `backup of the previous settings: ${hooks.backup}` : "there were no previous settings to back up");
-  req.print(`allowlist: ${allow.allowlist.join(", ")}`);
+  req.print(hooks.backup ? `backup of the previous settings: ${hooks.backup}` : "the settings already held these hooks, or there were none to back up");
+  req.print(`allowlist: ${merged.allowlist.join(", ")}`);
   const running = await (req.probe ?? probeAgent)(hooks.port);
   req.print(running ? `an agent is running on port ${hooks.port}; restart it to pick up these changes` : "start the agent with: pnpm --filter @clawd/agent start");
   return 0;
 }
 
-export async function uninstall(req: UninstallRequest): Promise<number> {
+export type UninstallRequest = { home: string; settingsPath: string; now: () => number };
+export type UninstallResult =
+  | { ok: true; outcome: "missing" | "nothing" | "removed"; backup: string | null }
+  | { ok: false; reason: "invalid" }
+  | { ok: false; reason: "shape"; at: string };
+
+/** Removes our hooks and puts a wrapped status line back. The result says what was found; nothing is printed. */
+export async function uninstallHooks(req: UninstallRequest): Promise<UninstallResult> {
   const paths = agentPaths(req.home);
   const config = await readConfig(paths);
   const read = await readSettings(req.settingsPath);
-  if (read.kind === "missing") {
-    req.print(`${req.settingsPath} does not exist; nothing to uninstall`);
-    return 0;
-  }
-  if (read.kind === "invalid") {
-    req.print(`${req.settingsPath} is not a JSON object; nothing was changed`);
-    return 1;
-  }
+  if (read.kind === "missing") return { ok: true, outcome: "missing", backup: null };
+  if (read.kind === "invalid") return { ok: false, reason: "invalid" };
   let next: JsonObject;
   try {
     next = applyUninstall(read.value, config?.wrappedStatusLine);
   } catch (err) {
     if (!(err instanceof SettingsShapeError)) throw err;
-    req.print(`${req.settingsPath} has an unexpected shape at ${err.message}; nothing was changed`);
-    return 1;
+    return { ok: false, reason: "shape", at: err.message };
   }
-  if (JSON.stringify(next) === JSON.stringify(read.value)) {
-    req.print("no Clawd hooks or status line were found; nothing was changed");
-    return 0;
-  }
+  if (JSON.stringify(next) === JSON.stringify(read.value)) return { ok: true, outcome: "nothing", backup: null };
   const saved = await backup(req.settingsPath, req.now());
   await writeJsonAtomic(req.settingsPath, next);
   if (config?.wrappedStatusLine) {
     const { wrappedStatusLine: _wrapped, ...rest } = config;
     await saveConfig(paths, rest);
   }
-  req.print(`removed the Clawd hooks from ${req.settingsPath}`);
-  req.print(`backup of the previous settings: ${saved}`);
-  req.print(`${paths.home} was left in place`);
+  return { ok: true, outcome: "removed", backup: saved };
+}
+
+/** The CLI's uninstall: the result above, printed. */
+export async function uninstall(req: UninstallRequest & { print: Print }): Promise<number> {
+  const result = await uninstallHooks(req);
+  if (!result.ok) {
+    req.print(result.reason === "invalid" ? `${req.settingsPath} is not a JSON object; nothing was changed` : `${req.settingsPath} has an unexpected shape at ${result.at}; nothing was changed`);
+    return 1;
+  }
+  if (result.outcome === "missing") req.print(`${req.settingsPath} does not exist; nothing to uninstall`);
+  else if (result.outcome === "nothing") req.print("no Clawd hooks or status line were found; nothing was changed");
+  else {
+    req.print(`removed the Clawd hooks from ${req.settingsPath}`);
+    req.print(`backup of the previous settings: ${result.backup}`);
+    req.print(`${agentPaths(req.home).home} was left in place`);
+  }
   return 0;
 }

@@ -5,7 +5,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { DEFAULT_PORT, agentPaths, defaultConfig, readConfig, saveConfig } from "../config";
 import { useTempDirs } from "../testing/tmp";
-import { install, installHooks, mergeAllowlist, removeFromAllowlist, setAllowlist, uninstall } from "./installer";
+import { install, installHooks, mergeAllowlist, removeFromAllowlist, setAllowlist, uninstall, uninstallHooks } from "./installer";
 import { HOOK_SCRIPTS, hookCommand, hookStatus, nodeRuntime, statusCommand, type InstallOptions, type JsonObject } from "./settings";
 
 const HOOKS = fileURLToPath(new URL("../../hooks/", import.meta.url));
@@ -110,7 +110,7 @@ describe("install and uninstall", () => {
     expect(existsSync(t.settingsPath)).toBe(false);
   });
 
-  it("keeps an existing token and gives each backup its own name", async () => {
+  it("keeps an existing token, writes no backup when nothing would change, and gives each real backup its own name", async () => {
     const t = await setup("{}");
     const existing = { ...defaultConfig("f".repeat(64)), allowlist: [join(t.root, "work")] };
     await saveConfig(agentPaths(t.home), existing);
@@ -119,11 +119,35 @@ describe("install and uninstall", () => {
     expect(first).toContain("f".repeat(64));
     expect(await install({ ...t.base, allow: [], dryRun: false })).toBe(0);
     expect(await readFile(t.settingsPath, "utf8")).toBe(first);
+    expect((await readdir(dirname(t.settingsPath))).sort()).toEqual(["settings.json", "settings.json.clawd-backup-20260912100000"]);
+    // A hand edit makes the next install write again, and its backup takes the next free name. An
+    // unrelated field would round-trip through the spread untouched, so this corrupts something the
+    // install itself manages: the port baked into the first http hook's URL.
+    await writeFile(t.settingsPath, first.replace(":4750/", ":4751/"));
+    expect(await install({ ...t.base, allow: [], dryRun: false })).toBe(0);
     expect((await readdir(dirname(t.settingsPath))).sort()).toEqual([
       "settings.json",
       "settings.json.clawd-backup-20260912100000",
       "settings.json.clawd-backup-20260912100000-2",
     ]);
+  });
+
+  it("copies the scripts before it saves anything, so a copy that fails leaves the config and the settings file untouched", async () => {
+    const t = await setup("{}");
+    const partial = join(t.root, "partial-hooks");
+    await mkdir(partial);
+    await writeFile(join(partial, "clawd-lib.mjs"), "");
+    await expect(install({ ...t.base, hooksDir: partial, allow: ["work"], dryRun: false })).rejects.toThrow();
+    expect(await readConfig(agentPaths(t.home))).toBeNull();
+    expect(await readFile(t.settingsPath, "utf8")).toBe("{}");
+  });
+
+  it("saves the allowlist it is given with the hooks, in one call", async () => {
+    const t = await setup();
+    const allowed = join(t.root, "work");
+    const hooks = await installHooks({ home: t.home, settingsPath: t.settingsPath, runtime: nodeRuntime("C:\\node.exe"), hooksDir: HOOKS, allowlist: [allowed], now: () => NOW });
+    expect(hooks.ok).toBe(true);
+    expect((await readConfig(agentPaths(t.home)))?.allowlist).toEqual([allowed]);
   });
 
   it("forgets a wrapped status line the settings no longer have, and keeps one they still point at", async () => {
@@ -191,17 +215,31 @@ describe("install and uninstall", () => {
     const original = { env: { A: "1" }, statusLine: { type: "command", command: "mine.sh" } };
     const t = await setup(JSON.stringify(original));
     await install({ ...t.base, allow: ["work"], dryRun: false });
-    expect(await uninstall({ home: t.home, settingsPath: t.settingsPath, now: () => NOW + 1_000, print: t.base.print })).toBe(0);
+    const result = await uninstallHooks({ home: t.home, settingsPath: t.settingsPath, now: () => NOW + 1_000 });
+    expect(result).toEqual({ ok: true, outcome: "removed", backup: `${t.settingsPath}.clawd-backup-20260912100001` });
     expect(await readJson(t.settingsPath)).toEqual(original);
     expect((await readConfig(agentPaths(t.home)))?.wrappedStatusLine).toBeUndefined();
     expect(existsSync(t.home)).toBe(true);
   });
 
-  it("uninstall changes nothing when there is nothing to remove", async () => {
+  it("uninstall says what it found: no file, nothing of ours, a file it cannot use", async () => {
     const missing = await setup();
-    expect(await uninstall({ home: missing.home, settingsPath: missing.settingsPath, now: () => NOW, print: missing.base.print })).toBe(0);
+    expect(await uninstallHooks({ home: missing.home, settingsPath: missing.settingsPath, now: () => NOW })).toEqual({ ok: true, outcome: "missing", backup: null });
+    const clean = await setup('{"model":"opus"}');
+    expect(await uninstallHooks({ home: clean.home, settingsPath: clean.settingsPath, now: () => NOW })).toEqual({ ok: true, outcome: "nothing", backup: null });
+    expect(await readdir(dirname(clean.settingsPath))).toEqual(["settings.json"]);
+    const invalid = await setup("[1, 2]");
+    expect(await uninstallHooks({ home: invalid.home, settingsPath: invalid.settingsPath, now: () => NOW })).toEqual({ ok: false, reason: "invalid" });
+    const shape = await setup('{"hooks": []}');
+    expect(await uninstallHooks({ home: shape.home, settingsPath: shape.settingsPath, now: () => NOW })).toEqual({ ok: false, reason: "shape", at: "hooks" });
+  });
+
+  it("the CLI's uninstall prints the outcome and keeps its exit codes", async () => {
     const clean = await setup('{"model":"opus"}');
     expect(await uninstall({ home: clean.home, settingsPath: clean.settingsPath, now: () => NOW, print: clean.base.print })).toBe(0);
-    expect(await readdir(dirname(clean.settingsPath))).toEqual(["settings.json"]);
+    expect(clean.lines.join("\n")).toContain("nothing was changed");
+    const invalid = await setup("[1, 2]");
+    expect(await uninstall({ home: invalid.home, settingsPath: invalid.settingsPath, now: () => NOW, print: invalid.base.print })).toBe(1);
+    expect(invalid.lines.join("\n")).toContain("not a JSON object");
   });
 });
