@@ -23,7 +23,12 @@ const AGENT_WORDS: Record<SettingsState["agent"]["mode"], string> = {
   restarting: "restarting",
   failed: "failed",
 };
-const HOOK_WORDS: Record<SettingsState["hooks"], string> = { missing: "not installed", current: "installed", stale: "installed, pointing elsewhere" };
+const HOOK_WORDS: Record<SettingsState["hooks"], string> = {
+  missing: "not installed",
+  current: "installed",
+  stale: "installed, but not what this app would write now",
+  unreadable: "cannot be checked: the agent's config or Claude Code's settings file is not usable",
+};
 const DETAIL_CHOICES: readonly { value: SettingsState["detail"]; label: string }[] = [
   { value: "none", label: "none: states, tool names and timings" },
   { value: "hints", label: "hints: adds programs, file types and web hosts" },
@@ -149,9 +154,9 @@ function render(state: SettingsState, force = false): void {
     section("This app", [row("version", state.app.version), row("runs from", el("code", state.app.exe))]),
     section("Watched folders", [folders, row("", button("add-folder", "Add folder…", () => window.clawd.addFolder()))]),
     section("Hooks", [
-      row("status", el("span", HOOK_WORDS[state.hooks], state.hooks === "stale" ? "warn" : "dim")),
-      row("", button("install-hooks", state.hooks === "missing" ? "Install hooks" : "Reinstall hooks", () => window.clawd.installHooks())),
-      ...(state.hooks === "missing" ? [] : [row("", button("remove-hooks", "Remove hooks", () => window.clawd.uninstallHooks()))]),
+      row("status", el("span", HOOK_WORDS[state.hooks], state.hooks === "current" || state.hooks === "missing" ? "dim" : "warn")),
+      ...(state.hooks === "unreadable" ? [] : [row("", button("install-hooks", state.hooks === "missing" ? "Install hooks" : "Reinstall hooks", () => window.clawd.installHooks()))]),
+      ...(state.hooks === "missing" || state.hooks === "unreadable" ? [] : [row("", button("remove-hooks", "Remove hooks", () => window.clawd.uninstallHooks()))]),
     ]),
     section("Detail level", [choices("detail", "What the local view shows", DETAIL_CHOICES, state.detail, (level) => window.clawd.setDetail(level))]),
     section("Start on login", [

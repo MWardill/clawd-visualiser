@@ -7,14 +7,13 @@ import {
   createLogger,
   defaultHome,
   defaultSettingsPath,
+  detailLevel,
   installHooks,
   readConfig,
-  readJsonFile,
   setAllowlist,
   setDetail,
   startAgent,
   uninstall,
-  type JsonObject,
 } from "@clawd/agent";
 import { Menu, Tray, app, dialog, ipcMain, nativeImage, protocol, screen, shell, type BrowserWindow, type NativeImage, type OpenDialogOptions } from "electron";
 import { join } from "node:path";
@@ -23,7 +22,7 @@ import { createAgentHost, statusText, type HostState } from "./agent-host";
 import { ownArgs, parseArgs, resolveRendererUrl } from "./args";
 import { restoredBounds } from "./bounds";
 import { createDesktopStore, desktopStatePath } from "./desktop-state";
-import { expectedCommands, hookStatus, repairOnLaunch, runtimePrefix, type HookStatus } from "./hooks";
+import { currentHookStatus, readConfigState, repairOnLaunch, runtimePrefix } from "./hooks";
 import { isQuitShortcut } from "./keys";
 import { createFileSink, readRetentionDays } from "./log";
 import { appUserModelId, loginItemTarget, loginOnLaunch } from "./login";
@@ -179,31 +178,18 @@ function run(): void {
     );
   }
 
-  /** The agent's own installer options, which say what the hooks should run. */
-  async function hookOptions(): Promise<{ runtime: string; binDir: string; port: number; token: string } | null> {
-    const config = await readConfig(agentPaths(home)).catch(() => null);
-    if (config === null) return null;
-    return { runtime, binDir: agentPaths(home).bin, port: config.port, token: config.token };
-  }
-
-  async function currentHookStatus(): Promise<HookStatus> {
-    const opts = await hookOptions();
-    if (opts === null) return "missing";
-    const file = await readJsonFile(settingsPath).catch(() => ({ found: false }) as const);
-    const settings = file.found && file.ok ? (file.value as JsonObject) : null;
-    return hookStatus(settings, expectedCommands(opts));
-  }
-
+  /** The state the page renders, from one read of the config. */
   async function currentState(): Promise<SettingsState> {
-    const config = await readConfig(agentPaths(home)).catch(() => null);
+    const read = await readConfigState(agentPaths(home));
+    const config = read.kind === "ok" ? read.config : null;
     return settingsState({
       host: host.state(),
       agentVersion: AGENT_VERSION,
       appVersion: app.getVersion(),
       exe: process.execPath,
       allowlist: config?.allowlist ?? [],
-      hooks: await currentHookStatus(),
-      detail: config?.detail ?? "none",
+      hooks: await currentHookStatus({ config: read, settingsPath, runtime, binDir: agentPaths(home).bin, hooksDir: dist.hooks }),
+      detail: detailLevel(config ?? {}),
       openAtLogin: openAtLogin(),
       logDir: agentPaths(home).logs,
     });
@@ -246,6 +232,7 @@ function run(): void {
     tray = new Tray(trayImage(trayFile));
     tray.on("click", () => showWindow());
 
+    const fallback = await currentState();
     for (const [channel, handler] of Object.entries(
       createHandlers(
         {
@@ -322,7 +309,7 @@ function run(): void {
             await shell.openPath(agentPaths(home).logs);
           },
         },
-        await currentState(),
+        fallback,
       ),
     )) {
       ipcMain.handle(channel, (_event, arg: unknown) => handler(arg));
@@ -332,8 +319,7 @@ function run(): void {
     refreshMenu();
 
     // Our hooks pointing at another folder are rewritten by the packaged app, so a moved app keeps receiving events.
-    const status = await currentHookStatus();
-    if (repairOnLaunch(status, app.isPackaged)) {
+    if (repairOnLaunch(fallback.hooks, app.isPackaged)) {
       try {
         const repaired = await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
         if (repaired.ok) log("desktop.hooksRepaired");

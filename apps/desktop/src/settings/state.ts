@@ -5,7 +5,7 @@ export type SettingsState = {
   agent: { mode: "starting" | "own" | "attached" | "restarting" | "failed"; port: number; version: string; sessions: number; waiting: number };
   app: { version: string; exe: string };
   allowlist: string[];
-  hooks: "missing" | "current" | "stale";
+  hooks: "missing" | "current" | "stale" | "unreadable";
   detail: "none" | "hints" | "paths";
   openAtLogin: boolean;
   logDir: string;

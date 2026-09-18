@@ -6,7 +6,7 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_PORT, agentPaths, defaultConfig, readConfig, saveConfig } from "../config";
 import { useTempDirs } from "../testing/tmp";
 import { install, installHooks, mergeAllowlist, removeFromAllowlist, setAllowlist, uninstall, uninstallHooks } from "./installer";
-import { HOOK_SCRIPTS, hookCommand, hookStatus, nodeRuntime, statusCommand, type InstallOptions, type JsonObject } from "./settings";
+import { HOOK_SCRIPTS, hookStatus, nodeRuntime, type JsonObject } from "./settings";
 
 const HOOKS = fileURLToPath(new URL("../../hooks/", import.meta.url));
 const NOW = Date.UTC(2026, 8, 12, 10, 0, 0);
@@ -179,9 +179,8 @@ describe("install and uninstall", () => {
     const hooks = await installHooks({ home: t.home, settingsPath: t.settingsPath, runtime, hooksDir: HOOKS, now: () => NOW });
     expect(hooks.ok).toBe(true);
     const settings = JSON.parse(await readFile(t.settingsPath, "utf8")) as JsonObject;
-    // Only the prefix and the bin directory shape the two commands.
-    const opts: InstallOptions = { port: DEFAULT_PORT, token: "t".repeat(64), binDir: agentPaths(t.home).bin, runtime };
-    expect(hookStatus(settings, { hook: hookCommand(opts), status: statusCommand(opts) })).toBe("current");
+    const config = await readConfig(agentPaths(t.home));
+    expect(hookStatus(settings, { port: DEFAULT_PORT, token: config?.token ?? "", binDir: agentPaths(t.home).bin, runtime })).toBe("current");
     expect(removeFromAllowlist([allowed], allowed)).toEqual([]);
   });
 

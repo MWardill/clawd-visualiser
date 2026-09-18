@@ -34,7 +34,7 @@ export class SettingsShapeError extends Error {
 
 /** `runtime` is the whole command prefix that runs a script: a quoted Node path, or the desktop's Electron prefix. */
 export type InstallOptions = { port: number; token: string; binDir: string; runtime: string };
-export type HookStatus = "missing" | "current" | "stale";
+export type HookStatus = "missing" | "current" | "stale" | "unreadable";
 export type InstallResult = {
   settings: JsonObject;
   /** The user's status line, when this install wrapped it; null when there was none or it was already ours. */
@@ -70,32 +70,52 @@ export function isOurStatusLine(value: unknown): boolean {
   return isJsonObject(value) && typeof value.command === "string" && value.command.includes(STATUS_SCRIPT);
 }
 
-/** Our SessionStart command hook, whatever command it holds, or null. */
-function ourHookCommand(settings: JsonObject): string | null {
-  const hooks = settings.hooks;
-  if (!isJsonObject(hooks)) return null;
-  const groups = hooks.SessionStart;
-  if (!Array.isArray(groups)) return null;
-  for (const group of groups) {
-    if (!isJsonObject(group) || !Array.isArray(group.hooks)) continue;
-    for (const hook of group.hooks) {
-      if (isJsonObject(hook) && hook.type === "command" && typeof hook.command === "string" && hook.command.includes(HOOK_SCRIPT)) return hook.command;
+/** What identifies one of our hooks: its kind, where it points, the token it carries and its timeout. */
+function hookKey(hook: JsonObject): string {
+  const headers = isJsonObject(hook.headers) ? hook.headers : {};
+  return JSON.stringify([hook.type, hook.url ?? hook.command ?? null, headers[TOKEN_HEADER] ?? null, hook.timeout ?? null]);
+}
+
+/** Our hooks in a settings file, keyed by event, and our status line's command; empty and null when absent. */
+function ourInstalled(settings: JsonObject): { byEvent: Map<string, Set<string>>; status: string | null } {
+  const byEvent = new Map<string, Set<string>>();
+  if (isJsonObject(settings.hooks)) {
+    for (const [event, groups] of Object.entries(settings.hooks)) {
+      if (!Array.isArray(groups)) continue;
+      for (const group of groups) {
+        if (!isJsonObject(group) || !Array.isArray(group.hooks)) continue;
+        for (const hook of group.hooks) {
+          if (!isOurHook(hook)) continue;
+          const keys = byEvent.get(event) ?? new Set<string>();
+          keys.add(hookKey(hook as JsonObject));
+          byEvent.set(event, keys);
+        }
+      }
     }
   }
-  return null;
+  const status = isOurStatusLine(settings.statusLine) ? (settings.statusLine as { command: string }).command : null;
+  return { byEvent, status };
 }
 
 /**
- * Whether the settings file already runs the commands we would write. `stale` is ours present but
- * not matching what an install would write now: pointing somewhere else, which is what a moved
- * folder or a new unzip leaves behind, or half-present, such as a status line removed by hand.
+ * Whether the settings file already holds everything an install with these options would write: the
+ * http hook for each event with its port and token, the SessionStart command, and the status line.
+ * `stale` is ours present with any part different or missing: a moved folder, an edited port, a
+ * recreated token, or a status line removed by hand. `unreadable` is decided by the caller, which
+ * reads the file. Hooks that are not ours are ignored.
  */
-export function hookStatus(settings: JsonObject | null, expected: { hook: string; status: string }): HookStatus {
+export function hookStatus(settings: JsonObject | null, opts: InstallOptions): HookStatus {
   if (settings === null) return "missing";
-  const hook = ourHookCommand(settings);
-  const line = isOurStatusLine(settings.statusLine) ? (settings.statusLine as { command: string }).command : null;
-  if (hook === null && line === null) return "missing";
-  return hook === expected.hook && line === expected.status ? "current" : "stale";
+  const have = ourInstalled(settings);
+  if (have.byEvent.size === 0 && have.status === null) return "missing";
+  const want = ourInstalled(applyInstall({}, opts).settings);
+  if (have.status !== want.status || have.byEvent.size !== want.byEvent.size) return "stale";
+  for (const [event, keys] of want.byEvent) {
+    const installed = have.byEvent.get(event);
+    if (installed === undefined || installed.size !== keys.size) return "stale";
+    for (const key of keys) if (!installed.has(key)) return "stale";
+  }
+  return "current";
 }
 
 /** Remove our hooks; drop groups and events that only we filled. Anything else is left as found. */
