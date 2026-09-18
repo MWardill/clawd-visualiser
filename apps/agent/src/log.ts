@@ -19,6 +19,7 @@ export type LogCode =
   | "desktop.hooksFailed"
   | "desktop.folderFailed"
   | "desktop.detailFailed"
+  | "desktop.attachedChange"
   | "ingest.counts"
   | "ingest.failed"
   | "presence.failed"

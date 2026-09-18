@@ -3,13 +3,14 @@ import type { SettingsState } from "../settings-state";
 import { CHANNELS, createHandlers, type SettingsActions } from "./ipc";
 
 const STATE: SettingsState = {
-  agent: { mode: "own", port: 4750, version: "0.1.0", sessions: 0, waiting: 0 },
+  agent: { mode: "own", port: 4750, version: "0.1.0", sessions: 0, waiting: 0, error: null },
   app: { version: "0.1.0", exe: "C:\\app.exe" },
   allowlist: ["C:\\repos\\one"],
   hooks: "current",
   detail: "none",
   openAtLogin: false,
   logDir: "C:\\logs",
+  notice: null,
 };
 
 // Distinct from STATE (different logDir) so a test can tell "the seed main started with" apart

@@ -9,11 +9,10 @@ import {
   defaultSettingsPath,
   detailLevel,
   installHooks,
-  readConfig,
+  saveDetail,
   setAllowlist,
-  setDetail,
   startAgent,
-  uninstall,
+  uninstallHooks,
 } from "@clawd/agent";
 import { Menu, Tray, app, dialog, ipcMain, nativeImage, protocol, screen, shell, type BrowserWindow, type NativeImage, type OpenDialogOptions } from "electron";
 import { access } from "node:fs/promises";
@@ -31,6 +30,7 @@ import { distPaths } from "./paths";
 import { createQuitHandler } from "./quit";
 import { APP_SCHEME, createSchemeHandler } from "./scheme";
 import { settingsState, type SettingsState } from "./settings-state";
+import { createSettingsActions } from "./settings/actions";
 import { createCoalescer } from "./settings/coalesce";
 import { CHANNELS, createHandlers } from "./settings/ipc";
 import { trayIconFile, trayMenuTemplate, trayTooltip } from "./tray";
@@ -165,17 +165,18 @@ function run(): void {
     return app.getLoginItemSettings(login).openAtLogin;
   }
 
-  function setOpenAtLogin(on: boolean): void {
+  function applyOpenAtLogin(on: boolean): void {
     app.setLoginItemSettings({ ...login, openAtLogin: on });
     store.update({ openAtLogin: on });
     refreshMenu();
-    pushState();
   }
 
   /** The menu is rebuilt whenever the login checkbox could have changed. */
   function refreshMenu(): void {
     tray?.setContextMenu(
-      Menu.buildFromTemplate(trayMenuTemplate(openAtLogin(), { open: showWindow, settings: showSettings, setOpenAtLogin, quit: () => app.quit() })),
+      Menu.buildFromTemplate(
+        trayMenuTemplate(openAtLogin(), { open: showWindow, settings: showSettings, setOpenAtLogin: (on: boolean) => { applyOpenAtLogin(on); pushState(); }, quit: () => app.quit() }),
+      ),
     );
   }
 
@@ -193,6 +194,7 @@ function run(): void {
       detail: detailLevel(config ?? {}),
       openAtLogin: openAtLogin(),
       logDir: agentPaths(home).logs,
+      notice: null,
     });
   }
 
@@ -234,85 +236,28 @@ function run(): void {
     tray.on("click", () => showWindow());
 
     const fallback = await currentState();
-    for (const [channel, handler] of Object.entries(
-      createHandlers(
-        {
-          getState: currentState,
-          // Each of these can throw: creating the folder, copying the scripts, saving the config and
-          // writing the settings file are all I/O. A throw would unwind into the message layer, which
-          // re-renders the page unchanged, so every one is caught here and logged before answering.
-          async addFolder() {
-            try {
-              // The picker belongs to the settings window, so it is modal to it and a second click cannot open another.
-              const options: OpenDialogOptions = { properties: ["openDirectory"], title: "Watch a folder" };
-              const parent = settingsWin !== null && !settingsWin.isDestroyed() ? settingsWin : null;
-              const picked = parent === null ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(parent, options);
-              const dir = picked.canceled ? null : (picked.filePaths[0] ?? null);
-              if (dir !== null) {
-                const saved = await setAllowlist({ home, add: [dir], cwd: home });
-                if (saved.ok) host.restart();
-                else log("desktop.folderFailed");
-              }
-            } catch {
-              log("desktop.folderFailed");
-            }
-            return await currentState();
-          },
-          async removeFolder(dir) {
-            try {
-              const config = await readConfig(agentPaths(home));
-              if (config !== null) {
-                const saved = await setAllowlist({ home, remove: dir, cwd: home });
-                if (saved.ok) host.restart();
-                else log("desktop.folderFailed");
-              }
-            } catch {
-              log("desktop.folderFailed");
-            }
-            return await currentState();
-          },
-          async installHooks() {
-            try {
-              const result = await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
-              if (!result.ok) log("desktop.hooksFailed", { repair: false });
-            } catch {
-              log("desktop.hooksFailed", { repair: false });
-            }
-            return await currentState();
-          },
-          async uninstallHooks() {
-            try {
-              const code = await uninstall({ home, settingsPath, now: Date.now, print: () => {} });
-              if (code !== 0) log("desktop.hooksFailed", { repair: false });
-            } catch {
-              log("desktop.hooksFailed", { repair: false });
-            }
-            return await currentState();
-          },
-          async setDetail(level) {
-            try {
-              await setDetail({ home, level, print: () => {} });
-              host.restart();
-            } catch {
-              log("desktop.detailFailed");
-            }
-            return await currentState();
-          },
-          async setOpenAtLogin(on) {
-            setOpenAtLogin(on);
-            return currentState();
-          },
-          async retryAgent() {
-            host.retry();
-            return currentState();
-          },
-          async openLogs() {
-            await shell.openPath(agentPaths(home).logs);
-          },
-        },
-        fallback,
-      ),
-    )) {
+    const actions = createSettingsActions({
+      state: currentState,
+      async pickFolder() {
+        // The picker belongs to the settings window, so it is modal to it and a second click cannot open another.
+        const options: OpenDialogOptions = { properties: ["openDirectory"], title: "Watch a folder" };
+        const parent = settingsWin !== null && !settingsWin.isDestroyed() ? settingsWin : null;
+        const picked = parent === null ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(parent, options);
+        return picked.canceled ? null : (picked.filePaths[0] ?? null);
+      },
+      hostMode: () => host.state().mode,
+      hasConfig: async () => (await readConfigState(agentPaths(home))).kind === "ok",
+      restartAgent: () => host.restart(),
+      retryAgent: () => host.retry(),
+      setAllowlist: (change) => setAllowlist({ home, cwd: home, ...("add" in change ? { add: [change.add] } : { remove: change.remove }) }),
+      installHooks: () => installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now }),
+      uninstallHooks: () => uninstallHooks({ home, settingsPath, now: Date.now }),
+      saveDetail: (level) => saveDetail({ home, level }),
+      applyOpenAtLogin,
+      openLogs: () => shell.openPath(agentPaths(home).logs).then(() => {}),
+      log,
+    });
+    for (const [channel, handler] of Object.entries(createHandlers(actions, fallback))) {
       ipcMain.handle(channel, (_event, arg: unknown) => handler(arg));
     }
 

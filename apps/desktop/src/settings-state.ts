@@ -23,16 +23,18 @@ export type SettingsInput = {
   detail: DetailLevel;
   openAtLogin: boolean;
   logDir: string;
+  notice: string | null;
 };
 
 export function settingsState(input: SettingsInput): SettingsState {
   return {
-    agent: { mode: input.host.mode, port: input.host.port ?? DEFAULT_PORT, version: input.agentVersion, sessions: input.host.sessions, waiting: input.host.waiting },
+    agent: { mode: input.host.mode, port: input.host.port ?? DEFAULT_PORT, version: input.agentVersion, sessions: input.host.sessions, waiting: input.host.waiting, error: input.host.error },
     app: { version: input.appVersion, exe: input.exe },
     allowlist: [...input.allowlist],
     hooks: input.hooks,
     detail: input.detail,
     openAtLogin: input.openAtLogin,
     logDir: input.logDir,
+    notice: input.notice,
   };
 }

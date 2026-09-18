@@ -144,8 +144,10 @@ function render(state: SettingsState, force = false): void {
   if (state.allowlist.length === 0) folders.append(el("li", "no folders watched yet", "dim"));
 
   app.replaceChildren(
+    ...(state.notice === null ? [] : [el("p", state.notice, "notice")]),
     section("Agent", [
       row("state", `${AGENT_WORDS[state.agent.mode]} · port ${state.agent.port} · version ${state.agent.version}`),
+      ...(state.agent.error === null ? [] : [row("reason", el("span", state.agent.error, "warn"))]),
       row("sessions", `${state.agent.sessions} · ${state.agent.waiting} waiting`),
       row("logs", el("code", state.logDir)),
       row("", button("open-logs", "Open logs folder", () => window.clawd.openLogs())),
