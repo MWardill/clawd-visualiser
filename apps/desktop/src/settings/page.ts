@@ -135,6 +135,14 @@ function render(state: SettingsState, force = false): void {
   const active = document.activeElement;
   const focusKey = active instanceof HTMLElement ? active.dataset.focusKey : undefined;
 
+  // A permanent live region, present since page.html: a node inserted fresh on every render is
+  // announced unreliably, so the notice's text and visibility are set on the same element each time.
+  const notice = document.getElementById("notice");
+  if (notice !== null) {
+    notice.textContent = state.notice ?? "";
+    notice.hidden = state.notice === null;
+  }
+
   const folders = el("ul");
   for (const dir of state.allowlist) {
     const item = el("li", undefined, "row");
@@ -144,7 +152,6 @@ function render(state: SettingsState, force = false): void {
   if (state.allowlist.length === 0) folders.append(el("li", "no folders watched yet", "dim"));
 
   app.replaceChildren(
-    ...(state.notice === null ? [] : [el("p", state.notice, "notice")]),
     section("Agent", [
       row("state", `${AGENT_WORDS[state.agent.mode]} · port ${state.agent.port} · version ${state.agent.version}`),
       ...(state.agent.error === null ? [] : [row("reason", el("span", state.agent.error, "warn"))]),

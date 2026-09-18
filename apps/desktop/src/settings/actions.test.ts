@@ -1,4 +1,4 @@
-import type { AllowlistResult, HooksResult, LogCode, UninstallResult } from "@clawd/agent";
+import type { AllowlistResult, HooksResult, LogFields, UninstallResult } from "@clawd/agent";
 import { describe, expect, it } from "vitest";
 import type { HostMode } from "../agent-host";
 import type { SettingsState } from "../settings-state";
@@ -20,6 +20,7 @@ const OK_HOOKS: HooksResult = { ok: true, statusLine: "added", events: [], backu
 function harness(over: Partial<ActionDeps> & { mode?: HostMode; config?: boolean } = {}) {
   const calls: string[] = [];
   const codes: string[] = [];
+  const fields: LogFields[] = [];
   const deps: ActionDeps = {
     state: async () => STATE,
     pickFolder: async () => "C:\\repos\\one",
@@ -42,10 +43,13 @@ function harness(over: Partial<ActionDeps> & { mode?: HostMode; config?: boolean
     saveDetail: async (level) => void calls.push(`detail ${level}`),
     applyOpenAtLogin: (on) => void calls.push(`login ${on}`),
     openLogs: async () => void calls.push("logs"),
-    log: (code: LogCode) => void codes.push(code),
+    log: (code, logFields = {}) => {
+      codes.push(code);
+      fields.push(logFields);
+    },
     ...over,
   };
-  return { calls, codes, actions: createSettingsActions(deps) };
+  return { calls, codes, fields, actions: createSettingsActions(deps) };
 }
 
 describe("createSettingsActions", () => {
@@ -59,6 +63,17 @@ describe("createSettingsActions", () => {
     const { calls, actions } = harness({ pickFolder: async () => null });
     expect(await actions.addFolder()).toEqual(STATE);
     expect(calls).toEqual([]);
+  });
+
+  it("says where to look, and adds nothing, when the picker itself throws", async () => {
+    const { calls, codes, actions } = harness({
+      pickFolder: async () => {
+        throw new Error("dialog crashed");
+      },
+    });
+    expect((await actions.addFolder()).notice).toContain("see the log");
+    expect(calls).toEqual([]);
+    expect(codes).toEqual(["desktop.folderFailed"]);
   });
 
   it("puts the installer's refusal in the notice, logs it, and does not restart", async () => {
@@ -111,6 +126,16 @@ describe("createSettingsActions", () => {
     expect(some.calls).toEqual(["install"]);
   });
 
+  it("logs the fields that tell an attached hooks refusal apart from an ordinary hooks failure", async () => {
+    const none = harness({ mode: "attached", config: false });
+    await none.actions.installHooks();
+    expect(none.fields).toEqual([{ repair: false, attached: true }]);
+
+    const refused = harness({ installHooks: async () => ({ ok: false, message: "settings.json is not a JSON object; nothing was changed" }) });
+    await refused.actions.installHooks();
+    expect(refused.fields).toEqual([{ repair: false }]);
+  });
+
   it("says what uninstall found", async () => {
     expect((await harness().actions.uninstallHooks()).notice).toBeNull();
     const nothing = harness({ uninstallHooks: async () => ({ ok: true, outcome: "nothing", backup: null }) });
@@ -140,5 +165,32 @@ describe("createSettingsActions", () => {
     await actions.retryAgent();
     await actions.openLogs();
     expect(calls).toEqual(["login true", "retry", "logs"]);
+  });
+
+  it("carries a refused action's notice to a push main makes on its own, across repeated pushes", async () => {
+    const { actions } = harness({ setAllowlist: async () => ({ ok: false, message: "refusing to allow a whole filesystem root: C:\\" }) });
+    await actions.addFolder();
+    expect((await actions.pushedState()).notice).toBe("refusing to allow a whole filesystem root: C:\\");
+    expect((await actions.pushedState()).notice).toBe("refusing to allow a whole filesystem root: C:\\");
+  });
+
+  it("clears the pushed notice once a following action answers with none", async () => {
+    const { actions } = harness({ setAllowlist: async () => ({ ok: false, message: "refusing to allow a whole filesystem root: C:\\" }) });
+    await actions.addFolder();
+    await actions.setOpenAtLogin(true);
+    expect((await actions.pushedState()).notice).toBeNull();
+  });
+
+  it("clears the pushed notice once the page asks for state again", async () => {
+    const { actions } = harness({ setAllowlist: async () => ({ ok: false, message: "refusing to allow a whole filesystem root: C:\\" }) });
+    await actions.addFolder();
+    await actions.getState();
+    expect((await actions.pushedState()).notice).toBeNull();
+  });
+
+  it("carries the attached notice to a push main makes on its own", async () => {
+    const { actions } = harness({ mode: "attached" });
+    await actions.addFolder();
+    expect((await actions.pushedState()).notice).toBe(ATTACHED_NOTICE);
   });
 });

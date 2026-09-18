@@ -33,8 +33,28 @@ export const NO_CONFIG_NOTICE = "this app is attached to another agent and has n
 export const NO_CONFIG_TO_CHANGE = "there is no config to change yet";
 export const SEE_LOG = "see the log";
 
-export function createSettingsActions(deps: ActionDeps): SettingsActions {
-  const answer = async (notice: string | null = null): Promise<SettingsState> => ({ ...(await deps.state()), notice });
+/**
+ * `SettingsActions` plus `pushedState`, for a push main makes on its own (a host snapshot, a hooks
+ * repair) rather than in answer to something the page asked for.
+ */
+export type SettingsActionsWithPush = SettingsActions & {
+  /**
+   * The state for a push main makes on its own. Carries whatever notice the last action's answer
+   * left, so a background push cannot erase a refusal or ATTACHED_NOTICE before the page has shown
+   * it. The notice lasts until the next action answers (a success clears it, a refusal or failure
+   * replaces it) or until the page loads again (`getState` answers with none and so clears it);
+   * `pushedState` itself never changes it.
+   */
+  pushedState(): Promise<SettingsState>;
+};
+
+export function createSettingsActions(deps: ActionDeps): SettingsActionsWithPush {
+  /** The notice the last action's answer carried; see `pushedState`. */
+  let lastNotice: string | null = null;
+  const answer = async (notice: string | null = null): Promise<SettingsState> => {
+    lastNotice = notice;
+    return { ...(await deps.state()), notice };
+  };
 
   /** After a successful save: the agent this app owns reads the config again; an attached one cannot be made to. */
   const applied = (): string | null => {
@@ -119,5 +139,6 @@ export function createSettingsActions(deps: ActionDeps): SettingsActions {
       return answer();
     },
     openLogs: () => deps.openLogs(),
+    pushedState: async () => ({ ...(await deps.state()), notice: lastNotice }),
   };
 }

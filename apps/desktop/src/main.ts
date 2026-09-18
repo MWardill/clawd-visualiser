@@ -198,10 +198,36 @@ function run(): void {
     });
   }
 
-  /** After a config change the agent reads it again, and the page hears about the new state. */
+  // Everything these depend on (home, the store's login item, dist, settingsPath, runtime, host, log)
+  // is already in scope here, and each call reads it fresh, so the actions can be built once, ahead
+  // of the settings window that is their only caller.
+  const settingsActions = createSettingsActions({
+    state: currentState,
+    async pickFolder() {
+      // The picker belongs to the settings window, so it is modal to it and a second click cannot open another.
+      const options: OpenDialogOptions = { properties: ["openDirectory"], title: "Watch a folder" };
+      const parent = settingsWin !== null && !settingsWin.isDestroyed() ? settingsWin : null;
+      const picked = parent === null ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(parent, options);
+      return picked.canceled ? null : (picked.filePaths[0] ?? null);
+    },
+    hostMode: () => host.state().mode,
+    hasConfig: async () => (await readConfigState(agentPaths(home))).kind === "ok",
+    restartAgent: () => host.restart(),
+    retryAgent: () => host.retry(),
+    setAllowlist: (change) => setAllowlist({ home, cwd: home, ...("add" in change ? { add: [change.add] } : { remove: change.remove }) }),
+    installHooks: () => installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now }),
+    uninstallHooks: () => uninstallHooks({ home, settingsPath, now: Date.now }),
+    saveDetail: (level) => saveDetail({ home, level }),
+    applyOpenAtLogin,
+    openLogs: () => shell.openPath(agentPaths(home).logs).then(() => {}),
+    log,
+  });
+
+  // A push main makes on its own (a host snapshot, a hooks repair) carries whatever notice the last
+  // action left, so it never erases a refusal or ATTACHED_NOTICE the page has not shown yet.
   function pushState(): void {
     if (settingsWin === null || settingsWin.isDestroyed()) return;
-    void currentState().then((state) => {
+    void settingsActions.pushedState().then((state) => {
       if (settingsWin !== null && !settingsWin.isDestroyed()) settingsWin.webContents.send(CHANNELS.state, state);
     });
   }
@@ -236,28 +262,7 @@ function run(): void {
     tray.on("click", () => showWindow());
 
     const fallback = await currentState();
-    const actions = createSettingsActions({
-      state: currentState,
-      async pickFolder() {
-        // The picker belongs to the settings window, so it is modal to it and a second click cannot open another.
-        const options: OpenDialogOptions = { properties: ["openDirectory"], title: "Watch a folder" };
-        const parent = settingsWin !== null && !settingsWin.isDestroyed() ? settingsWin : null;
-        const picked = parent === null ? await dialog.showOpenDialog(options) : await dialog.showOpenDialog(parent, options);
-        return picked.canceled ? null : (picked.filePaths[0] ?? null);
-      },
-      hostMode: () => host.state().mode,
-      hasConfig: async () => (await readConfigState(agentPaths(home))).kind === "ok",
-      restartAgent: () => host.restart(),
-      retryAgent: () => host.retry(),
-      setAllowlist: (change) => setAllowlist({ home, cwd: home, ...("add" in change ? { add: [change.add] } : { remove: change.remove }) }),
-      installHooks: () => installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now }),
-      uninstallHooks: () => uninstallHooks({ home, settingsPath, now: Date.now }),
-      saveDetail: (level) => saveDetail({ home, level }),
-      applyOpenAtLogin,
-      openLogs: () => shell.openPath(agentPaths(home).logs).then(() => {}),
-      log,
-    });
-    for (const [channel, handler] of Object.entries(createHandlers(actions, fallback))) {
+    for (const [channel, handler] of Object.entries(createHandlers(settingsActions, fallback))) {
       ipcMain.handle(channel, (_event, arg: unknown) => handler(arg));
     }
 
