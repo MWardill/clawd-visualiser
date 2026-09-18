@@ -265,9 +265,7 @@ Until now the app was a repository: `electron .` on a folder of source, with the
 `release/win-unpacked/`, renames the exe to `Clawd Visualiser.exe`, stamps the icon and the version
 into it, and puts the app's own files, `dist/main.cjs` and the two pages, into one archive,
 `resources/app.asar`. The `zip` target then zips that folder. There is no installer and no updater:
-the folder is the install, and a new version is unzipped over it. When a new version changes the
-hook scripts, open Settings and choose Reinstall after updating: the scripts copied into
-`~/.clawd/bin` are only refreshed by an install, not by unzipping a new version over the folder.
+the folder is the install, and a new version is unzipped over it.
 
 **asar.** The archive is a read-only bundle of files with an index. Node inside Electron reads it as
 if it were a directory: `require`, `readFile` and `readdir` see through it, which is how the scheme
@@ -318,3 +316,29 @@ packaged app with `--user-data-dir` pointing at a scratch profile: Electron deri
 single-instance lock from that directory, so the copy under test never collides with an installed
 copy sitting in the tray. The smoke also stops the app by ending its whole process tree, so a Claude
 CLI call still in flight cannot write into the scratch folder after the script has removed it.
+
+### Stage 7: hardening, the first half
+
+Nothing new in Electron. The settings window and the installer stop losing events and stop lying.
+
+**What stale means now.** The hook check compares everything an install would write: the http hook
+for each event with its port and token, the SessionStart command, the status line, and the three
+scripts in `~/.clawd/bin` against the ones shipped beside the archive. Any difference is `stale`, so
+an edited port, a recreated token, a status line removed by hand and an update that changed a script
+are all repaired by the packaged app at launch, and offered as Reinstall in development. A config or
+settings file that exists but cannot be used reads `unreadable`, with no buttons.
+
+**The page can say no.** Every answer over the bridge is still the whole state, but the state now
+carries a `notice`, one sentence about the last action when it was refused, failed, or was saved but
+not applied, and the failed agent's reason. The rules that decide them live in
+`settings/actions.ts`, tested with doubles for the picker, the installer, the host and the log;
+`main.ts` only wires. A change made while attached to another agent is saved but not applied, and
+the notice says so. Installing hooks while attached with no config of this app's own is refused. The
+notice persists across the pushes main makes on its own, such as a host change or the tray's login
+toggle, since the actions remember it until the next action answers or the page loads again, and it
+shows in a permanent live region so a screen reader announces it.
+
+**The install saves once.** The installer validates Claude Code's settings file, copies the
+scripts, saves the config, then writes the settings file, in one call and in that order; a failure
+before the save leaves the config untouched, and an install that would change nothing writes no
+backup.

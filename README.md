@@ -24,9 +24,8 @@ Download `Clawd-Visualiser-<version>-win-x64.zip`, unzip it anywhere (a folder u
 profile is best, since the hooks will point at it), and run `Clawd Visualiser.exe`. The app sits in
 the tray; open Settings from its menu to watch your repositories and install Claude Code's hooks.
 Nothing else is installed, and the app runs from wherever it was unzipped. To update, quit, unzip the
-new version over the folder and launch. If the new version changes the hook scripts, open Settings
-and choose Reinstall afterwards, since an update alone does not refresh the copies in `~/.clawd/bin`.
-Details in [apps/desktop/README.md](apps/desktop/README.md).
+new version over the folder and launch. Details in
+[apps/desktop/README.md](apps/desktop/README.md).
 
 ## Layout
 

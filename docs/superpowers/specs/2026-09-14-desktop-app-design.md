@@ -57,10 +57,11 @@ apps/desktop/
     window.ts             BrowserWindow, bounds persistence, hide on close
     tray.ts               icon, badge, tooltip, menu
     login.ts              setLoginItemSettings wrapper
-    hooks.ts              hook status (missing, current, stale), repair, the runtime prefix
+    hooks.ts              hook status (missing, current, stale, unreadable) from the config, the file and the scripts; the runtime prefix
     settings/
       preload.ts          the contextBridge API
       ipc.ts              ipcMain handlers, zod-validated
+      actions.ts          the settings actions: save, restart, refuse, notice; tested over doubles
       page.html, page.ts  the settings window
   resources/              the tray ICOs and the app icon, generated and checked in
   dist/                   build output, ignored; release/ is the packager's, also ignored
@@ -93,7 +94,10 @@ States: `starting → own | attached | failed`; `own → restarting → own | fa
 - **own.** `startAgent` resolved; the app holds the `RunningAgent`.
 - **attached.** `startAgent` threw `PortInUseError` and a health probe on the port answered within
   500 ms: another agent (the CLI's, say) is serving. The host polls health every 10 s and, when it
-  stops answering, starts its own (takeover).
+  stops answering, starts its own (takeover). A folder or detail-level change made while attached is
+  saved but not applied, since the other agent read its config at its own start: the page says so
+  and `desktop.attachedChange` is logged. Installing hooks while attached with no config of this
+  app's own is refused, since they would carry a token the other agent does not hold (stage 7).
 - **restarting.** A fault while own. The host stops what it can and calls `startAgent` again after a
   backoff of 1, 2, 4, 8 then 16 s. Five faults inside five minutes lead to failed.
 - **failed.** The tray shows the error state; the settings window shows the log directory and a
@@ -119,8 +123,10 @@ attached.
 - The installer's `InstallOptions.node` becomes `runtime`: the exact command prefix. The CLI passes
   the quoted Node path; the desktop passes the prefix in §8. `install()` splits into
   `setAllowlist()` and `installHooks()`; the CLI composes them as today and the settings window
-  calls them separately. `hookStatus(settingsPath, expectedCommand)` returns `missing`, `current`
-  or `stale`.
+  calls them separately. `hookStatus(settings, options)` compares everything an install would
+  write, the http hooks with their port and token, the SessionStart command and the status line,
+  and returns `missing`, `current` or `stale`; `uninstallHooks()` and `saveDetail()` are the
+  result-returning cores the CLI's `uninstall` and `detail` print (stage 7).
 
 ## 7. Renderer
 
@@ -165,15 +171,21 @@ attached.
   point the prefix at it, a configuration change only.
 - The `runAsNode` fuse stays enabled (`electronFuses.runAsNode: true`). Turning it off would break
   every installed hook.
-- On launch, `hooks.ts` reads the settings file. `current`: nothing. `stale` (our hook present with
-  a different command, as after the folder moved or a new version was unzipped elsewhere): rewrite
-  through `installHooks()` with the usual backup, logged as `desktop.hooksRepaired`. Only the
-  packaged app rewrites unattended: on the maintainer's machine the hooks may belong to the CLI's
-  install or to another checkout, and a development launch would otherwise flip them on every run
-  and leave a backup each time. A development run still shows `stale` in the settings window, where
-  Reinstall is a choice (stage 6). `missing`: nothing; the settings window offers to install. Until
-  the app is launched from its new place the hooks fail quietly, as hooks always do, and events for
-  that interval are missed.
+- On launch, `hooks.ts` reads the settings file. `current`: nothing. `stale` (ours present with any
+  part different from what an install would write now: the commands after the folder moved or a new
+  version was unzipped elsewhere, an http hook's port or token, a status line removed by hand, or a
+  script in `~/.clawd/bin` that differs from the one shipped beside the archive, which is how an
+  update refreshes the scripts): rewrite through `installHooks()` with the usual backup, logged as
+  `desktop.hooksRepaired`. Only the packaged app rewrites unattended: on the maintainer's machine the
+  hooks may belong to the CLI's install or to another checkout, and a development launch would
+  otherwise flip them on every run and leave a backup each time. A development run still shows
+  `stale` in the settings window, where Reinstall is a choice (stage 6). `missing`: nothing; the
+  settings window offers to install. `unreadable`: the config exists but cannot be used, or the
+  settings file is not a JSON object; nothing is repaired and the page offers no buttons. The
+  packaged app rewrites at launch only when the installed command names this exe or an exe that no
+  longer exists; a command naming another exe that still exists is a live install and is left alone,
+  shown as stale in the settings window (stage 7). Until the app is launched from its new place the
+  hooks fail quietly, as hooks always do, and events for that interval are missed.
 - Uninstall from the app is the CLI's uninstall. Deleting the folder without it leaves the hooks
   pointing at nothing; they keep failing quietly, and the CLI's uninstall or a fresh install repairs
   the settings file.
@@ -184,13 +196,14 @@ A second window, 560 by 720, loading `app://settings/`, with `preload.ts` exposi
 
 ```ts
 type SettingsState = {
-  agent: { mode: "starting" | "own" | "attached" | "restarting" | "failed"; port: number; version: string; sessions: number; waiting: number };
+  agent: { mode: "starting" | "own" | "attached" | "restarting" | "failed"; port: number; version: string; sessions: number; waiting: number; error: string | null };
   app: { version: string; exe: string };
   allowlist: string[];
-  hooks: "missing" | "current" | "stale";
+  hooks: "missing" | "current" | "stale" | "unreadable";
   detail: "none" | "hints" | "paths";
   openAtLogin: boolean;
   logDir: string;
+  notice: string | null;
 };
 
 type ClawdSettingsApi = {
@@ -212,6 +225,16 @@ the agent in process, so the README's "restart the agent after changing the allo
 the user. Sections, top to bottom: agent, this app (version and where it runs from), watched
 folders, hooks, detail level, start on login. Text only, no framework; JetBrains Mono on black,
 matching the app. The detail section is present only once the detail levels design has landed.
+`notice` is one sentence about the last action when it was refused, failed, or was saved but not
+applied, and null otherwise; `agent.error` is the failed agent's reason, which names a field and
+never a value. The actions that decide them live in `settings/actions.ts`, tested over doubles
+(stage 7). The actions remember the last notice: it lasts until the next action answers, a success
+clears it and a refusal replaces it, or until the page loads again, when `getState` clears it. The
+pushes main makes on its own, a host change or the tray's login toggle, send `pushedState()`, the
+fresh state carrying the remembered notice, so a background push does not erase it; this matters
+because the host polls every ten seconds while attached. The page shows the notice in a permanent
+live region: `page.html` holds an always-present `<p id="notice" role="status">` above the
+sections, which `render` fills and hides, so a screen reader announces a refusal.
 
 ## 10. Tray, login item, logging
 
@@ -235,7 +258,8 @@ matching the app. The detail section is present only once the detail levels desi
   `desktop.started`, `desktop.attached`, `desktop.takeover`, `desktop.agentFault`,
   `desktop.agentFailed`, `desktop.hooksRepaired`, `desktop.hooksFailed` (a hook write that failed or
   threw, with a boolean for whether it was a launch repair), `desktop.folderFailed` (a watched-folder
-  change that was refused or threw), `desktop.loginItemReapplied`. Retention follows
+  change that was refused or threw), `desktop.attachedChange` (a config change saved while attached
+  to another agent, which will not see it), `desktop.loginItemReapplied`. Retention follows
   `logRetentionDays`.
 
 ## 11. Packaging and distribution
@@ -268,9 +292,8 @@ matching the app. The detail section is present only once the detail levels desi
 - Version: `apps/desktop/package.json`, shown in the settings window and after the status in the
   tray tooltip.
 - Updating: quit the app, unzip the new version over the folder, launch. The hooks and the login
-  item point at the same path, so nothing is repaired. Unzipping to a new place is the moved-folder
-  case in §8 and §10. When a new version changes the hook scripts, open Settings and choose
-  Reinstall after updating: the scripts in `~/.clawd/bin` are only refreshed by an install.
+  item point at the same path; the launch repair copies the scripts again when the new version
+  changed them (stage 7). Unzipping to a new place is the moved-folder case in §8 and §10.
 - Signing: none. SmartScreen warns once for an exe extracted from a downloaded zip. An enterprise
   policy that blocks unsigned executables in user-writable directories blocks this too; a
   certificate is the fix, not a code change.
@@ -290,7 +313,8 @@ matching the app. The detail section is present only once the detail levels desi
 | 5 Settings | The settings window, preload, IPC, the folder picker, hook install and repair with the runtime prefix | Preload, `contextBridge`, `ipcMain`, dialogs, process-model security | A fresh machine is set up from the app alone |
 | 6 Package | Icons, electron-builder with the `dir` and `zip` targets, fuses | Packaging, asar, fuses, `process.execPath` in a packaged app | A teammate unzips the folder, runs the exe, and sets up hooks from the settings window; moving the folder and relaunching repairs the hooks and the login item |
 | 6.1 Review fixes | The findings of the review of stage 6's merge (§12.1) | None new | Each is done or recorded with a reason |
-| Post-dev Hardening | The fixes and checks deferred from the stage reviews (§12.1) | None new | Each item in §12.1 is fixed, or dropped with a reason in the decision log |
+| 7 Hardening I | The hooks, the install, the bridge, and what development leaves behind (§12.1) | None new | Every §12.1 item marked stage 7 is done or dropped with a reason |
+| 8 Hardening II | The page's rendering and tests, the shell's edge cases, the scheme, the stale wait (§12.1) | None new | Every remaining §12.1 item is done or dropped with a reason in the decision log |
 
 Each stage has its own plan and branch and is merged before the next starts. Stage 5's detail
 section lands with whichever of stage 5 and the detail levels design is later.
@@ -411,7 +435,7 @@ Found in the reviews of stage 5 (16 September 2026).
   things: save, then restart only when the save succeeded, and log a code when a write fails. That is
   where the last-folder defect lived and where two more were found in review. `createHandlers`
   already takes its actions injected, so a `createSettingsActions(deps)` factory could be tested with
-  doubles and leave `main.ts` as the wiring the design intends.
+  doubles and leave `main.ts` as the wiring the design intends. Done in stage 7: `settings/actions.ts`.
 - **The settings window does not get the app's font.** The build copies only the page's markup and
   stylesheet into its directory, and the settings origin may load only its own files, so the face the
   visualiser uses is out of reach and the window falls back to whatever the machine has. Ship the
@@ -419,7 +443,8 @@ Found in the reviews of stage 5 (16 September 2026).
 - **A status line removed by hand is reinstated at every launch.** `hookStatus` calls our hook
   present with the status line missing `stale`, and launch repair now runs unattended, so it writes
   back something the user deleted. Decide whether that is repair or override; the same predicate also
-  drives the settings window's Reinstall button, where writing it back is clearly right.
+  drives the settings window's Reinstall button, where writing it back is clearly right. Done in
+  stage 7: decided, it is stale and the packaged app repairs it.
 - **The preload carries the validation library.** The bridge script imports only the channel names,
   but the module holding them also builds a schema, and `@clawd/core` is not marked side-effect free,
   so the bundler keeps the whole barrel: roughly 750 kB loaded before every settings page. Mark the
@@ -429,16 +454,17 @@ Found in the reviews of stage 5 (16 September 2026).
   port was edited, or whose token no longer matches after `config.json` was recreated, still reports
   `current`: the launch repair never fires, the settings window says the hooks are installed, and
   events are lost with nothing said. Decide it together with the hand-deleted status line item above,
-  since both are what `stale` should mean.
+  since both are what `stale` should mean. Done in stage 7: the whole set is compared.
 - **The bridge cannot tell the user an action was refused.** Every call answers with the whole state
   and nothing else, so a refusal — a drive root picked in the folder dialog, say — re-renders an
   identical page. Two defects have traced to this. The refusal now logs a code, which makes it
   diagnosable but not visible. Adding a message to the bridge's answers would breach this stage's rule
-  that the list of calls does not grow, so it belongs to a stage that revisits the bridge.
+  that the list of calls does not grow, so it belongs to a stage that revisits the bridge. Done in
+  stage 7: the state's `notice`.
 - **The failed agent's reason is never shown.** The host keeps a message for an unusable config, which
   the design says the settings window should show beside the log directory and the retry button. The
   directory is now rendered, but the reason has no route to the page: it is not part of the state the
-  bridge carries. Add it when the bridge next changes.
+  bridge carries. Add it when the bridge next changes. Done in stage 7: `agent.error`.
 
 Found in the overall review of the desktop app at stage 5 (17 September 2026). Three were taken into
 stage 6: the launch repair no longer runs unattended in development, the folder picker belongs to the
@@ -448,12 +474,12 @@ settings window, and the detail setter is caught and logged. The rest wait for t
   call `host.restart()`, but while the host is attached to another process's agent `release()` is a
   no-op and `attempt()` re-attaches, so the other agent keeps its allowlist and detail level while the
   page lists the change as applied, with no log code. Detect attached in the actions, log a code, and
-  carry a notice into the state when the bridge next changes.
+  carry a notice into the state when the bridge next changes. Done in stage 7.
 - **An unreadable config or settings file reads as "not installed".** `hookOptions()` maps a
   `ConfigError` to null, and `currentHookStatus()` maps that, an invalid-JSON settings file, or a
   settings file that is a JSON array (cast without `isJsonObject`) to `missing`. The page then hides
   Remove, the launch repair is skipped, and the offered Install fails silently. Add an `unreadable`
-  status and use `isJsonObject` on the read.
+  status and use `isJsonObject` on the read. Done in stage 7.
 - **`install()` saves the config before the hooks can still fail.** The allowlist and port are written
   through `setAllowlist()` before `installHooks()` copies the scripts and re-reads the settings file;
   a copy failure, or a settings file rewritten between the dry-run check and the real read, leaves
@@ -461,12 +487,12 @@ settings window, and the detail setter is caught and logged. The rest wait for t
   can save the empty allowlist the pre-check meant to forbid. Save the config once inside
   `installHooks` after the copy, passing the merged allowlist in; that also removes the four config
   reads per install, the second merge, the unreachable guard after `setAllowlist`, and the unread
-  `HooksResult.allowlist` field.
+  `HooksResult.allowlist` field. Done in stage 7.
 - **An install from the app can mint a token the serving agent lacks.** With no config in the app's
   home the installer falls back to a default config with a fresh token, and the agent is not
   restarted; attached to an agent running from a different home, the written hooks carry a token that
   agent refuses while the page says installed. Refuse or warn when installing hooks without owning the
-  agent, and never create a config from the settings window.
+  agent, and never create a config from the settings window. Done in stage 7.
 - **The settings page rebuilds itself on every push.** `render()` replaces every node when the text
   differs, which is what drops the button's `aria-busy` guard (a second Add folder during the picker,
   now modal but still a second request once it closes), resets an in-flight radio for the moment
@@ -476,10 +502,11 @@ settings window, and the detail setter is caught and logged. The rest wait for t
 - **Every state build reads the config twice.** `currentState()` reads and parses `config.json`, then
   `currentHookStatus()` reads it again before the settings file, in series; at startup the fallback
   build is followed by a second `currentHookStatus()` for the launch repair. Read once and pass the
-  config into a `hookStatusFor(config)`, and reuse the startup state's `hooks` for the repair.
+  config into a `hookStatusFor(config)`, and reuse the startup state's `hooks` for the repair. Done
+  in stage 7.
 - **The login toggle from the page builds the state twice.** `setOpenAtLogin()` ends with
   `pushState()`, and the IPC action then returns a second `currentState()`; the page renders both.
-  Split apply from push.
+  Split apply from push. Done in stage 7.
 - **The bridge is typed by hand in three places.** `Api` in the page, `SettingsActions` in the
   handlers and an untyped literal in the preload, with nothing linking them; the unions copied into
   `settings/state.ts` are checked one way only. One `SettingsApi` in the import-free `settings/state.ts`,
@@ -491,12 +518,13 @@ settings window, and the detail setter is caught and logged. The rest wait for t
 - **The desktop calls the CLI-shaped uninstall with a no-op printer.** `uninstall()` returns 0 for
   three outcomes and reports refusals only through `print`, so the desktop cannot tell removed from
   nothing-to-remove or log which refusal happened. Split it the way install was: a result-returning
-  core with the CLI's printing on top, and the same for `setDetail`.
+  core with the CLI's printing on top, and the same for `setDetail`. Done in stage 7.
 - **Two host tables in `scheme.ts`.** Host to directory and host to policy are two ternaries, the URL
   is parsed twice per request, and `settingsPolicy()` rebuilds a constant. One per-host table
   consulted once, which is also where the "handler that can reject" item above belongs.
 - **The detail default duplicates `detailLevel()`.** `currentState` writes `config?.detail ?? "none"`
   while the agent uses `detailLevel()`, which the agent package does not export. Export it and call it.
+  Done in stage 7.
 
 Found in the final review of stage 6 (17 September 2026). They wait for the hardening pass.
 
@@ -505,8 +533,7 @@ Found in the final review of stage 6 (17 September 2026). They wait for the hard
   launch repair finds nothing to do; the three scripts the installer copied into `~/.clawd/bin` are
   left at the old version. The real fix is to compare the scripts bundled beside the archive with
   the copies in `~/.clawd/bin` at launch, or stamp them with the version, and copy them again when
-  they differ. Until then, the documents tell the maintainer to choose Reinstall from Settings after
-  an update that changes the scripts.
+  they differ. Done in stage 7: the scripts are compared at launch.
 - **The icon check compares bytes.** `build/icons.mjs --check` compares the checked-in ICOs with a
   fresh render byte for byte, and the PNGs inside come from `node:zlib`, so a Node upgrade that
   changes zlib's output fails `pnpm test` with no sprite change. Compare decoded pixels instead,
@@ -549,9 +576,38 @@ Found in the review of stage 6's merge (17 September 2026), and taken as stage 6
   CLI's install, take turns rewriting the hooks and leaving a backup each. Accepted for now: the
   package is for teammates without the CLI, and the maintainer's machine runs one or the other. The
   cure, if wanted, goes with stage 7's hook-status rework: repair only when the installed command's
-  exe is this one or no longer exists, and otherwise show `stale` and offer Reinstall.
+  exe is this one or no longer exists, and otherwise show `stale` and offer Reinstall. Done in
+  stage 7: the repair fires only for this exe or an exe that no longer exists.
 - **The `distPaths` tests spell Windows paths.** By the design's rule that nothing is tested
   elsewhere. Accepted.
+
+Stage 8 takes what remains: the settings page rebuilding on every push, its missing tests (a DOM
+environment for vitest), the bridge typed by hand in three places, the two window copies, the
+scheme's host table with the handler that can reject, Windows device names, the 404 body,
+`args.ts`'s dependency on `scheme.ts`, `connect-src 'self'`, one source for the agent's port, an
+unreadable `desktop.json`, restored bounds, the Start on login checkbox and Task Manager, Ctrl+Q on
+other layouts, tearing the tray down in `will-quit`, the settings window's font, the preload's
+bundle, zod's eval probe, the built-in `http://localhost:3000` origin, the restart that clears the
+fault budget, the two extra fuses, and the wait nobody answers.
+
+Found in stage 7's reviews.
+
+- **The plan's `currentState()` built `notice: null` for every push.** A notice was erased by the
+  next host snapshot, within ten seconds while attached. Done in stage 7: the actions remember the
+  last notice and pushes carry it.
+- **The notice was a node inserted on each render and never announced.** Done in stage 7: a
+  permanent `role="status"` region.
+- **The plan's backup-naming test edited a setting that an install does not write.** No second
+  backup could appear. Done in stage 7: the test changes a managed hook's port.
+- **The live region's text is rewritten on every render.** A notice that persists may be announced
+  again when an unrelated push redraws the page. Left for stage 8, with the page's tests: write the
+  text only when it differs, and unhide before writing.
+- **An unreadable config and a missing one refuse in the same words.** With an unreadable config,
+  `hasConfig` reads as no config, so the two refusals would word it as "no config". Accepted: the
+  page cannot reach either one, since an unreadable config shows no folders and no hook buttons.
+- **Uninstall's `missing` outcome shares its sentence with `nothing`'s.** No settings file and a
+  settings file with none of our hooks both answer "no hooks of ours were found; nothing was
+  changed". Accepted: the sentence is true either way.
 
 Found while stage 6.1 was built, and done in it.
 
