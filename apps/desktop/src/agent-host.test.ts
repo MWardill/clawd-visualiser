@@ -16,7 +16,7 @@ async function advance(ms: number): Promise<void> {
 type FakeAgent = RunningAgent & { stopped: boolean; emit(s: Snapshot): void };
 
 /** A host over fakes. Each start throws the next error in `fail`, then succeeds on port 4750. */
-function harness(opts: { fail?: unknown[]; probe?: AgentHostDeps["probe"]; counts?: AgentHostDeps["counts"] } = {}) {
+function harness(opts: { fail?: unknown[]; probe?: AgentHostDeps["probe"]; counts?: AgentHostDeps["counts"]; onSnapshot?: NonNullable<AgentHostDeps["onSnapshot"]> } = {}) {
   const fail = [...(opts.fail ?? [])];
   const codes: string[] = [];
   const agents: FakeAgent[] = [];
@@ -41,6 +41,7 @@ function harness(opts: { fail?: unknown[]; probe?: AgentHostDeps["probe"]; count
     counts: opts.counts ?? (async () => null),
     log: (code) => void codes.push(code),
     now: () => Date.now(),
+    ...(opts.onSnapshot === undefined ? {} : { onSnapshot: opts.onSnapshot }),
   });
   return { host, codes, agents, starts: () => starts };
 }
@@ -105,6 +106,23 @@ describe("createAgentHost", () => {
     expect(host.state()).toMatchObject({ mode: "own", port: 4750, sessions: 0, waiting: 0 });
     agents[0]?.emit(snapshot(["working", "waiting", "waiting"]));
     expect(host.state()).toMatchObject({ sessions: 3, waiting: 2 });
+  });
+
+  it("hands its own agent's snapshots on with the number of the start they came from, and never a replaced agent's", async () => {
+    const seen: Array<[number, number]> = [];
+    const { host, agents } = harness({ onSnapshot: (s, run) => void seen.push([s.sessions.length, run]) });
+    host.start();
+    await flush();
+    agents[0]?.emit(snapshot(["working"]));
+    host.fault();
+    await flush();
+    await advance(1_000);
+    agents[0]?.emit(snapshot(["working", "idle"]));
+    agents[1]?.emit(snapshot(["working", "idle", "idle"]));
+    expect(seen).toEqual([
+      [1, 1],
+      [3, 2],
+    ]);
   });
 
   it("attaches to an agent already answering on the port, polls it, and takes over when it goes quiet", async () => {

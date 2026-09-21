@@ -41,14 +41,20 @@ export async function probeHealth(port: number, timeoutMs = PROBE_TIMEOUT_MS): P
   }
 }
 
-/** The session counts of the agent on the port, or null when it does not answer with a snapshot. */
-export async function fetchCounts(port: number, timeoutMs = COUNTS_TIMEOUT_MS): Promise<Counts | null> {
+/** The snapshot of the agent on the port, or null when it does not answer with one. Asked with no Origin, as a hook or the CLI would, so an agent that refuses the app's page still answers. */
+export async function fetchSnapshot(port: number, timeoutMs = COUNTS_TIMEOUT_MS): Promise<Snapshot | null> {
   try {
     const parsed = SnapshotSchema.safeParse(await getJson(port, ENDPOINTS.snapshot, timeoutMs));
-    return parsed.success ? countsOf(parsed.data) : null;
+    return parsed.success ? parsed.data : null;
   } catch {
     return null;
   }
+}
+
+/** The session counts of the agent on the port, or null when it does not answer with a snapshot. */
+export async function fetchCounts(port: number, timeoutMs = COUNTS_TIMEOUT_MS): Promise<Counts | null> {
+  const s = await fetchSnapshot(port, timeoutMs);
+  return s === null ? null : countsOf(s);
 }
 
 /** Whether the agent on the port holds a token: it does, it refuses it, or it did not say. */

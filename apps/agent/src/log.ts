@@ -25,6 +25,8 @@ export type LogCode =
   | "desktop.stateUnreadable"
   | "desktop.stateWriteFailed"
   | "desktop.loginItem"
+  | "desktop.viewChanged"
+  | "desktop.widgetFailed"
   | "ingest.counts"
   | "ingest.failed"
   | "presence.failed"
