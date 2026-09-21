@@ -131,6 +131,21 @@ describe("guards", () => {
     expect((await send(port, { path: "/api/stream", headers: { origin: "app://other" } })).status).toBe(403);
   });
 
+  it("refuses the dev server's origins when the host leaves them out, and still lets the desktop app's page and a configured origin in", async () => {
+    // Not WEB: that is the dev server's own origin, and a config listing it is how a host gets it back.
+    const configured = "https://clawd.example";
+    const { port } = await start({ devOrigins: false, config: { allowlist: [ALLOWED_ROOT], token: TOKEN, corsOrigins: [configured] } });
+    for (const origin of ["http://localhost:3000", "http://127.0.0.1:3000"]) {
+      expect((await send(port, { path: "/api/health", headers: { origin } })).status).toBe(403);
+      expect((await send(port, { path: "/api/stream", headers: { origin } })).status).toBe(403);
+    }
+    for (const origin of [DESKTOP_ORIGIN, configured]) {
+      const reply = await send(port, { path: "/api/health", headers: { origin } });
+      expect(reply.status).toBe(200);
+      expect(reply.headers["access-control-allow-origin"]).toBe(origin);
+    }
+  });
+
   it("answers an allowed preflight, including private network access", async () => {
     const { port } = await start();
     const reply = await send(port, {

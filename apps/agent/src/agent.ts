@@ -28,6 +28,8 @@ export type AgentOptions = {
   transcriptsDir?: string;
   /** Each changed snapshot, as the stream receives it. The desktop app counts sessions from it. */
   onSnapshot?: (s: Snapshot) => void;
+  /** Whether `http://localhost:3000` and `http://127.0.0.1:3000` are accepted with no configuration. Default true; the packaged desktop app passes false. */
+  devOrigins?: boolean;
 };
 
 export type RunningAgent = { port: number; stop(): Promise<void> };
@@ -119,6 +121,7 @@ export async function startAgent(opts: AgentOptions): Promise<RunningAgent> {
     log,
     counts,
     sensitive,
+    ...(opts.devOrigins === undefined ? {} : { devOrigins: opts.devOrigins }),
   });
 
   // Read before listening, applied after: an agent that cannot bind its port changes nothing.

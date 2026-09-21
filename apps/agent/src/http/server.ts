@@ -38,6 +38,8 @@ export type ServerDeps = {
   counts: IngestCounts;
   /** Strings no response body may contain: the live working directories. */
   sensitive: () => readonly string[];
+  /** Whether the dev server's origins are accepted with no configuration. Absent means yes. */
+  devOrigins?: boolean;
   limits?: { hook?: number; status?: number; command?: number };
 };
 
@@ -130,7 +132,7 @@ export function createAgentServer(deps: ServerDeps): Server {
   }
 
   async function handleApi(req: IncomingMessage, res: ServerResponse, path: string): Promise<void> {
-    const origin = checkOrigin(req.headers.origin, allowedOrigins(deps.config.corsOrigins));
+    const origin = checkOrigin(req.headers.origin, allowedOrigins(deps.config.corsOrigins, deps.devOrigins !== false));
     if (origin.kind === "denied") return refuse(req, res, 403, { error: "origin not allowed" });
     const cors: Headers = origin.kind === "allowed" ? { "access-control-allow-origin": origin.origin, vary: "Origin" } : {};
 
