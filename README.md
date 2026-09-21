@@ -68,3 +68,5 @@ forces the simulation; `?source=live` disables the fallback. Click a Clawd for i
   the **clawd-animation** skill by mmguo, found at <https://mmguo.dev/clawd/>. The visualiser draws
   its Clawds with that engine and follows its rules: one flat body colour, single-pixel eyes, no mouth,
   mood carried by eyes, accessories and particles.
+- The desktop app's settings window ships **JetBrains Mono** (SIL Open Font License 1.1), by JetBrains,
+  taken at build time from the `@fontsource/jetbrains-mono` package.

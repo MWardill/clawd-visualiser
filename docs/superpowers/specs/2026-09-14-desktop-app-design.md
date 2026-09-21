@@ -39,7 +39,8 @@ or tested elsewhere); code signing; the detail levels themselves (the detail lev
 ```
 apps/desktop/
   package.json            @clawd/desktop. No dependencies. devDependencies: electron, electron-builder,
-                          esbuild, vitest, typescript, @clawd/agent, @clawd/core
+                          esbuild, vitest, typescript, @clawd/agent, @clawd/core, happy-dom,
+                          @fontsource/jetbrains-mono
   electron-builder.yml    dir and zip targets, asar, fuses, extraResources for the icons and the scripts
   build/
     bundle.mjs            esbuild: main, preload, settings page script; copies the tray icons and the hook scripts
@@ -57,12 +58,14 @@ apps/desktop/
     window.ts             BrowserWindow, bounds persistence, hide on close
     tray.ts               icon, badge, tooltip, menu
     login.ts              setLoginItemSettings wrapper
+    reveal.ts             show the window there is, or make one; nothing once quitting has begun
     hooks.ts              hook status (missing, current, stale, unreadable) from the config, the file and the scripts; the runtime prefix
     settings/
       preload.ts          the contextBridge API
       ipc.ts              ipcMain handlers, zod-validated
+      channels.ts         the bridge's channel names, import-free, all the preload takes
       actions.ts          the settings actions: save, restart, refuse, notice; tested over doubles
-      page.html, page.ts  the settings window
+      page.html, page.ts  the settings window, built once and patched; page.test.ts runs it under happy-dom
   resources/              the tray ICOs and the app icon, generated and checked in
   dist/                   build output, ignored; release/ is the packager's, also ignored
 ```
@@ -80,8 +83,9 @@ command, tooltip text, argument parsing) is a pure module with tests, as in the 
    re-apply the login item and repair the hooks if the exe has moved (§8, §10), and create the
    window unless `--hidden`.
 4. Closing the window hides it. Quit (tray menu or Ctrl+Q) sets a quitting flag, hides the window,
-   awaits `host.stop()` and calls `app.exit(0)`. `will-quit` is held until the stop resolves, capped
-   at five seconds.
+   awaits `host.stop()` and calls `app.exit(0)`. The tray icon is taken away in `will-quit`, when the
+   quit is certain, not in `before-quit`, which a page could still cancel. `will-quit` is held until
+   the stop resolves, capped at five seconds.
 5. `uncaughtException` and `unhandledRejection` in main are logged by code and handed to the host
    (§5). The app never shows Electron's crash dialog.
 
@@ -92,15 +96,19 @@ Wraps `startAgent({ home: defaultHome(), log, onSnapshot })` (§6 adds the optio
 States: `starting → own | attached | failed`; `own → restarting → own | failed`; `attached → own`.
 
 - **own.** `startAgent` resolved; the app holds the `RunningAgent`.
-- **attached.** `startAgent` threw `PortInUseError` and a health probe on the port answered within
-  500 ms: another agent (the CLI's, say) is serving. The host polls health every 10 s and, when it
-  stops answering, starts its own (takeover). A folder or detail-level change made while attached is
-  saved but not applied, since the other agent read its config at its own start: the page says so
-  and `desktop.attachedChange` is logged. Installing hooks while attached with no config of this
-  app's own is refused, since they would carry a token the other agent does not hold (stage 7); by
-  then, though, this app's own refused start has already written that config, so the refusal is
-  reached only if it is deleted afterwards, and an agent served from a different `CLAWD_HOME` still
-  answers the installed hooks' token with 401 while the page says installed (§12.1).
+- **attached.** `startAgent` threw `PortInUseError` and a health probe on the port, sent with this
+  app's origin, answered within 500 ms: another agent (the CLI's, say) is serving. An agent that
+  answers the origin with its 403 was started before it knew `app://clawd`: the host attaches all the
+  same, logs `desktop.attachedRefused`, and the title, the tooltip and the settings page's reason say
+  the agent refuses this app, until it stops and the app takes over. The host polls health every 10 s
+  and, when it stops answering, starts its own (takeover). A folder or detail-level change made while
+  attached is saved but not applied, since the other agent read its config at its own start: the page
+  says so and `desktop.attachedChange` is logged. Installing hooks never creates a config: with none,
+  the install is refused, and unless the app is attached the agent is restarted to write one. With
+  one, the app first asks the agent on the port whether it holds the config's token, a
+  `POST /ingest/status` with the token and an empty body: a 401 while attached means that agent runs
+  from another `CLAWD_HOME` and the install is refused; a 401 from the app's own agent means the
+  config was recreated under it, and the agent is restarted before the hooks are written (stage 8).
 - **restarting.** A fault while own. The host stops what it can and calls `startAgent` again after a
   backoff of 1, 2, 4, 8 then 16 s. Five faults inside five minutes lead to failed.
 - **failed.** The tray shows the error state; the settings window shows the log directory and a
@@ -109,6 +117,9 @@ States: `starting → own | attached | failed`; `own → restarting → own | fa
 Faults: `startAgent` rejecting with anything but `PortInUseError` or `ConfigError`; an
 `uncaughtException` or `unhandledRejection` reaching main. A `ConfigError` (an unusable
 `config.json`) goes straight to failed with the CLI's message, which names a field and never a value.
+
+`settled()` resolves once the first start has left `starting`, or the host was stopped. The launch
+repair (§8) waits for it, since that start is what writes `config.json` when there is none.
 
 Counts for the tray come from `onSnapshot` when own, and from `GET /api/snapshot` every 10 s when
 attached.
@@ -130,26 +141,39 @@ attached.
   write, the http hooks with their port and token, the SessionStart command and the status line,
   and returns `missing`, `current` or `stale`; `uninstallHooks()` and `saveDetail()` are the
   result-returning cores the CLI's `uninstall` and `detail` print (stage 7).
+- `AgentOptions.devOrigins?: boolean`, default true. False leaves `http://localhost:3000` and
+  `http://127.0.0.1:3000` out of the built-in origins; the packaged desktop app passes false, since a
+  teammate's machine has no dev server of ours and whatever else listens on port 3000 there should
+  not read the stream. A config that lists one of them in `corsOrigins` still gets it (stage 8).
 
 ## 7. Renderer
 
 - One `BrowserWindow`: 1280 by 800, black background, `autoHideMenuBar`, `webPreferences: {
   sandbox: true, contextIsolation: true, nodeIntegration: false }`, no preload. Bounds persist in
-  the packaged app's `~/.clawd/desktop.json` and a development run's `desktop-dev.json` (§10).
+  the packaged app's `~/.clawd/desktop.json` and a development run's `desktop-dev.json` (§10). They
+  are restored when enough of the title strip shows on the displays there are now, counted across a
+  seam between two of them, and made no larger than the work area holding most of the window; the
+  maximised state is kept too (stage 8).
 - The window loads `--dev-url`, else `CLAWD_DESKTOP_URL`, else `app://clawd/`. The desktop
   package's `dev` script passes `--dev-url http://localhost:3000` for the hot-reload loop, and
   `start` loads the export (changed in the stage 3 plan, so the export runs before packaging).
   Packaged, both the flag and the variable are ignored and the export is loaded, so nothing in a
   teammate's environment can point the app elsewhere (stage 6).
 - The scheme handler maps `app://clawd/<path>` to `<renderer dir>/<path>` and `/` to `index.html`.
-  The mapper is pure: it decodes, normalises, refuses `..` and absolute paths, and returns null for
-  anything outside the renderer directory. MIME comes from a fixed table (html, js, css, json, png,
-  ico, svg, woff2, txt, map); anything else is 404.
+  The mapper is pure: it decodes, normalises, refuses `..` and absolute paths, and any segment whose
+  name before the first dot is a Windows device (`CON`, `NUL`, `COM1`…), which Windows 10 would open
+  as one, and returns null for anything outside the renderer directory. MIME comes from a fixed table
+  (html, js, css, json, png, ico, svg, woff2, txt, map); anything else is 404. A path that looks like
+  a page and is not there is answered with the export's `404.html` when it has one. The handler never
+  rejects: a port getter that throws falls back to the default port, and a read that fails is a 404.
+  Both hosts come from one table, looked up once per request; a host that is neither gets the settings
+  page's policy, the strictest.
 - Every response carries `Content-Security-Policy: default-src 'self'; script-src 'self'
   'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self';
-  connect-src http://127.0.0.1:<port> http://localhost:<port>; frame-ancestors 'none'`, with the
-  agent's port. Inline is allowed because Next's export emits inline scripts; the renderer is
+  connect-src 'self' http://127.0.0.1:<port> http://localhost:<port>; frame-ancestors 'none'`, with
+  the agent's port. Inline is allowed because Next's export emits inline scripts; the renderer is
   sandboxed and the network is limited to the agent, which is where the policy earns its keep.
+  `'self'` lets a page that navigates on the client fetch its own payloads.
 - `app://settings/` serves the settings page from `<dist>/settings/` in a window with the preload (§9).
 - Next: `output: "export"` and `images: { unoptimized: true }` when `CLAWD_TARGET=desktop`. The web
   app's source is otherwise untouched.
@@ -174,7 +198,9 @@ attached.
   point the prefix at it, a configuration change only.
 - The `runAsNode` fuse stays enabled (`electronFuses.runAsNode: true`). Turning it off would break
   every installed hook.
-- On launch, `hooks.ts` reads the settings file. `current`: nothing. `stale` (ours present with any
+- Once the host's first start has settled, `launchRepair()` in `hooks.ts` reads the settings file. It
+  waits because that start writes `config.json` when there is none, and hooks left from before then
+  carry the old token, which only a status read after the write sees as stale. `current`: nothing. `stale` (ours present with any
   part different from what an install would write now: the commands after the folder moved or a new
   version was unzipped elsewhere, an http hook's port or token, a status line removed by hand, or a
   script in `~/.clawd/bin` that differs from the one shipped beside the archive, which is how an
@@ -209,7 +235,7 @@ type SettingsState = {
   notice: string | null;
 };
 
-type ClawdSettingsApi = {
+type SettingsApi = {
   getState(): Promise<SettingsState>;
   addFolder(): Promise<SettingsState>;          // opens the folder picker
   removeFolder(dir: string): Promise<SettingsState>;
@@ -222,6 +248,10 @@ type ClawdSettingsApi = {
   onState(cb: (s: SettingsState) => void): () => void;
 };
 ```
+
+`SettingsApi` lives in the import-free `settings/state.ts`; the preload's literal `satisfies` it, the
+page declares `window.clawd` with it, and main's actions are `Omit<SettingsApi, "onState">`, so the
+bridge is spelled once (stage 8).
 
 Main validates every argument with zod. Folder edits and level changes save the config and restart
 the agent in process, so the README's "restart the agent after changing the allowlist" happens for
@@ -240,9 +270,13 @@ own: the attached one, once the host reads `own`, because only this app's own ru
 read the saved config. A takeover that is still `starting`, or that faulted into `restarting` or
 `failed`, has read nothing and keeps the notice, so a single missed health probe cannot make the
 page stop saying that a saved change has not been applied. The bridge refreshes with `pushedState()`
-too when an action throws, since `getState` means the page is asking again and clears the notice. The page shows the notice in a permanent
-live region: `page.html` holds an always-present `<p id="notice" role="status">` above the
-sections, which `render` fills and hides, so a screen reader can announce it; not yet checked with one.
+too when an action throws, since `getState` means the page is asking again and clears the notice. The
+page shows the notice in a live region that is always rendered: `page.html` holds an empty
+`<div id="notice-region" role="status">` above the sections, and `render` puts the styled paragraph
+inside it and takes it out, replacing it only when the text changes or the user's own action earns
+the same sentence again, so a push that carries an old notice is not read out twice. The page is
+built once and patched after that: text, `hidden` and `checked` are set in place, only the folder
+list is rebuilt, and only when it changes (stage 8).
 
 ## 10. Tray, login item, logging
 
@@ -251,12 +285,17 @@ sections, which `render` fills and hides, so a screen reader can announce it; no
   variant with an amber dot for waiting above zero. The app's own icon is an ICO up to 256 px from
   the same sprite. `pnpm test` fails if a checked-in icon no longer matches the sprite. Tooltip:
   `Clawd Visualiser · 3 sessions · 1 waiting`, with `· agent attached` or `· agent failed` appended
-  in those states. Menu: Open, Settings, Start on login (checkbox), Quit. Clicking the icon opens the
+  in those states, or `· agent attached, refuses this app`. Menu: Open, Settings, Start on login (checkbox), Quit. Clicking the icon opens the
   window.
 - Login item: `app.setLoginItemSettings({ openAtLogin, args: ["--hidden"] })`. Turned on the first
   time the packaged app runs (a flag in `desktop.json`). The settings toggle and the tray checkbox
-  read `getLoginItemSettings()`. On every launch, when it is on, `login.ts` applies it again so the
-  registered path follows a moved folder. In development the Run value has its own name
+  read `getLoginItemSettings()`. They show off when Windows has the entry but the user has switched
+  it off in Task Manager's startup list, which Electron reports per entry in `launchItems`; when
+  Electron reports no entry of ours, which stage 6 saw for the packaged exe, they go by `openAtLogin`
+  as before, and each launch logs what Electron said as `desktop.loginItem`. A `desktop.json` that
+  exists but could not be read is never written over, and the first-run enable is skipped, since a
+  stored choice of off may be in it (stage 8). On every launch, when it is on, `login.ts` applies it
+  again so the registered path follows a moved folder. In development the Run value has its own name
   (`<appId>.dev`), its toggle is remembered in its own `desktop-dev.json`, and nothing is enabled or
   re-applied at launch, so a development run cannot disturb the packaged app's entry (stages 6 and
   6.1). `desktop.json` is version 2 since stage 6.1; a version 1 file, which only development runs
@@ -271,6 +310,9 @@ sections, which `render` fills and hides, so a screen reader can announce it; no
   that was refused or threw), `desktop.detailFailed` (a detail level that could not be saved),
   `desktop.loginFailed` (a login choice the system would not take), `desktop.attachedChange` (a
   config change saved while attached to another agent, which will not see it),
+  `desktop.attachedRefused` (attached to an agent that refuses this app's origin),
+  `desktop.stateUnreadable` and `desktop.stateWriteFailed` (the state file), `desktop.loginItem`
+  (what Electron reports of the login item at launch: numbers and booleans),
   `desktop.stopTimedOut`, `desktop.loginItemReapplied`. Every action that writes says why in the
   notice as well, so no failure is silent. Retention follows
   `logRetentionDays`.
@@ -280,11 +322,14 @@ sections, which `render` fills and hides, so a screen reader can announce it; no
 - electron-builder, configured in `electron-builder.yml`: `appId: io.github.mwardill.clawd-visualiser`,
   `win.target: ["dir", "zip"]`, output in `release/` (its default, `dist`, is the bundle's directory),
   asar on, `npmRebuild: false`, fuses `runAsNode: true`, `enableCookieEncryption: true`,
-  `onlyLoadAppFromAsar: true`. The archive's `package.json` gets `productName: Clawd Visualiser`
+  `onlyLoadAppFromAsar: true`, `enableNodeOptionsEnvironmentVariable: false`,
+  `enableNodeCliInspectArguments: false`. The archive's `package.json` gets `productName: Clawd Visualiser`
   through `extraMetadata`, the only place the name is written, so the packaged app's name, and
   with it its profile folder under `%APPDATA%` and its single-instance lock, differ from a
   development run's `@clawd/desktop` and neither blocks the other from starting. The archive holds
-  `dist/main.cjs`, `dist/renderer/` and `dist/settings/`, without source maps; the tray icons and the
+  `dist/main.cjs`, `dist/renderer/` and `dist/settings/`, without source maps; the settings directory
+  carries the latin JetBrains Mono at 400 and 700 with its licence, copied from a dev dependency by
+  the bundle step; the tray icons and the
   hook scripts go beside it through `extraResources`, under `resources/tray/` and `resources/hooks/`,
   because the tray loads its icon by path and the installer copies the scripts as files, and an asar
   is read-only and transparent only to Node's read calls. `paths.ts` finds them under
@@ -341,28 +386,36 @@ early; otherwise they are done after stage 6.
 - **Attaching to an agent that refuses the page.** The health probe (`agent-client.ts`) sends no
   `Origin`, so the host attaches to any agent that answers, including one started before stage 3
   that refuses `app://clawd` with 403. The title then says `agent attached` while the page stays
-  simulated. Probe with `Origin: app://clawd`, treat a 403 as an incompatible agent, log a code
-  for it, and say so in the title and the tray tooltip. Until then, the desktop README warns the
-  maintainer to restart such an agent.
+  simulated. Probe with `Origin: app://clawd`, treat a 403 as an incompatible agent, log a code for
+  it, and say so in the title and the tray tooltip. Until then, the desktop README warns the
+  maintainer to restart such an agent. Done in stage 8: the probe carries the app's origin, the
+  agent's own 403 reads as refused, the host attaches and says so, and the README's warning went.
 - **Windows device names in `app://` paths.** The scheme mapper accepts segments such as `CON.txt`,
   `NUL.js` or `COM1.json`. On Windows 11 they are ordinary missing files; on Windows 10 they are
   devices, and reading `CON` can hang the request. Refuse any segment whose name before the first
-  dot is a reserved device name, with tests, before teammates on Windows 10 run the app.
+  dot is a reserved device name, with tests, before teammates on Windows 10 run the app. Done in
+  stage 8.
 - **One source for the agent's port.** The first page's CSP is written before the host knows the
-  agent's port, so it names `DEFAULT_PORT` for the life of that page, and the export's agent URL
-  is fixed at build time. Neither matters on 4750. Before any stage lets the port vary, feed the
-  CSP and the page's agent URL from the same configured port, or reload the window once it is known.
+  agent's port, so it names `DEFAULT_PORT` for the life of that page, and the export's agent URL is
+  fixed at build time. Neither matters on 4750. Before any stage lets the port vary, feed the CSP
+  and the page's agent URL from the same configured port, or reload the window once it is known.
+  Dropped in stage 8: no stage lets the port vary and the settings window has no port control. A
+  test pins core's `DEFAULT_AGENT_URL` to the agent's `DEFAULT_PORT`, and the desktop README says
+  that a port edited by hand in `config.json` leaves the page simulated.
 - **`connect-src 'self'`.** The policy does not let the page fetch its own `app://` files, and today
   nothing does: the web app has one route and no client navigation. Add `'self'`, with a test, in
-  the change that adds `next/link` or router calls.
+  the change that adds `next/link` or router calls. Done in stage 8, ahead of the change that needs
+  it, so that change does not meet a silent failure.
 - **A handler that can reject.** `createSchemeHandler` calls `port()` outside its `try`, so a
   throwing port getter rejects the request. Main's getter cannot throw. Build the policy inside the
-  guard with a fallback port, and add a test with a rejecting `readFile`.
+  guard with a fallback port, and add a test with a rejecting `readFile`. Done in stage 8.
 - **The 404 body.** Unknown paths get a plain-text `not found` rather than the export's `404.html`.
-  Harmless with one route; serve `404.html` once there are more.
+  Harmless with one route; serve `404.html` once there are more. Done in stage 8: `404.html`, for
+  paths that look like a page, on the visualiser's host.
 - **`args.ts` depends on `scheme.ts`.** It imports `./scheme` only for `APP_URL`, which pulls core,
   zod and `fs` into the pure argument parser. Move the URL to a small constants module, or pass the
-  fallback in.
+  fallback in. Done in stage 8: the export's URL is passed in, and a test reads the file for
+  imports.
 - **The export build.** `build/renderer.mjs` exits without a message when the Next build cannot be
   spawned, and a stale `apps/web/out/index.html` would pass its check. Print the spawn error, and
   remove `apps/web/out` before building. Done in stage 6: the previous export is removed first and
@@ -372,10 +425,15 @@ early; otherwise they are done after stage 6.
   that they stay as a support tool. Done in stage 6: both are ignored when packaged.
 - **The built-in `http://localhost:3000` origin.** It can no longer be removed through the config,
   so any local dev server on port 3000 can read the redacted stream and send focus commands, as
-  default configs already allowed. Accept that in the decision log, or add an opt-out.
-- **zod's eval probe.** zod tests for `Function("")` on every page load, which the CSP reports as
-  an eval violation. It is harmless. Set `z.config({ jitless: true })` for the desktop target, or
-  note it as expected in the desktop README.
+  default configs already allowed. Accept that in the decision log, or add an opt-out. Done in stage
+  8, decided 21 September 2026: `startAgent` takes `devOrigins`, the packaged app passes false, and
+  the CLI and a development run keep the origins. No config field.
+- **zod's eval probe.** zod tests for `Function("")` on every page load, which the CSP reports as an
+  eval violation. It is harmless. Set `z.config({ jitless: true })` for the desktop target, or note
+  it as expected in the desktop README. Dropped in stage 8, and noted as expected in the desktop
+  README: zod probes when core's schemas are built, at import, so a `jitless` call would have to run
+  before any import of core, an order no test can pin, and it would put desktop-specific code in the
+  web app.
 - **Stage 3's manual check: done.** On 16 September 2026 the maintainer ran
   `pnpm --filter @clawd/desktop start` on the default port, and the page read live rather than
   simulated. Stage 3's automated smoke test had run on port 4751 because other processes held 4750
@@ -395,21 +453,27 @@ and is settled in its plan; the rest wait like the items above.
   as nothing remembered, so the next change overwrites the real file, and a packaged first run would
   turn the login item on against a stored off. A failed write is dropped with no log code. Tell
   unreadable from missing, skip writes and the first-run enable after an unreadable load, and log a
-  code for a failed write.
+  code for a failed write. Done in stage 8.
 - **Restored bounds.** Bounds saved on a large display are restored at full size on a smaller one,
   the maximised state is not kept, and a title strip across the seam of two displays counts as off
-  every display. Clamp the size to the chosen work area.
+  every display. Clamp the size to the chosen work area. Done in stage 8: clamped to the work area
+  holding most of the window, the maximised state kept, and a strip across a seam counted.
 - **The Start on login checkbox and Task Manager.** The tray checkbox reads `openAtLogin`, which
   ignores an entry disabled in Task Manager's startup list. Stage 5's settings toggle faces the same
   choice; `executableWillLaunchAtLogin` or `launchItems[].enabled` would show it. Check them against
   the packaged app first: stage 6's automated walk saw `launchItems` empty and
   `executableWillLaunchAtLogin` false for the packaged exe, whose path has spaces, while the Run
-  value was right and `openAtLogin` was true.
+  value was right and `openAtLogin` was true. Done in stage 8: an entry of ours that Electron
+  reports as disabled shows as off; when it reports none, `openAtLogin` decides as before, and
+  `desktop.loginItem` logs what Electron said at each launch.
 - **Ctrl+Q on other keyboard layouts.** `isQuitShortcut` matches `input.key`, so on a layout where
-  that key types another letter the shortcut never fires. Also accept `input.code === "KeyQ"`.
+  that key types another letter the shortcut never fires. Also accept `input.code === "KeyQ"`. Done
+  in stage 8, narrower than written: the physical key counts only when the typed key is outside
+  ASCII, since on AZERTY the physical Q key types `a` and Ctrl+A must stay select-all.
 - **Tearing the tray down before a quit is certain.** `before-quit` destroys the tray, so a quit
   cancelled by a page's `beforeunload` would leave the agent running with no tray icon. Nothing
-  registers `beforeunload` today; destroying the tray in `will-quit` removes the risk.
+  registers `beforeunload` today; destroying the tray in `will-quit` removes the risk. Done in stage
+  8.
 - **Tray icon scaling.** At 125% and 150% display scaling Windows resamples the 16 or 32 px PNG and
   blurs the pixel art. An ICO with 16, 20, 24 and 32 px images fixes it, with stage 6's icons, along
   with a check that the checked-in icons still match the sprite. Done in stage 6: ICOs at 16, 20, 24
@@ -446,28 +510,33 @@ Found in the reviews of stage 5 (16 September 2026).
 
 - **A restart the user asked for clears the fault budget.** `agent-host.ts`'s `restart()`, which the
   settings window calls after a folder or detail-level change, resets the fault history, so the
-  give-up path cannot fire while restarts keep arriving. That is deliberate: only the settings window
-  calls it, nobody clicks faster than five crashes accumulate, and keeping the budget would deny a
-  clean start to someone who has just fixed a bad config. Revisit it if anything else ever calls
-  `restart()`, especially on a timer.
+  give-up path cannot fire while restarts keep arriving. That is deliberate: only the settings
+  window calls it, nobody clicks faster than five crashes accumulate, and keeping the budget would
+  deny a clean start to someone who has just fixed a bad config. Revisit it if anything else ever
+  calls `restart()`, especially on a timer. Kept in stage 8: still deliberate. The settings actions
+  are still its only callers, now also from an install that finds the agent's token out of date or
+  its config gone, each a click.
 - **The settings actions are rules living in untested glue.** `main.ts`'s actions object decides
   things: save, then restart only when the save succeeded, and log a code when a write fails. That is
   where the last-folder defect lived and where two more were found in review. `createHandlers`
   already takes its actions injected, so a `createSettingsActions(deps)` factory could be tested with
   doubles and leave `main.ts` as the wiring the design intends. Done in stage 7: `settings/actions.ts`.
 - **The settings window does not get the app's font.** The build copies only the page's markup and
-  stylesheet into its directory, and the settings origin may load only its own files, so the face the
-  visualiser uses is out of reach and the window falls back to whatever the machine has. Ship the
-  font beside the page, or accept the fallback deliberately.
+  stylesheet into its directory, and the settings origin may load only its own files, so the face
+  the visualiser uses is out of reach and the window falls back to whatever the machine has. Ship
+  the font beside the page, or accept the fallback deliberately. Done in stage 8, decided 21
+  September 2026: shipped beside the page from the dev dependency `@fontsource/jetbrains-mono`.
 - **A status line removed by hand is reinstated at every launch.** `hookStatus` calls our hook
   present with the status line missing `stale`, and launch repair now runs unattended, so it writes
   back something the user deleted. Decide whether that is repair or override; the same predicate also
   drives the settings window's Reinstall button, where writing it back is clearly right. Done in
   stage 7: decided, it is stale and the packaged app repairs it.
 - **The preload carries the validation library.** The bridge script imports only the channel names,
-  but the module holding them also builds a schema, and `@clawd/core` is not marked side-effect free,
-  so the bundler keeps the whole barrel: roughly 750 kB loaded before every settings page. Mark the
-  core package side-effect free, or move the channel names into a module of their own.
+  but the module holding them also builds a schema, and `@clawd/core` is not marked side-effect
+  free, so the bundler keeps the whole barrel: roughly 750 kB loaded before every settings page.
+  Mark the core package side-effect free, or move the channel names into a module of their own. Done
+  in stage 8: the channel names have a module of their own, and the bundle step fails if the preload
+  passes 20 kB.
 - **The hook check ignores the port and the token.** `hookStatus` compares only the command hook and
   the status line, not the HTTP hook that carries the agent's port and token. A settings file whose
   port was edited, or whose token no longer matches after `config.json` was recreated, still reports
@@ -509,19 +578,20 @@ settings window, and the detail setter is caught and logged. The rest wait for t
   `HooksResult.allowlist` field. Done in stage 7.
 - **An install from the app can mint a token the serving agent lacks.** With no config in the app's
   home the installer falls back to a default config with a fresh token, and the agent is not
-  restarted; attached to an agent running from a different home, the written hooks carry a token that
-  agent refuses while the page says installed. Refuse or warn when installing hooks without owning the
-  agent, and never create a config from the settings window. Partly done in stage 7: the guard covers
-  a config deleted after this app attached, the only way the refusal in `installHooks` is reached,
-  since `startAgent` writes a fresh config before the app's own refused start reports attached. It
-  does not cover an agent served from a different `CLAWD_HOME`: hooks are installed carrying a token
-  that agent lacks, and the page still says installed. The cure is stage 8's.
+  restarted; attached to an agent running from a different home, the written hooks carry a token
+  that agent refuses while the page says installed. Refuse or warn when installing hooks without
+  owning the agent, and never create a config from the settings window. Partly done in stage 7: the
+  guard covers a config deleted after this app attached, the only way the refusal in `installHooks`
+  is reached, since `startAgent` writes a fresh config before the app's own refused start reports
+  attached. It does not cover an agent served from a different `CLAWD_HOME`: hooks are installed
+  carrying a token that agent lacks, and the page still says installed. The cure is stage 8's. Done
+  in stage 8: the install never creates a config, and asks the serving agent about the token first.
 - **The settings page rebuilds itself on every push.** `render()` replaces every node when the text
-  differs, which is what drops the button's `aria-busy` guard (a second Add folder during the picker,
-  now modal but still a second request once it closes), resets an in-flight radio for the moment
-  between a coalesced push and the answer, wipes a text selection, and swallows a click split across
-  old and new nodes. Patch counters and `checked` in place and rebuild only the folder list, with the
-  page test harness this list already calls for.
+  differs, which is what drops the button's `aria-busy` guard (a second Add folder during the
+  picker, now modal but still a second request once it closes), resets an in-flight radio for the
+  moment between a coalesced push and the answer, wipes a text selection, and swallows a click split
+  across old and new nodes. Patch counters and `checked` in place and rebuild only the folder list,
+  with the page test harness this list already calls for. Done in stage 8.
 - **Every state build reads the config twice.** `currentState()` reads and parses `config.json`, then
   `currentHookStatus()` reads it again before the settings file, in series; at startup the fallback
   build is followed by a second `currentHookStatus()` for the launch repair. Read once and pass the
@@ -532,19 +602,21 @@ settings window, and the detail setter is caught and logged. The rest wait for t
   Split apply from push. Done in stage 7.
 - **The bridge is typed by hand in three places.** `Api` in the page, `SettingsActions` in the
   handlers and an untyped literal in the preload, with nothing linking them; the unions copied into
-  `settings/state.ts` are checked one way only. One `SettingsApi` in the import-free `settings/state.ts`,
-  `satisfies` on the preload literal, and `Omit` for the actions.
+  `settings/state.ts` are checked one way only. One `SettingsApi` in the import-free
+  `settings/state.ts`, `satisfies` on the preload literal, and `Omit` for the actions. Done in stage
+  8.
 - **Two copies of the window hardening and of show-or-create.** `createSettingsWindow` repeats
   `createMainWindow`'s options and guards, and `showWindow` and `showSettings` already diverge
   (`showSettings` has no quitting guard and no `restore()`). One hardened-window factory and one
-  show-or-create helper.
+  show-or-create helper. Done in stage 8: `createHardenedWindow` and `showOrCreate`.
 - **The desktop calls the CLI-shaped uninstall with a no-op printer.** `uninstall()` returns 0 for
   three outcomes and reports refusals only through `print`, so the desktop cannot tell removed from
   nothing-to-remove or log which refusal happened. Split it the way install was: a result-returning
   core with the CLI's printing on top, and the same for `setDetail`. Done in stage 7.
-- **Two host tables in `scheme.ts`.** Host to directory and host to policy are two ternaries, the URL
-  is parsed twice per request, and `settingsPolicy()` rebuilds a constant. One per-host table
-  consulted once, which is also where the "handler that can reject" item above belongs.
+- **Two host tables in `scheme.ts`.** Host to directory and host to policy are two ternaries, the
+  URL is parsed twice per request, and `settingsPolicy()` rebuilds a constant. One per-host table
+  consulted once, which is also where the "handler that can reject" item above belongs. Done in
+  stage 8.
 - **The detail default duplicates `detailLevel()`.** `currentState` writes `config?.detail ?? "none"`
   while the agent uses `detailLevel()`, which the agent package does not export. Export it and call it.
   Done in stage 7.
@@ -563,7 +635,8 @@ Found in the final review of stage 6 (17 September 2026). They wait for the hard
   which `icons.test.ts` already knows how to do. Done in stage 6.1: pixels, after vitest.
 - **Two fuses the app does not need are still on.** `EnableNodeOptionsEnvironmentVariable` and
   `EnableNodeCliInspectArguments` are separate from `runAsNode`, so turning them off would not
-  affect the hooks. Consider them with signing.
+  affect the hooks. Consider them with signing. Done in stage 8: both off, and the smoke run shows
+  the exe still runs as Node.
 - **The smoke check can be answered by another agent.** If a CLI agent already holds the port, the
   packaged app attaches and the health answer comes from that agent. The app logs
   `desktop.attached` then, so the smoke script can fail or say so when the newest log contains it.
@@ -617,27 +690,32 @@ Found in the final review of stage 6.1 (17 September 2026). They wait for the ha
 - **A restarted poller logs a false failure.** A `stop()` followed at once by `start()` shares the
   run still in flight. That run was aborted, so it logs `presence.failed` and skips a poll, and the
   same sequence can leave two loops (older). No caller restarts the poller today. The cure is for
-  `start()` to wait for, or refuse, a stopped run still in flight.
+  `start()` to wait for, or refuse, a stopped run still in flight. Done in stage 8: each stop raises
+  a generation, and a run or loop from an earlier one is over.
 - **`taskkill` is found by searching.** `nodeExec` and the smoke script run `taskkill` by name, so
   Windows searches the working directory and `PATH` for it, the same kind of lookup as `cmd.exe` and
-  `claude`. Call it by its full path under `%SystemRoot%\System32` at both sites.
+  `claude`. Call it by its full path under `%SystemRoot%\System32` at both sites. Done in stage 8,
+  at both sites.
 - **An output overflow still ends only the shell.** When `claude agents --json` writes more than
   `maxBuffer` (4 MB), Node kills `cmd.exe` itself and the CLI lives on. That is far off. A
-  spawn-based runner with its own cap could end the tree here too.
+  spawn-based runner with its own cap could end the tree here too. Done in stage 8: a spawn-based
+  runner with its own cap.
 - **The real-process `nodeExec` tests abort at 300 ms.** They run concurrently and expect the
   started file by then. The chain starts in about 60 to 70 ms on the maintainer's machine, but a
   loaded machine could flake. Poll for the started file before aborting, and give the timeout test
-  about 1 s.
+  about 1 s. Done in stage 8.
 - **The smoke's kill fallback can hang.** If `app.kill()` also fails to end the app, the child's
   handle keeps Node running. The fallback should check again whether the app exited and `unref()`
-  it. A partial tree kill, where a child survives, also goes unreported.
+  it. A partial tree kill, where a child survives, also goes unreported. Done in stage 8.
 - **A CLI call can outlive an app that exits on its own.** If the packaged app exits mid-poll during
   the smoke, the tree kill is skipped and its children are no longer its tree. The cost is a
-  leftover scratch folder, which the script warns about.
+  leftover scratch folder, which the script warns about. Dropped in stage 8: the children of an app
+  that has already exited are no longer its tree, and the cost is a scratch folder the script
+  already warns about.
 - **The smoke still spells one log line.** It finds `desktop.started` by the raw substring
   `"code":"desktop.started","packaged":true`, while the ownership check parses records. It should
   parse this line too. Change it together with the `taskkill` path, in one edit that runs the smoke
-  again.
+  again. Done in stage 8.
 
 Found in stage 7's reviews.
 
@@ -654,7 +732,7 @@ Found in stage 7's reviews.
   announcement when an unrelated push redraws the page. The robust shape is an always-rendered
   `role="status"` container with the styled paragraph put inside it. Nobody has yet run the page
   with a screen reader, so the maintainer's walk includes a Narrator check. Left for stage 8, with
-  the page's tests.
+  the page's tests. Done in stage 8.
 - **An unreadable config and a missing one refuse in the same words.** With an unreadable config,
   `hasConfig` reads as no config, so the two refusals would word it as "no config". Accepted: the
   page cannot reach either one, since an unreadable config shows no folders and no hook buttons.
@@ -667,22 +745,25 @@ Found in stage 7's reviews.
   while attached to an agent serving from a different `CLAWD_HOME` still carry a token it does not
   hold. Stage 8's cure: ask the attached agent whether it holds this home's token before installing,
   a `POST /ingest/status` with the token and an empty body answering 401 or 200, injected into the
-  actions as a dependency.
+  actions as a dependency. Done in stage 8.
 - **Nothing stops a config minted after attaching either.** Related, and the same cure: "never
   create a config from the settings window" is not enforced in `own` mode. With the config deleted
   while the app runs, Install hooks mints a token the running agent lacks and nothing restarts it.
-  Stage 8.
+  Stage 8. Done in stage 8.
 - **`applied()` reads the host's mode at the instant of the action.** During `starting` or
   `restarting` a change is answered with no notice and a queued restart, and that restart can still
   settle as attached, leaving the change saved but not applied with nothing said. Narrow; stage 8.
+  Done in stage 8: a change made between agents is judged by the next push that finds the host
+  settled.
 - **The launch repair is decided while the host's first start may still be creating `config.json`.**
   With the config deleted and the hooks left, the status most likely reads `missing` for that
   launch, so the recreated-token case is repaired one launch late, the same order as stage 6. Stage
-  8: decide the repair after the host's first attempt settles.
+  8: decide the repair after the host's first attempt settles. Done in stage 8.
 - **`hookCommand` and `statusCommand` have no consumer, and `main.ts` repeats a guard.** Both are
   exported from the agent's index with nothing outside the package calling them, and `main.ts`
   repeats `repairOnLaunch`'s first guard before reading the installed exe. A tested
   `launchRepair(deps)` in `hooks.ts`, with the existence check injected, would hold both. Stage 8.
+  Done in stage 8: `launchRepair(deps)`, and the two names left the agent's index.
 
 Stage 8 takes what remains: the settings page rebuilding on every push, its missing tests (a DOM
 environment for vitest), the bridge typed by hand in three places, the two window copies, the
@@ -703,6 +784,11 @@ action, the launch repair decided before the host's first start has settled, and
 `hookCommand` and `statusCommand` with no consumer, which a tested `launchRepair(deps)` in `hooks.ts`
 would join with the guard `main.ts` repeats.
 
+Stage 8 closed the list (21 September 2026). Dropped, each with its reason beside the item: one
+source for the agent's port, zod's eval probe, and a CLI call that outlives an app that exits on its
+own during the smoke. Kept as it is: the restart that clears the fault budget. Everything else in
+§12.1 is done. Nothing here is open.
+
 Asked for while stage 5 was finishing (16 September 2026). Not a review finding; the shape below was
 settled in conversation, so whoever picks it up does not have to decide it again.
 
@@ -722,7 +808,9 @@ settled in conversation, so whoever picks it up does not have to decide it again
   bar, which all read the snapshot, and a pane whose only session is a stale wait goes with it.
   Worth testing at either side of the boundary, with and without prompts, that an answer after the
   limit brings it back, and that the four committed golden snapshots do not move, since each replays
-  a short captured run.
+  a short captured run. Done in stage 8. One reading was settled: past the limit the session is
+  hidden whatever its prompt count, which a literal fall-through to the existing rules would not do
+  for a session with more than eight prompts.
 
 Skipped when the settings page's choices became radio groups (16 September 2026).
 
@@ -734,14 +822,16 @@ Skipped when the settings page's choices became radio groups (16 September 2026)
   an offscreen Electron window with a stub bridge and real key presses; that script was not kept.
   The suggested fix is a DOM environment for vitest (happy-dom or jsdom, a new dev dependency) and a
   page test with a stub `window.clawd` covering those four. Arrow keys moving between radios are the
-  browser's own and need no test.
+  browser's own and need no test. Done in stage 8: happy-dom, and `settings/page.test.ts` over a
+  stub bridge.
 
 ## 13. Tests
 
 - Unit tests in `apps/desktop` with vitest: `args`; `scheme` mapping, MIME and CSP text;
   `agent-host` transitions with a fake `startAgent`, probe and clock; `hooks` status and command
   building; `tray` tooltip text; `settings/ipc` handlers with a fake agent and installer; `icons`
-  output sizes.
+  output sizes; `settings/page` under happy-dom with a stub bridge; `reveal`; `hooks`' launch repair
+  over doubles.
 - Agent tests: the built-in origins, the private-network preflight, `onSnapshot`, the installer
   split, `hookStatus`, the runtime prefix in the written command.
 - A manual checklist per stage, kept in that stage's plan: the "done when" column above, plus for

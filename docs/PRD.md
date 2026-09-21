@@ -77,7 +77,7 @@ Priority: **P0** first usable version · **P1** next · **P2** later.
 - **FR-5** Each session has exactly one state: `working`, `waiting`, `idle`, `asleep`, `done`.
 - **FR-6** Transitions are defined in section 9. `idle` becomes `asleep` after a configurable period (default 10 minutes).
 - **FR-7** Each state and activity has a minimum display duration (default 1.5 s) to prevent flicker.
-- **FR-7a** Dormant sessions leave the view. Working and waiting sessions are always shown. A session with no typed prompts is never shown; one with a single prompt is hidden 3 hours after its last activity, one with two to eight after 24 hours, and one with more is never hidden. A hidden session returns on its next prompt. Prompt counts come from the session's transcript, read locally by the agent, which keeps only the number.
+- **FR-7a** Dormant sessions leave the view. A working session is always shown, and a waiting one until it has waited 36 hours, after which it is hidden until it is answered. A session with no typed prompts is never shown; one with a single prompt is hidden 3 hours after its last activity, one with two to eight after 24 hours, and one with more is never hidden. A hidden session returns on its next prompt. Prompt counts come from the session's transcript, read locally by the agent, which keeps only the number.
 
 ### 7.3 Activity categorisation (P0)
 
@@ -287,7 +287,7 @@ The contract comes first and is the fork point. After it, the web app and the ag
 
 | # | Milestone | Outcome |
 |---|---|---|
-| M8 | Desktop | The Electron app in six stages, one Electron idea each: the window, the agent inside, the packaged UI over `app://`, the tray, the settings window, the package. Done when a teammate unzips the folder, runs the exe and sets up the hooks from the settings window, and moving the folder and relaunching repairs the hooks and the login item. |
+| M8 | Desktop | The Electron app in six stages, one Electron idea each: the window, the agent inside, the packaged UI over `app://`, the tray, the settings window, the package; then the review fixes (6.1) and two hardening stages (7 and 8) that closed the design's §12.1. Done when a teammate unzips the folder, runs the exe and sets up the hooks from the settings window, and moving the folder and relaunching repairs the hooks and the login item. |
 
 ## 13. Open questions
 
@@ -328,3 +328,6 @@ The contract comes first and is the fork point. After it, the web app and the ag
 | 13 Sep 2026 | Pane labels in the local view are the working directory's last path segment, numbered on collision, behind an agent setting; cloud snapshots keep generated tree names. Session labels stay generated. |
 | 14 Sep 2026 | Detail levels: an opt-in agent setting adds hints or paths to the local view; the event log and the cloud stay at level none through one strip function with invariant tests. Content is never read at any level. |
 | 14 Sep 2026 | Desktop app: the agent runs in Electron's main process; the UI is the static export over a custom scheme; the hooks run under the app's own binary; shipped as a zipped folder with no installer, electron-builder's `portable` target ruled out. |
+| 21 Sep 2026 | The packaged desktop app's agent does not accept the dev server's origins (`http://localhost:3000`, `http://127.0.0.1:3000`); the CLI and a development run still do. An option on `startAgent`, not a config field. |
+| 21 Sep 2026 | A session that has waited 36 hours for an answer leaves the view, whatever its prompt count, and returns the moment it is answered; it stays `waiting` in the fleet. |
+| 21 Sep 2026 | The settings window ships JetBrains Mono from a dev dependency, copied at bundle time; no font binary is checked in. |
