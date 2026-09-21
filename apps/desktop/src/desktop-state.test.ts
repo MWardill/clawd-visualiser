@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -24,8 +24,9 @@ describe("desktopStatePath", () => {
 });
 
 describe("parseDesktopState", () => {
-  it("keeps valid bounds and a boolean openAtLogin from a version 2 file", () => {
-    expect(parseDesktopState({ version: 2, bounds: BOUNDS, openAtLogin: false })).toEqual({ bounds: BOUNDS, openAtLogin: false });
+  it("keeps valid bounds, a boolean maximized and a boolean openAtLogin from a version 2 file", () => {
+    expect(parseDesktopState({ version: 2, bounds: BOUNDS, maximized: true, openAtLogin: false })).toEqual({ bounds: BOUNDS, maximized: true, openAtLogin: false });
+    expect(parseDesktopState({ version: 2, maximized: "yes" })).toEqual({});
     expect(parseDesktopState({ version: 2 })).toEqual({});
   });
 
@@ -49,11 +50,41 @@ describe("createDesktopStore", () => {
     const missing = createDesktopStore(join(dir, "desktop.json"));
     await missing.load();
     expect(missing.get()).toEqual({});
+    expect(missing.usable()).toBe(true);
 
     await writeFile(join(dir, "desktop.json"), "{ not json");
     const damaged = createDesktopStore(join(dir, "desktop.json"));
     await damaged.load();
     expect(damaged.get()).toEqual({});
+    expect(damaged.usable()).toBe(true);
+  });
+
+  it("tells a file it cannot read from a missing one: nothing is written over it, it says so once, and this run still remembers", async () => {
+    const dir = await tempDir();
+    const path = join(dir, "desktop.json");
+    // A directory where the file should be: the read fails, and not with "no such file", as a locked file would.
+    await mkdir(path);
+    const codes: string[] = [];
+    const store = createDesktopStore(path, (code) => void codes.push(code));
+    await store.load();
+    expect(store.usable()).toBe(false);
+    store.update({ openAtLogin: true });
+    store.update({ bounds: BOUNDS });
+    await store.flush();
+    expect(store.get()).toEqual({ openAtLogin: true, bounds: BOUNDS });
+    expect((await stat(path)).isDirectory()).toBe(true);
+    expect(await readdir(dir)).toEqual(["desktop.json"]);
+    expect(codes).toEqual(["desktop.stateUnreadable"]);
+  });
+
+  it("logs a write that fails", async () => {
+    const inTheWay = join(await tempDir(), "a-file");
+    await writeFile(inTheWay, "");
+    const codes: string[] = [];
+    const store = createDesktopStore(join(inTheWay, "desktop.json"), (code) => void codes.push(code));
+    store.update({ openAtLogin: true });
+    await store.flush();
+    expect(codes).toEqual(["desktop.stateWriteFailed"]);
   });
 
   it("loads what was saved, merges each update and writes the whole file as version 2", async () => {

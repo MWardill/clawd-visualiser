@@ -79,4 +79,35 @@ describe("createQuitHandler", () => {
     await flush();
     expect(order).toEqual(["desktop.stopTimedOut", "flush", "exit 0"]);
   });
+
+  it("says once that the quit is now certain, before it stops anything, which is when main takes the tray icon away", async () => {
+    const order: string[] = [];
+    const handler = createQuitHandler({
+      begin: () => void order.push("begin"),
+      stop: async () => void order.push("stop"),
+      flush: async () => void order.push("flush"),
+      exit: (code) => void order.push(`exit ${code}`),
+      log: (code) => void order.push(code),
+    });
+    handler({ preventDefault: () => {} });
+    handler({ preventDefault: () => {} });
+    await flush();
+    expect(order).toEqual(["begin", "stop", "flush", "exit 0"]);
+  });
+
+  it("still stops and exits when taking the tray away throws", async () => {
+    const order: string[] = [];
+    const handler = createQuitHandler({
+      begin: () => {
+        throw new Error("tray already gone");
+      },
+      stop: async () => void order.push("stop"),
+      flush: async () => void order.push("flush"),
+      exit: (code) => void order.push(`exit ${code}`),
+      log: () => {},
+    });
+    handler({ preventDefault: () => {} });
+    await flush();
+    expect(order).toEqual(["stop", "flush", "exit 0"]);
+  });
 });

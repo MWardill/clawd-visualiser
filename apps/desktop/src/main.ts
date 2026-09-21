@@ -25,8 +25,9 @@ import { createDesktopStore, desktopStatePath } from "./desktop-state";
 import { currentHookStatus, installedExe, launchRepair, readConfigState, runtimePrefix } from "./hooks";
 import { isQuitShortcut } from "./keys";
 import { createFileSink, readRetentionDays } from "./log";
-import { appUserModelId, loginItemTarget, loginOnLaunch } from "./login";
+import { appUserModelId, loginItemTarget, loginOnLaunch, shownAtLogin } from "./login";
 import { distPaths } from "./paths";
+import { showOrCreate } from "./reveal";
 import { createQuitHandler, settleWithin } from "./quit";
 import { APP_SCHEME, APP_URL, createSchemeHandler } from "./scheme";
 import { settingsState, type SettingsState } from "./settings-state";
@@ -65,8 +66,10 @@ function run(): void {
     if (!app.isPackaged) process.stdout.write(line);
   });
 
-  const store = createDesktopStore(desktopStatePath(home, app.isPackaged));
+  const store = createDesktopStore(desktopStatePath(home, app.isPackaged), log);
   const login = loginItemTarget(app.isPackaged, process.execPath, app.getAppPath());
+  /** The Run value's name, which is the AppUserModelId set above: how Electron names our entry in launchItems. */
+  const loginName = appUserModelId(app.isPackaged);
   // Packaged, the bundle and the pages are inside resources/app.asar and the icons and scripts beside it.
   const dist = distPaths(__dirname, app.isPackaged ? process.resourcesPath : __dirname);
   const settingsPath = defaultSettingsPath();
@@ -108,33 +111,27 @@ function run(): void {
 
   /** Shows the window, making it the first time; from the tray, a second launch, or startup. */
   function showWindow(): void {
-    // Quitting has begun: neither a second launch nor startup may bring a window back while the app exits.
-    if (quitting) return;
-    if (win !== null) {
-      if (win.isMinimized()) win.restore();
-      win.show();
-      win.focus();
-      return;
-    }
-    const workAreas = screen.getAllDisplays().map((display) => display.workArea);
-    const created = createMainWindow(url, statusText(host.state()), restoredBounds(store.get().bounds, workAreas));
-    // Closing hides the window, and the app and its agent carry on in the tray. Once quitting has
-    // begun the close goes through. Either way the bounds are remembered.
-    created.on("close", (event) => {
-      store.update({ bounds: created.getNormalBounds() });
-      if (quitting) return;
-      event.preventDefault();
-      created.hide();
+    win = showOrCreate(win, quitting, () => {
+      const workAreas = screen.getAllDisplays().map((display) => display.workArea);
+      const created = createMainWindow(url, statusText(host.state()), restoredBounds(store.get().bounds, workAreas), store.get().maximized === true);
+      // Closing hides the window, and the app and its agent carry on in the tray. Once quitting has
+      // begun the close goes through. Either way where it was, and whether it filled the screen, is remembered.
+      created.on("close", (event) => {
+        store.update({ bounds: created.getNormalBounds(), maximized: created.isMaximized() });
+        if (quitting) return;
+        event.preventDefault();
+        created.hide();
+      });
+      created.webContents.on("before-input-event", (event, input) => {
+        if (!isQuitShortcut(input)) return;
+        event.preventDefault();
+        app.quit();
+      });
+      created.on("closed", () => {
+        win = null;
+      });
+      return created;
     });
-    created.webContents.on("before-input-event", (event, input) => {
-      if (!isQuitShortcut(input)) return;
-      event.preventDefault();
-      app.quit();
-    });
-    created.on("closed", () => {
-      win = null;
-    });
-    win = created;
   }
 
   const version = app.getVersion();
@@ -165,8 +162,9 @@ function run(): void {
     }
   }
 
+  /** What the tray checkbox and the settings page show: off too when the entry is switched off in Task Manager. The launch rule below goes by the Run value alone, so it never re-enables an entry the user switched off there. */
   function openAtLogin(): boolean {
-    return app.getLoginItemSettings(login).openAtLogin;
+    return shownAtLogin(app.getLoginItemSettings(login), loginName);
   }
 
   function applyOpenAtLogin(on: boolean): void {
@@ -242,14 +240,12 @@ function run(): void {
   }
 
   function showSettings(): void {
-    if (settingsWin !== null && !settingsWin.isDestroyed()) {
-      settingsWin.show();
-      settingsWin.focus();
-      return;
-    }
-    settingsWin = createSettingsWindow(join(dist.settings, "preload.js"));
-    settingsWin.on("closed", () => {
-      settingsWin = null;
+    settingsWin = showOrCreate(settingsWin, quitting, () => {
+      const created = createSettingsWindow(join(dist.settings, "preload.js"));
+      created.on("closed", () => {
+        settingsWin = null;
+      });
+      return created;
     });
   }
 
@@ -303,7 +299,11 @@ function run(): void {
         if (outcome !== "none") pushState();
       });
 
-    const action = loginOnLaunch({ packaged: app.isPackaged, remembered: store.get().openAtLogin, registered: openAtLogin() });
+    // What Electron says about the entry, at every launch: numbers and booleans, so whether
+    // `launchItems` can be trusted for a packaged path with spaces is on record from the first run.
+    const item = app.getLoginItemSettings(login);
+    log("desktop.loginItem", { openAtLogin: item.openAtLogin, willLaunch: item.executableWillLaunchAtLogin, items: item.launchItems.length, shown: shownAtLogin(item, loginName) });
+    const action = loginOnLaunch({ packaged: app.isPackaged, remembered: store.get().openAtLogin, registered: item.openAtLogin, stateUsable: store.usable() });
     if (action !== "none") {
       app.setLoginItemSettings({ ...login, openAtLogin: true });
       store.update({ openAtLogin: true });
@@ -327,19 +327,29 @@ function run(): void {
   app.on("window-all-closed", () => {});
 
   // Quitting, from the tray, Ctrl+Q or Ctrl+C in the terminal: set the flag so the window's close goes
-  // through, and take the window and the tray icon away at once while the agent stops.
+  // through, and take the window away at once. The tray icon goes in will-quit, once the quit is certain.
   app.on("before-quit", () => {
     quitting = true;
     // A rebuild waiting on the coalescer would only build state for a window that is going away.
     pushStateSoon.cancel();
     win?.hide();
-    tray?.destroy();
-    tray = null;
   });
 
   // `will-quit` comes after every window has closed. The handler holds it until the agent has stopped
   // (at most five seconds), writes out the log and desktop.json, then exits.
-  app.on("will-quit", createQuitHandler({ stop: () => host.stop(), flush: () => Promise.all([sink.flush(), store.flush()]).then(() => {}), exit: (code) => app.exit(code), log }));
+  app.on(
+    "will-quit",
+    createQuitHandler({
+      begin: () => {
+        tray?.destroy();
+        tray = null;
+      },
+      stop: () => host.stop(),
+      flush: () => Promise.all([sink.flush(), store.flush()]).then(() => {}),
+      exit: (code) => app.exit(code),
+      log,
+    }),
+  );
 
   // Ctrl+C in the terminal asks for the same sequence.
   process.on("SIGINT", () => app.quit());
