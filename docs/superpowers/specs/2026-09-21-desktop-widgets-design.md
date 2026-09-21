@@ -82,7 +82,8 @@ Turning the popup off lowers every raised box.
 - The right button opens a native menu: **Pin on top** (a checkbox), **Open full window**,
   **Settings**.
 - The tray: clicking the icon shows the widgets and brings them forward, where it used to show the
-  window. The menu gains **Show widgets** above **Open**, present only in widget view; **Open** opens
+  window; with no widget open, because no session is shown, it opens the full window as before, so
+  the click always does something. The menu gains **Show widgets** above **Open**, present only in widget view; **Open** opens
   the full window in either view. A second launch of the app does what clicking the tray icon does.
 - `--hidden`, which the login item passes, holds back only the full window. Widgets follow the
   setting: they exist only while a session does, which is the point of them.
@@ -166,7 +167,7 @@ type WidgetState = {
 };
 
 type WidgetApi = {
-  ready(): Promise<WidgetState>;                 // asked once the scene is mounted
+  ready(): Promise<WidgetState | null>;          // asked once the scene is mounted; null to a window main does not know
   onState(cb: (s: WidgetState) => void): () => void;
   resize(size: { width: number; height: number } | null): void;   // null: nothing left to draw
   dragStart(): void;
@@ -178,10 +179,13 @@ type WidgetApi = {
 };
 ```
 
-- The page never learns which pane it is. It draws the snapshot it is sent.
+- The page never learns which pane it is. It draws the snapshot it is sent. `raised` and `temporary`
+  arrive with stage 10; stage 9's state is the other three fields.
+- The one-way calls (`resize`, the three drag calls, `togglePin`, `select`, `menu`) go by
+  `ipcRenderer.send`; only `ready` is an `invoke`, since only it has an answer.
 - **Served** at `app://widget/` from `dist/widget/`, a third entry in `scheme.ts`'s host table with
   the settings page's policy: `connect-src 'none'`, no inline scripts. `SchemeDirs` and `DistPaths`
-  gain `widget`. The smoke run loads it from the archive.
+  gain `widget`.
 - **The preload** imports the channel names and Electron's bridge and nothing else; the bundle step
   holds it to the same 20 kB as the settings preload.
 - **Dragging.** On a primary-button `pointerdown` that is not on the pin, the page captures the
@@ -231,20 +235,24 @@ src/attached-feed.ts   snapshots while attached: polls the agent on the port; te
   `createHardenedWindow`, whose spec gains a `chrome` field for the options that differ: `frame:
   false`, `transparent: true`, `resizable: false`, `maximizable: false`, `minimizable: false`,
   `fullscreenable: false`, `skipTaskbar: true`, `hasShadow: false`, `show: false`, and a fully
-  transparent `backgroundColor`. A widget is shown with `showInactive()` once its page has asked for
-  its state, so it never appears empty and never takes the keyboard.
+  transparent `backgroundColor`. A widget is shown with `showInactive()` once its page has reported
+  the size it needs, so it never appears empty or at the wrong size, and never takes the keyboard.
 - **Levels.** Pinned: `setAlwaysOnTop(true, "floating")`. Raised: `setAlwaysOnTop(true,
   "screen-saver")`, `moveTop()`, `showInactive()`. Lowered and unpinned: `setAlwaysOnTop(false)`.
   Stage 10's checklist settles whether `screen-saver` is the level that clears the taskbar and a
   maximised window on Windows 11; the level is one constant.
-- **Snapshots.** `AgentHostDeps` gains an optional `onSnapshot(s)`, called inside the guard the host
-  already applies to its own agent's snapshots, so one from an agent already replaced never arrives.
-  While the host is `attached` and either setting is on, `attached-feed.ts` asks `GET /api/snapshot`
-  every second, through a new `fetchSnapshot` beside `fetchCounts` in `agent-client.ts`, and stops
-  when the host leaves `attached` or both settings are off. The generation rises whenever the source
-  changes: a new run of the app's own agent, attaching, a takeover. On a rise the tracker forgets its
-  baseline, the raised set empties and each page clears its scene. An agent that refuses this app's
-  origin answers 403, so no widgets appear; the tooltip and the settings page already say why.
+- **Snapshots.** `AgentHostDeps` gains an optional `onSnapshot(s, run)`, called inside the guard the
+  host already applies to its own agent's snapshots, so one from an agent already replaced never
+  arrives; `run` is the host's count of starts. While the host is `attached` and either setting is
+  on, `attached-feed.ts` asks `GET /api/snapshot` every second, through a new `fetchSnapshot` beside
+  `fetchCounts` in `agent-client.ts`, and stops when the host leaves `attached` or both settings are
+  off. Main asks without an `Origin`, as `fetchCounts` does, so widgets work even while attached to
+  an agent that refuses the app's page. Every snapshot reaches the controller with the name of its
+  source, `own:<run>` or `attached:<port>`, and the generation rises when that name changes: the
+  order of a snapshot and a host mode change then cannot matter, which it would if the rise were
+  taken from the mode. On a rise the tracker forgets its baseline, the raised set empties and each
+  page clears its scene. A host that reaches `failed` has no source: the controller drops its
+  snapshot and the widgets close after the five-second cap.
 - **Quitting.** `before-quit` closes every widget and stops the feed; nothing of a widget holds the
   quit up.
 
@@ -271,11 +279,13 @@ src/attached-feed.ts   snapshots while attached: polls the agent on the port; te
 
 ## 7. The web app (`apps/web`)
 
-One change, and not a desktop one: a deep link. `#session=<alias>` in the URL selects that session
-once a snapshot holds it, opening its detail sheet, and the hash is then removed with
-`history.replaceState`, so closing the sheet does not reopen it. It is read at mount and on
-`hashchange`; an alias no snapshot ever holds is dropped when the feed's generation changes. The
-parsing is a pure function in `lib/`, tested; it works in a browser tab as well.
+One change, and not a desktop one: a deep link. `#session=<alias>` in the URL opens that session's
+detail sheet. The hash is read at load and on `hashchange`, and consumed at once: it is removed with
+`history.replaceState` and the alias kept in state, so the same link can be followed twice and a
+reload does not reopen the sheet. The sheet opens once a snapshot from the live agent holds the
+alias, never from the simulated feed, whose aliases are its own. Closing the sheet, or choosing
+another Clawd, forgets the link. The parsing and the rule are pure functions in `lib/`, tested; it
+works in a browser tab as well.
 
 Main uses it for a Clawd clicked in a widget: `showWindow()`, then the window is loaded at its own
 URL with the hash. For a window already showing the page that is a same-document navigation, so the
@@ -333,7 +343,9 @@ locked, still there at unlock; a pinned widget turning green.
   the widget host under the strict policy; `settings/actions` and `settings/page` for the two
   controls; `agent-host` calling `onSnapshot` inside its guard.
 - `apps/web`: the deep link's parser, and the selection it makes once a snapshot holds the alias.
-- The packaged smoke loads `app://widget/` from the archive.
+- The smoke run does not open pages, so the widget page in the archive is covered two ways: a test
+  that the bundle step writes every file `page.html` and `page.css` name, as the settings page has,
+  and stage 9's manual checklist, which is walked on a packaged build.
 
 ## 12. Documents
 
