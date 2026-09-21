@@ -6,9 +6,9 @@
     <link rel="stylesheet" href="page.css" />
   </head>
   <body>
-    <!-- Always present, so a screen reader can pick up a change to it; a node inserted fresh each
-         render is announced unreliably. render() sets its text and toggles `hidden`. -->
-    <p id="notice" class="notice" role="status" hidden></p>
+    <!-- The live region: always rendered and never hidden, so it is in the accessibility tree before
+         the first notice arrives. render() puts the styled paragraph inside it and takes it out. -->
+    <div id="notice-region" role="status"></div>
     <main id="app">Loading…</main>
     <script src="page.js"></script>
   </body>
