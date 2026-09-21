@@ -48,9 +48,9 @@ export type WidgetController = {
   setView(view: View): void;
   /** `source` names the agent the snapshot came from (`own:<run>`, `attached:<port>`); a new name is a new generation. */
   setSnapshot(s: Snapshot, source: string): void;
-  /** There is no agent to hear from: what is shown is stale, and goes after the cap. */
+  /** There is no agent to hear from: the Clawds walk out, same as any pane that leaves, and what is shown goes after the cap. */
   noSource(): void;
-  /** Brings every widget already shown forward; answers how many windows there are. */
+  /** Brings every widget already shown forward; answers how many are showing. */
   showAll(): number;
   closeAll(): void;
   // What a page may ask, each with its sender's id. A sender no window has is ignored.
@@ -87,7 +87,12 @@ type Entry = {
   drag: { dx: number; dy: number; moved: boolean } | null;
 };
 
-/** A state as text, less the time the snapshot was made, which changes with every snapshot and draws nothing. */
+/**
+ * A state as text, less the time the snapshot was made, which changes with every snapshot and draws
+ * nothing. Compares JSON text, which is order-sensitive; that holds here because every snapshot the
+ * controller sees was normalised by core's SnapshotSchema.parse, and paneSnapshot/emptied spread that
+ * same object, so key order never drifts — a snapshot built any other way could send on every poll.
+ */
 const keyOf = (state: WidgetState): string => JSON.stringify({ ...state, snapshot: state.snapshot === null ? null : { ...state.snapshot, generatedAt: "" } });
 
 export function createWidgetController(deps: ControllerDeps): WidgetController {
@@ -151,7 +156,7 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     return e;
   };
 
-  const reconcile = (): void => {
+  const reconcile = (leaving: Snapshot | null = snapshot): void => {
     const current = snapshot;
     const wanted = new Set<string>();
     if (current !== null) {
@@ -168,9 +173,9 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     }
     for (const e of [...entries.values()]) {
       if (wanted.has(e.label)) continue;
-      // Its pane has left: the page plays the walk out and then says it has nothing left to draw.
-      if (current !== null) {
-        e.shown = emptied(current);
+      // Its pane has left (or there is no source at all): the page plays the walk out and then says it has nothing left to draw.
+      if (leaving !== null) {
+        e.shown = emptied(leaving);
         push(e);
       }
       if (e.closing === null) e.closing = setTimeout(() => close(e), CLOSE_CAP_MS);
@@ -182,6 +187,8 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
   };
 
   const togglePin = (e: Entry): void => {
+    // The menu's closure may outlive its entry.
+    if (entries.get(e.label) !== e) return;
     e.pinned = !e.pinned;
     e.win.setPinned(e.pinned);
     // A pinned widget should be where it was pinned next time too, dragged or not.
@@ -206,13 +213,19 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
       reconcile();
     },
     noSource() {
+      const leaving = snapshot;
       source = null;
       snapshot = null;
-      reconcile();
+      reconcile(leaving);
     },
     showAll() {
-      for (const e of entries.values()) if (e.revealed) e.win.reveal();
-      return entries.size;
+      let showing = 0;
+      for (const e of entries.values()) {
+        if (!e.revealed || e.closing !== null) continue;
+        e.win.reveal();
+        showing++;
+      }
+      return showing;
     },
     closeAll,
     ready(sender) {

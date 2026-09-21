@@ -49,7 +49,7 @@ function fakeWindow(id: number, initial: Bounds): FakeWindow {
     popupMenu: (template) => void menus.push(template),
     close: () => {
       calls.push("close");
-      closed();
+      // Electron's closed event is asynchronous; tests fire it themselves with closedByUser() when they mean it.
     },
     onFailed: (cb) => {
       failed = cb;
@@ -151,6 +151,27 @@ describe("which windows there are", () => {
     h.c.setSnapshot(TWO, "own:1");
     expect(h.windows).toHaveLength(3);
   });
+
+  it("a late closed event from a window already replaced leaves the replacement alone", () => {
+    const h = shown();
+    h.c.setSnapshot(snap({ docs: ["agent-2"] }), "own:1"); // a snapshot without repo
+    vi.advanceTimersByTime(CLOSE_CAP_MS); // w0 closed, entry dropped
+    h.c.setSnapshot(TWO, "own:1"); // a new window, w2, for repo
+    h.w(0).closedByUser(); // a late closed event from the original, now-stale window
+    expect(h.c.ready(h.w(2).win.id)).not.toBeNull();
+    expect(h.windows).toHaveLength(3);
+  });
+
+  it("a late failure from a window already replaced is not counted", () => {
+    const h = shown();
+    h.c.setSnapshot(snap({ docs: ["agent-2"] }), "own:1"); // a snapshot without repo
+    vi.advanceTimersByTime(CLOSE_CAP_MS); // w0 closed, entry dropped
+    h.c.setSnapshot(TWO, "own:1"); // a new window, w2, for repo
+    h.w(0).fail(); // a late failure from the original, now-stale window
+    expect(h.logged).toEqual([]);
+    expect(h.w(2).calls).not.toContain("close");
+    expect(h.windows).toHaveLength(3);
+  });
 });
 
 describe("what a window is sent", () => {
@@ -183,6 +204,13 @@ describe("what a window is sent", () => {
     expect(h.w(0).sent.map((s) => s.generation)).toEqual([2]);
     h.c.setSnapshot(TWO, "attached:4750");
     expect(h.w(0).sent.map((s) => s.generation)).toEqual([2, 3]);
+  });
+
+  it("a page that asks again is sent the next change", () => {
+    const h = shown();
+    h.c.ready(h.w(0).win.id); // a reload keeps the webContents id
+    h.c.setSnapshot(snap({ repo: ["agent-1", "agent-3"], docs: ["agent-2"] }), "own:1");
+    expect(h.w(0).sent.map((s) => s.snapshot?.sessions.length)).toEqual([2]);
   });
 });
 
@@ -222,7 +250,7 @@ describe("a pane that leaves", () => {
   it("closes every widget after the cap once there is no agent to hear from", () => {
     const h = shown();
     h.c.noSource();
-    expect(h.w(0).sent).toEqual([]);
+    expect(h.w(0).sent.at(-1)?.snapshot).toMatchObject({ panes: [], sessions: [] });
     vi.advanceTimersByTime(CLOSE_CAP_MS);
     expect(h.windows.map((made) => made.calls)).toEqual([["close"], ["close"]]);
     // the next agent is a new source
@@ -245,6 +273,7 @@ describe("size and showing", () => {
     h.c.resize(id, { width: 346, height: 384 });
     expect(h.w(0).calls).toEqual([`bounds ${FIRST.x},${FIRST.y} 346x192`, "reveal", `bounds ${FIRST.x},${FIRST.y} 346x384`]);
     h.c.resize(999, { width: 1, height: 1 });
+    expect(h.w(0).calls).toHaveLength(3); // a sender no window has is ignored
   });
 
   it("brings every widget already shown forward, and says how many windows there are", () => {
@@ -252,6 +281,12 @@ describe("size and showing", () => {
     expect(h.c.showAll()).toBe(2);
     expect(h.windows.map((made) => made.calls)).toEqual([["reveal"], ["reveal"]]);
     expect(harness().c.showAll()).toBe(0);
+    // a pane that has left, still waiting out the cap, is not showing: not counted, not revealed again
+    h.c.setSnapshot(snap({ docs: ["agent-2"] }), "own:1");
+    h.w(0).calls.length = 0;
+    h.w(1).calls.length = 0;
+    expect(h.c.showAll()).toBe(1);
+    expect(h.w(0).calls).toEqual([]);
   });
 });
 
@@ -293,6 +328,19 @@ describe("dragging", () => {
     const edge = AREA.width - DEFAULT_WIDGET_SIZE.width;
     expect(h.w(0).win.bounds()).toEqual({ x: edge, y: 300, ...DEFAULT_WIDGET_SIZE });
     expect(h.saved).toEqual([["repo", { x: edge, y: 300, pinned: false }]]);
+  });
+
+  it("a drag keeps the size the page last reported, not the default", () => {
+    const h = shown();
+    const id = h.w(0).win.id;
+    h.c.resize(id, { width: 346, height: 384 });
+    h.setCursor(FIRST.x + 16, FIRST.y + 28);
+    h.c.dragStart(id);
+    h.setCursor(1000, 500);
+    h.c.dragMove(id);
+    expect(h.w(0).calls.at(-1)).toBe("bounds 984,472 346x384");
+    h.c.dragEnd(id);
+    expect(h.saved).toEqual([["repo", { x: 984, y: 472, pinned: false }]]);
   });
 
   it("ignores a drag from a window it does not know", () => {
@@ -338,6 +386,20 @@ describe("the pin, the menu and a clicked Clawd", () => {
     h.c.select(999, "agent-1");
     expect(h.opened).toEqual(["session agent-1"]);
   });
+
+  it("a menu item clicked after its window has gone does nothing", () => {
+    const h = shown();
+    h.c.menu(h.w(0).win.id);
+    const menu = h.w(0).menus[0] ?? [];
+    h.c.setSnapshot(snap({ docs: ["agent-2"] }), "own:1"); // a snapshot without repo
+    vi.advanceTimersByTime(CLOSE_CAP_MS); // the window closes, its entry dropped
+    h.w(0).calls.length = 0;
+    const sentBefore = h.w(0).sent.length;
+    (menu[0]?.click as () => void)(); // Pin on top, on the closure's now-stale entry
+    expect(h.w(0).calls).toEqual([]);
+    expect(h.saved).toEqual([]);
+    expect(h.w(0).sent).toHaveLength(sentBefore);
+  });
 });
 
 describe("a widget that fails", () => {
@@ -355,6 +417,24 @@ describe("a widget that fails", () => {
     // two to begin with, and a replacement after the first and the second failure only
     expect(h.windows).toHaveLength(4);
     expect(h.logged.some(([, fields]) => Object.values(fields).some((value) => typeof value === "string"))).toBe(false);
+  });
+
+  it("tries are counted per label", () => {
+    const h = shown();
+    h.w(h.windows.length - 2).fail(); // repo, try 1
+    h.c.setSnapshot(TWO, "own:1"); // repo replaced
+    h.w(h.windows.length - 1).fail(); // repo's replacement, try 2
+    h.w(1).fail(); // docs, untouched until now: try 1
+    expect(h.logged).toEqual([
+      ["desktop.widgetFailed", { tries: 1 }],
+      ["desktop.widgetFailed", { tries: 2 }],
+      ["desktop.widgetFailed", { tries: 1 }],
+    ]);
+    // repo's tries (2) has not hit the cap, so a further TWO snapshot would remake it too; a
+    // docs-only snapshot isolates the check to the last log entry's label.
+    const before = h.windows.length;
+    h.c.setSnapshot(snap({ docs: ["agent-2"] }), "own:1");
+    expect(h.windows).toHaveLength(before + 1);
   });
 });
 
