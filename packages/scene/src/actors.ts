@@ -125,12 +125,17 @@ function syncMinis(a: Actor, count: number, now: number): void {
   }
 }
 
+export type ReconcileOptions = {
+  /** Sessions the world has not met take their seats at once. For a view opened on sessions that were already there: they did not arrive, the view did. */
+  seated?: boolean;
+};
+
 /**
  * Brings the world in line with a snapshot: new panes are appended, new sessions take the lowest
- * free seat in their pane and walk in from the door, known sessions are updated in place, done
- * sessions wave, vanished sessions leave without the wave.
+ * free seat in their pane and walk in from the door (or, with `seated`, are simply there), known
+ * sessions are updated in place, done sessions wave, vanished sessions leave without the wave.
  */
-export function reconcile(world: World, s: Snapshot, now: number): World {
+export function reconcile(world: World, s: Snapshot, now: number, opts: ReconcileOptions = {}): World {
   const livePanes = new Set<string>();
   for (const ps of s.panes) {
     livePanes.add(ps.pane);
@@ -159,6 +164,8 @@ export function reconcile(world: World, s: Snapshot, now: number): World {
       const seat = firstFreeSeat(pane.seats);
       pane.seats[seat] = ss.alias;
       const from = doorOrigin(seat, seatsUsed(pane));
+      const to = seatOrigin(seat);
+      const seated = opts.seated === true;
       a = {
         alias: ss.alias,
         label: ss.label,
@@ -171,10 +178,10 @@ export function reconcile(world: World, s: Snapshot, now: number): World {
         name: ss.detail?.name ?? null,
         subject: ss.detail?.subject ?? null,
         since: Date.parse(ss.since),
-        phase: "entering",
+        phase: seated ? "seated" : "entering",
         phaseAt: now,
-        pos: { ...from },
-        move: { from, to: seatOrigin(seat), t0: now, dur: TIMING.enter, ease: "out" },
+        pos: seated ? { ...to } : { ...from },
+        move: seated ? null : { from, to, t0: now, dur: TIMING.enter, ease: "out" },
         blinkAt: nextBlink(ss.alias, now),
         sparkleUntil: 0,
         glanceUntil: 0,
