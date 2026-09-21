@@ -1,6 +1,7 @@
 // ~/.clawd/desktop.json: what the app remembers between runs that is not the agent's config. The
 // window's bounds, and whether the user wants the app at login, absent until a first packaged run or
-// a toggle. A missing or damaged file reads as nothing remembered. A file that is there but cannot
+// a toggle, the view (one window or a widget per pane) and where each folder's widget was left,
+// absent until a widget is placed. A missing or damaged file reads as nothing remembered. A file that is there but cannot
 // be read (locked, say) is different: what it holds is unknown, so nothing is written over it for
 // the rest of the run. A failed write is logged and dropped, since the next change writes the whole
 // file again. A development run keeps its own file, so what it remembers never steers the packaged app.
@@ -8,7 +9,16 @@ import { readJsonFile, silentLogger, writeJsonAtomic, type Logger } from "@clawd
 import { join } from "node:path";
 
 export type Bounds = { x: number; y: number; width: number; height: number };
-export type DesktopState = { bounds?: Bounds; maximized?: boolean; openAtLogin?: boolean };
+/** The one scene window, or one frameless window per pane. */
+export type View = "window" | "widgets";
+/** Where a folder's widget was left, and whether it was pinned on top. */
+export type Placement = { x: number; y: number; pinned: boolean };
+export type DesktopState = { bounds?: Bounds; maximized?: boolean; openAtLogin?: boolean; view?: View; widgets?: Record<string, Placement> };
+
+/** Folders come and go; the file does not grow for ever. */
+export const MAX_PLACEMENTS = 200;
+/** Longer than any directory name Windows allows. */
+const MAX_LABEL = 300;
 
 /**
  * Version 2 since stage 6.1. Version 1 files were only ever written by development runs before
@@ -23,10 +33,34 @@ export function desktopStatePath(home: string, packaged: boolean): string {
 
 const whole = (value: unknown): value is number => Number.isInteger(value);
 
+/** The valid places in a `widgets` object, the last 200 written. Built with fromEntries, so a folder called `__proto__` is a key like any other. */
+function parsePlacements(value: unknown): Record<string, Placement> | undefined {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
+  const kept: [string, Placement][] = [];
+  for (const [label, raw] of Object.entries(value)) {
+    if (label.length === 0 || label.length > MAX_LABEL || typeof raw !== "object" || raw === null) continue;
+    const { x, y, pinned } = raw as Record<string, unknown>;
+    if (whole(x) && whole(y) && typeof pinned === "boolean") kept.push([label, { x, y, pinned }]);
+  }
+  return Object.fromEntries(kept.slice(-MAX_PLACEMENTS));
+}
+
+/** A folder's remembered place. By own property only: a folder may be called `constructor`. */
+export function placementOf(state: DesktopState, label: string): Placement | undefined {
+  const all = state.widgets;
+  return all !== undefined && Object.hasOwn(all, label) ? all[label] : undefined;
+}
+
+/** The places with this one written last, and the oldest-written dropped past the cap. */
+export function withPlacement(all: Record<string, Placement> | undefined, label: string, placement: Placement): Record<string, Placement> {
+  const rest = Object.entries(all ?? {}).filter(([key]) => key !== label);
+  return Object.fromEntries([...rest, [label, placement] as const].slice(-MAX_PLACEMENTS));
+}
+
 /** The valid fields of a version 2 file, each judged on its own; anything else is dropped. */
 export function parseDesktopState(value: unknown): DesktopState {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
-  const file = value as { version?: unknown; bounds?: unknown; maximized?: unknown; openAtLogin?: unknown };
+  const file = value as { version?: unknown; bounds?: unknown; maximized?: unknown; openAtLogin?: unknown; view?: unknown; widgets?: unknown };
   if (file.version !== VERSION) return {};
   const state: DesktopState = {};
   const b = file.bounds;
@@ -36,6 +70,9 @@ export function parseDesktopState(value: unknown): DesktopState {
   }
   if (typeof file.maximized === "boolean") state.maximized = file.maximized;
   if (typeof file.openAtLogin === "boolean") state.openAtLogin = file.openAtLogin;
+  if (file.view === "window" || file.view === "widgets") state.view = file.view;
+  const widgets = parsePlacements(file.widgets);
+  if (widgets !== undefined) state.widgets = widgets;
   return state;
 }
 
