@@ -260,9 +260,11 @@ src/attached-feed.ts   snapshots while attached: polls the agent on the port; te
 
 - `desktop.json` gains three fields, each judged on its own as the others are, and needs no new
   version since an older build simply drops them: `view: "window" | "widgets"`, `finishedPopup:
-  boolean`, and `widgets: Record<label, { x, y, pinned }>`, with whole-number coordinates and at most
-  200 entries, the oldest-written dropped first. Folder names are written to this file and nowhere
-  else; `config.json` beside it already holds the watched folders' full paths.
+  boolean`, and `widgets`, a list of `{ label, x, y, pinned }` in the order written, newest last,
+  with whole-number coordinates and at most 200 entries, the oldest-written dropped first; a list,
+  because an object lists number-like keys first whatever order they were written in, and a folder
+  may be called `2024`. Folder names are written to this file and nowhere else; `config.json`
+  beside it already holds the watched folders' full paths.
 - `SettingsState` gains `view` and `finishedPopup`; `SettingsApi` gains `setView(view)` and
   `setFinishedPopup(on)`, through the channels, the zod handlers and `settings/actions.ts` like the
   rest. Neither restarts the agent. A `desktop.json` that could not be read keeps its rule: the

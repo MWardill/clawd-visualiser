@@ -13,7 +13,13 @@ export type Bounds = { x: number; y: number; width: number; height: number };
 export type View = "window" | "widgets";
 /** Where a folder's widget was left, and whether it was pinned on top. */
 export type Placement = { x: number; y: number; pinned: boolean };
-export type DesktopState = { bounds?: Bounds; maximized?: boolean; openAtLogin?: boolean; view?: View; widgets?: Record<string, Placement> };
+/**
+ * One folder's place as the file holds it; the list is in the order written, newest last. A list,
+ * not an object keyed by label, because an object lists number-like keys first whatever order they
+ * were written in, and a folder may be called `2024`.
+ */
+export type StoredPlacement = Placement & { label: string };
+export type DesktopState = { bounds?: Bounds; maximized?: boolean; openAtLogin?: boolean; view?: View; widgets?: StoredPlacement[] };
 
 /** Folders come and go; the file does not grow for ever. */
 export const MAX_PLACEMENTS = 200;
@@ -33,28 +39,35 @@ export function desktopStatePath(home: string, packaged: boolean): string {
 
 const whole = (value: unknown): value is number => Number.isInteger(value);
 
-/** The valid places in a `widgets` object, the last 200 written. Built with fromEntries, so a folder called `__proto__` is a key like any other. */
-function parsePlacements(value: unknown): Record<string, Placement> | undefined {
-  if (typeof value !== "object" || value === null || Array.isArray(value)) return undefined;
-  const kept: [string, Placement][] = [];
-  for (const [label, raw] of Object.entries(value)) {
-    if (label.length === 0 || label.length > MAX_LABEL || typeof raw !== "object" || raw === null) continue;
-    const { x, y, pinned } = raw as Record<string, unknown>;
-    if (whole(x) && whole(y) && typeof pinned === "boolean") kept.push([label, { x, y, pinned }]);
+/**
+ * The valid places in a `widgets` list, each judged on its own. A label that appears twice keeps
+ * its last occurrence, in that occurrence's position. Then the last 200 written.
+ */
+function parsePlacements(value: unknown): StoredPlacement[] | undefined {
+  if (!Array.isArray(value)) return undefined;
+  const kept: StoredPlacement[] = [];
+  for (const raw of value) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const { label, x, y, pinned } = raw as Record<string, unknown>;
+    if (typeof label !== "string" || label.length === 0 || label.length > MAX_LABEL) continue;
+    if (!whole(x) || !whole(y) || typeof pinned !== "boolean") continue;
+    const duplicate = kept.findIndex((entry) => entry.label === label);
+    if (duplicate !== -1) kept.splice(duplicate, 1);
+    kept.push({ label, x, y, pinned });
   }
-  return Object.fromEntries(kept.slice(-MAX_PLACEMENTS));
+  return kept.slice(-MAX_PLACEMENTS);
 }
 
-/** A folder's remembered place. By own property only: a folder may be called `constructor`. */
+/** The place of the entry with this label; undefined when there is none. */
 export function placementOf(state: DesktopState, label: string): Placement | undefined {
-  const all = state.widgets;
-  return all !== undefined && Object.hasOwn(all, label) ? all[label] : undefined;
+  const found = state.widgets?.find((entry) => entry.label === label);
+  return found === undefined ? undefined : { x: found.x, y: found.y, pinned: found.pinned };
 }
 
-/** The places with this one written last, and the oldest-written dropped past the cap. */
-export function withPlacement(all: Record<string, Placement> | undefined, label: string, placement: Placement): Record<string, Placement> {
-  const rest = Object.entries(all ?? {}).filter(([key]) => key !== label);
-  return Object.fromEntries([...rest, [label, placement] as const].slice(-MAX_PLACEMENTS));
+/** The list without that label, then this place last, then the last 200 written. Never mutates `all`. */
+export function withPlacement(all: readonly StoredPlacement[] | undefined, label: string, placement: Placement): StoredPlacement[] {
+  const rest = (all ?? []).filter((entry) => entry.label !== label);
+  return [...rest, { label, x: placement.x, y: placement.y, pinned: placement.pinned }].slice(-MAX_PLACEMENTS);
 }
 
 /** The valid fields of a version 2 file, each judged on its own; anything else is dropped. */
