@@ -283,9 +283,10 @@ One change, and not a desktop one: a deep link. `#session=<alias>` in the URL op
 detail sheet. The hash is read at load and on `hashchange`, and consumed at once: it is removed with
 `history.replaceState` and the alias kept in state, so the same link can be followed twice and a
 reload does not reopen the sheet. The sheet opens once a snapshot from the live agent holds the
-alias, never from the simulated feed, whose aliases are its own. Closing the sheet, or choosing
-another Clawd, forgets the link. The parsing and the rule are pure functions in `lib/`, tested; it
-works in a browser tab as well.
+alias, never from the simulated feed, whose aliases are its own. Closing the sheet, choosing another
+Clawd, or a change of feed forgets the link, as a change of feed already closes a sheet chosen by
+hand; a link read at load, before any feed has started, belongs to the first feed. The parsing and
+the rule are pure functions in `lib/`, tested; it works in a browser tab as well.
 
 Main uses it for a Clawd clicked in a widget: `showWindow()`, then the window is loaded at its own
 URL with the hash. For a window already showing the page that is a same-document navigation, so the

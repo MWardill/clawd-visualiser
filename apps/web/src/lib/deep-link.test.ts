@@ -1,6 +1,6 @@
 import type { Snapshot } from "@clawd/core";
 import { describe, expect, it } from "vitest";
-import { linkedSelection, sessionFromHash } from "./deep-link";
+import { linkedSelection, sessionFromHash, type SessionLink } from "./deep-link";
 
 const t = new Date(0).toISOString();
 const SNAPSHOT: Snapshot = {
@@ -24,18 +24,32 @@ describe("sessionFromHash", () => {
 });
 
 describe("linkedSelection", () => {
+  const link: SessionLink = { alias: "agent-3", generation: 1 };
+
   it("is the linked alias once a live snapshot holds it", () => {
-    expect(linkedSelection("agent-3", "live", SNAPSHOT)).toBe("agent-3");
+    expect(linkedSelection(link, 1, "live", SNAPSHOT)).toBe("agent-3");
   });
 
   it("is nothing with no link, before the first snapshot, or for an alias the snapshot does not hold", () => {
-    expect(linkedSelection(null, "live", SNAPSHOT)).toBeNull();
-    expect(linkedSelection("agent-3", "live", null)).toBeNull();
-    expect(linkedSelection("agent-9", "live", SNAPSHOT)).toBeNull();
+    expect(linkedSelection(null, 1, "live", SNAPSHOT)).toBeNull();
+    expect(linkedSelection(link, 1, "live", null)).toBeNull();
+    expect(linkedSelection({ alias: "agent-9", generation: 1 }, 1, "live", SNAPSHOT)).toBeNull();
   });
 
   it("is never honoured from the simulated feed, whose aliases are its own", () => {
-    expect(linkedSelection("agent-3", "simulated", SNAPSHOT)).toBeNull();
-    expect(linkedSelection("agent-3", "probing", SNAPSHOT)).toBeNull();
+    expect(linkedSelection(link, 1, "simulated", SNAPSHOT)).toBeNull();
+    expect(linkedSelection(link, 1, "probing", SNAPSHOT)).toBeNull();
+  });
+
+  it("belongs to the feed it was read under: a later feed does not honour it", () => {
+    expect(linkedSelection(link, 1, "live", SNAPSHOT)).toBe("agent-3");
+    expect(linkedSelection(link, 2, "live", SNAPSHOT)).toBeNull();
+  });
+
+  it("a link read before any feed had started is honoured by the first feed, and only the first", () => {
+    const loadedBeforeAnyFeed: SessionLink = { alias: "agent-3", generation: 0 };
+    expect(linkedSelection(loadedBeforeAnyFeed, 1, "live", SNAPSHOT)).toBe("agent-3");
+    expect(linkedSelection(loadedBeforeAnyFeed, 2, "live", SNAPSHOT)).toBeNull();
+    expect(linkedSelection(loadedBeforeAnyFeed, 0, "live", null)).toBeNull();
   });
 });
