@@ -4,33 +4,11 @@
 import { DetailLevelSchema } from "@clawd/core";
 import { z } from "zod";
 import type { SettingsState } from "../settings-state";
+import { CHANNELS } from "./channels";
+import type { SettingsApi } from "./state";
 
-/** One channel per call in the design's §9 bridge, plus the one main pushes state on. */
-export const CHANNELS = {
-  getState: "clawd:settings/getState",
-  addFolder: "clawd:settings/addFolder",
-  removeFolder: "clawd:settings/removeFolder",
-  installHooks: "clawd:settings/installHooks",
-  uninstallHooks: "clawd:settings/uninstallHooks",
-  setDetail: "clawd:settings/setDetail",
-  setOpenAtLogin: "clawd:settings/setOpenAtLogin",
-  retryAgent: "clawd:settings/retryAgent",
-  openLogs: "clawd:settings/openLogs",
-  /** Main to the page: the state changed. */
-  state: "clawd:settings/state",
-} as const;
-
-export type SettingsActions = {
-  getState(): Promise<SettingsState>;
-  addFolder(): Promise<SettingsState>;
-  removeFolder(dir: string): Promise<SettingsState>;
-  installHooks(): Promise<SettingsState>;
-  uninstallHooks(): Promise<SettingsState>;
-  setDetail(level: SettingsState["detail"]): Promise<SettingsState>;
-  setOpenAtLogin(on: boolean): Promise<SettingsState>;
-  retryAgent(): Promise<SettingsState>;
-  openLogs(): Promise<void>;
-};
+/** The page's calls as main implements them: the bridge less `onState`, which is the preload's own. */
+export type SettingsActions = Omit<SettingsApi, "onState">;
 
 /**
  * What main hands the bridge: the page's calls, plus `pushedState`, the read that leaves the notice

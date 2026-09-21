@@ -23,6 +23,13 @@ export type StateConfig = {
   fewPromptsHideMs: number;
   /** A session with more prompts than this stays in view however quiet it is. */
   fewPrompts: number;
+  /**
+   * A waiting session leaves the view once it has waited this long, measured from `since`, the moment
+   * the wait began, not from its last activity, which a tool finishing or a subagent stopping
+   * elsewhere in the session could push back. It stays `waiting` in the fleet, so an answer makes it
+   * working and it returns at once.
+   */
+  waitingHideMs: number;
   /** Label a pane with its directory's last segment when its events carry one; otherwise its generated tree name. */
   folderPaneLabels: boolean;
 };
@@ -36,5 +43,6 @@ export const DEFAULT_CONFIG: StateConfig = {
   oneShotHideMs: 3 * 3_600_000,
   fewPromptsHideMs: 24 * 3_600_000,
   fewPrompts: 8,
+  waitingHideMs: 36 * 3_600_000,
   folderPaneLabels: true,
 };

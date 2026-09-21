@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { SettingsState } from "../settings-state";
-import { CHANNELS, createHandlers, type BridgeActions } from "./ipc";
+import { CHANNELS } from "./channels";
+import { createHandlers, type BridgeActions } from "./ipc";
 
 const STATE: SettingsState = {
   agent: { mode: "own", port: 4750, version: "0.1.0", sessions: 0, waiting: 0, error: null },

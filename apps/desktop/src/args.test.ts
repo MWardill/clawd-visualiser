@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { ownArgs, parseArgs, resolveRendererUrl } from "./args";
 
@@ -22,14 +23,22 @@ describe("ownArgs", () => {
 });
 
 describe("resolveRendererUrl", () => {
-  it("in development, prefers the flag, then the environment, then the static export over app://clawd/", () => {
-    expect(resolveRendererUrl({ hidden: false, devUrl: "http://a" }, { CLAWD_DESKTOP_URL: "http://b" }, false)).toBe("http://a");
-    expect(resolveRendererUrl({ hidden: false, devUrl: null }, { CLAWD_DESKTOP_URL: "http://b" }, false)).toBe("http://b");
-    expect(resolveRendererUrl({ hidden: false, devUrl: null }, { CLAWD_DESKTOP_URL: "  " }, false)).toBe("app://clawd/");
-    expect(resolveRendererUrl({ hidden: false, devUrl: null }, {}, false)).toBe("app://clawd/");
+  const EXPORT = "app://clawd/";
+
+  it("in development, prefers the flag, then the environment, then the export's URL it was given", () => {
+    expect(resolveRendererUrl({ hidden: false, devUrl: "http://a" }, { CLAWD_DESKTOP_URL: "http://b" }, false, EXPORT)).toBe("http://a");
+    expect(resolveRendererUrl({ hidden: false, devUrl: null }, { CLAWD_DESKTOP_URL: "http://b" }, false, EXPORT)).toBe("http://b");
+    expect(resolveRendererUrl({ hidden: false, devUrl: null }, { CLAWD_DESKTOP_URL: "  " }, false, EXPORT)).toBe(EXPORT);
+    expect(resolveRendererUrl({ hidden: false, devUrl: null }, {}, false, EXPORT)).toBe(EXPORT);
   });
 
   it("packaged, loads the export whatever the flag or the environment says", () => {
-    expect(resolveRendererUrl({ hidden: false, devUrl: "http://a" }, { CLAWD_DESKTOP_URL: "http://b" }, true)).toBe("app://clawd/");
+    expect(resolveRendererUrl({ hidden: false, devUrl: "http://a" }, { CLAWD_DESKTOP_URL: "http://b" }, true, EXPORT)).toBe(EXPORT);
+  });
+});
+
+describe("args.ts", () => {
+  it("imports nothing, so the argument parser pulls no schema library or file system into itself", async () => {
+    expect(await readFile(new URL("./args.ts", import.meta.url), "utf8")).not.toMatch(/^\s*import\s/m);
   });
 });

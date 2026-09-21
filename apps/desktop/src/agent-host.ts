@@ -4,7 +4,7 @@
 // Electron-free, so every transition is tested.
 import { ConfigError, PortInUseError, type LogFields, type Logger, type RunningAgent } from "@clawd/agent";
 import type { Snapshot } from "@clawd/core";
-import { countsOf, type Counts } from "./agent-client";
+import { countsOf, type Counts, type Probe } from "./agent-client";
 import { settleWithin } from "./quit";
 
 export type HostMode = "starting" | "own" | "attached" | "restarting" | "failed";
@@ -15,15 +15,15 @@ export type HostState = {
   port: number | null;
   sessions: number;
   waiting: number;
-  /** A ConfigError's message, which names a field and never a value. Shown, never logged. */
+  /** Why the agent is no use, when it is not: a ConfigError's message, which names a field and never a value, or REFUSED_MESSAGE while attached to an agent that refuses this app's page. Shown, never logged. */
   error: string | null;
 };
 
 export type AgentHostDeps = {
   /** Starts an agent in this process. Main passes startAgent with the home and the logger. */
   start(onSnapshot: (s: Snapshot) => void): Promise<RunningAgent>;
-  /** Whether an agent's health endpoint on the port answers in time. Never rejects. */
-  probe(port: number): Promise<boolean>;
+  /** What answers on the port, asked as the app's page would ask. Never rejects. */
+  probe(port: number): Promise<Probe>;
   /** The session counts of the agent on the port, or null. Never rejects. */
   counts(port: number): Promise<Counts | null>;
   log: Logger;
@@ -35,6 +35,8 @@ export type AgentHost = {
   state(): HostState;
   /** Begins starting. Call once, after `ready`; later calls do nothing. */
   start(): void;
+  /** Resolves once the first start has settled as own, attached, restarting or failed, or the host was stopped. By then this home's config.json exists, unless it could not be written. */
+  settled(): Promise<void>;
   /** An uncaught error reached main. Restarts the agent when the app owns it. */
   fault(): void;
   /** From failed, starts again with the fault history cleared. */
@@ -49,6 +51,8 @@ export const ATTACHED_POLL_MS = 10_000;
 export const FAULT_WINDOW_MS = 300_000;
 /** The wait before restarting, by how many faults the window already held. A fault finding all five used fails. */
 export const BACKOFF_MS = [1_000, 2_000, 4_000, 8_000, 16_000] as const;
+/** Shown as the agent's reason while attached to an agent started before it knew this app's origin. */
+export const REFUSED_MESSAGE = "the agent on this port refuses this app's page; stop it and this app will start its own";
 /** How long a faulted agent gets to stop before the host moves on without it. */
 const AGENT_STOP_CAP_MS = 5_000;
 
@@ -66,8 +70,14 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
 
   const stopped = (): boolean => stopping !== null;
 
+  let markSettled: () => void = () => {};
+  const firstSettled = new Promise<void>((resolve) => {
+    markSettled = resolve;
+  });
+
   const set = (patch: Partial<HostState>): void => {
     state = { ...state, ...patch };
+    if (state.mode !== "starting") markSettled();
     deps.onChange?.(state);
   };
 
@@ -112,10 +122,13 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
         return;
       }
       if (err instanceof PortInUseError) {
-        if (!(await deps.probe(err.port))) return faulted({ portInUse: true });
+        const found = await deps.probe(err.port);
+        if (found === "none") return faulted({ portInUse: true });
         if (stopped()) return;
-        deps.log("desktop.attached", { port: err.port });
-        set({ mode: "attached", port: err.port });
+        // An agent that refuses the page is still an agent holding the port: attach, so the takeover
+        // happens when it stops, and say why the page stays simulated until then.
+        deps.log(found === "refused" ? "desktop.attachedRefused" : "desktop.attached", { port: err.port });
+        set({ mode: "attached", port: err.port, error: found === "refused" ? REFUSED_MESSAGE : null });
         return refresh(err.port);
       }
       return faulted({});
@@ -132,8 +145,14 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
 
   const poll = async (port: number): Promise<void> => {
     if (stopped() || state.mode !== "attached") return;
-    if (await deps.probe(port)) return refresh(port);
+    const found = await deps.probe(port);
     if (stopped()) return;
+    if (found !== "none") {
+      // The agent on the port may have been replaced by a newer one since the last look.
+      const error = found === "refused" ? REFUSED_MESSAGE : null;
+      if (error !== state.error) set({ error });
+      return refresh(port);
+    }
     deps.log("desktop.takeover", { port });
     return attempt();
   };
@@ -162,6 +181,7 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
       begun = true;
       queue(attempt);
     },
+    settled: () => firstSettled,
     fault() {
       queue(async () => {
         if (stopped()) return;
@@ -189,6 +209,7 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
     },
     stop() {
       stopping ??= (async () => {
+        markSettled();
         if (timer !== null) clearTimeout(timer);
         timer = null;
         await work;
@@ -203,7 +224,7 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
 export function statusText(state: HostState): string {
   const parts = ["Clawd Visualiser", `${state.sessions} ${state.sessions === 1 ? "session" : "sessions"}`];
   if (state.waiting > 0) parts.push(`${state.waiting} waiting`);
-  if (state.mode === "attached") parts.push("agent attached");
+  if (state.mode === "attached") parts.push(state.error === null ? "agent attached" : "agent attached, refuses this app");
   if (state.mode === "failed") parts.push("agent failed");
   return parts.join(" · ");
 }

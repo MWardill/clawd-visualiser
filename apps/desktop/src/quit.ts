@@ -24,6 +24,8 @@ export function settleWithin(work: Promise<unknown>, ms: number): Promise<boolea
 }
 
 export type QuitDeps = {
+  /** Called once, when the first `will-quit` arrives: every window has closed, so the quit is certain. Main takes the tray icon away here, not in `before-quit`, which a page's `beforeunload` could still cancel, leaving the agent running with no icon. */
+  begin?(): void;
   /** Stops the agent host. */
   stop(): Promise<void>;
   /** Writes out the log lines still queued. */
@@ -40,6 +42,11 @@ export function createQuitHandler(deps: QuitDeps): (event: { preventDefault(): v
     event.preventDefault();
     if (quitting) return;
     quitting = true;
+    try {
+      deps.begin?.();
+    } catch {
+      // Tidying up must not stop the quit.
+    }
     void (async () => {
       // Promise.resolve().then() turns a stop that throws synchronously into a rejection.
       if (!(await settleWithin(Promise.resolve().then(deps.stop), QUIT_CAP_MS))) deps.log("desktop.stopTimedOut");

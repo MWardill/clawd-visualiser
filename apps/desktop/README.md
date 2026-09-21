@@ -19,10 +19,13 @@ to it instead and starts its own when that one stops; the window title says whic
 `~/.clawd/logs/desktop-YYYY-MM-DD.log`, and in development the same lines print to the terminal.
 
 The export talks to the agent at `http://127.0.0.1:4750`, unless `NEXT_PUBLIC_AGENT_URL` was set
-when it was built. An agent started before stage 3, such as a CLI agent left running from earlier,
-does not know the `app://clawd` origin and refuses the page: the app still attaches to it and the
-title says `agent attached`, but the page stays simulated. Restart that agent, or stop it and let
-the app run its own.
+when it was built. No stage lets the port vary: a `port` edited by hand in `config.json` moves the
+agent, and the page, which still asks 4750, stays simulated. An agent started before stage 3, such
+as a CLI agent left running from earlier, does not know the `app://clawd` origin and refuses the
+page: the app attaches to it, and the title, the tray and Settings say `agent attached, refuses this
+app`. Stop that agent and the app starts its own. DevTools' console shows one `unsafe-eval`
+Content Security Policy report per page load. It is expected and harmless: zod tests whether it may
+compile its parsers, is told no, and carries on without.
 
 The app lives in the tray. Closing the window hides it and the agent keeps running; click the tray
 icon to bring it back, and quit from the tray menu or with Ctrl+Q. Only one copy runs: starting it
@@ -349,3 +352,40 @@ screen reader can announce it, not yet checked with one.
 scripts, saves the config, then writes the settings file, in one call and in that order; a failure
 before the save leaves the config untouched, and an install that would change nothing writes no
 backup.
+
+### Stage 8: hardening, the second half
+
+Nothing new in Electron. Every item the reviews left in the design's §12.1 is done, or dropped with
+its reason written beside it.
+
+**The page is built once.** Main pushes a state whenever a session changes, and the settings page
+used to rebuild itself each time, which dropped a button's busy guard, reset a radio mid-request and
+wiped a text selection. It now patches text, `hidden` and `checked` in place and rebuilds only the
+folder list, when the list changes. The notice sits in a `role="status"` container that is always
+rendered, so a screen reader hears the first one. `settings/page.test.ts` runs the real page under
+happy-dom over a stub bridge. The bridge is typed once, as `SettingsApi` in `settings/state.ts`; the
+preload takes the channel names from an import-free module and fell from about 750 kB to a few; the
+window has its font, copied beside the page from `@fontsource/jetbrains-mono`.
+
+**The install asks first.** Install hooks never creates a config. With one, the app asks the agent on
+the port whether it holds the config's token, the way a hook would. Attached to an agent that
+answers 401, one started from another `CLAWD_HOME`, nothing is written and the page says why. When
+the app's own agent answers 401, the config was recreated under it: the agent is restarted and the
+hooks are then written. The launch repair is a tested function, and runs once the agent's first
+start has settled, so a token that start created is seen on the same launch.
+
+**The shell.** A `desktop.json` that exists but cannot be read is left alone for the run, and the
+first-run login item is skipped. Bounds saved on a larger display are clamped to the one holding
+most of the window, a title strip across the seam of two displays counts, and the maximised state is
+kept. Ctrl+Q also works on a layout with no Latin letters, by the physical key, and only there, since
+on AZERTY that key types `a`. The tray icon goes in `will-quit`, when the quit is certain. The Start
+on login control shows off when the entry is switched off in Task Manager, if Electron reports the
+entry; each launch logs what it reported as `desktop.loginItem`.
+
+**The scheme.** One table for the two hosts, a handler that cannot reject, Windows device names
+refused, the export's `404.html` for a missing page, and `connect-src 'self'`.
+
+**The agent.** The packaged app's agent no longer accepts `http://localhost:3000`. The presence
+poller survives a stop followed at once by a start, and its command runner ends the whole process
+tree on overflow as well as on a timeout or an abort, with `taskkill` called by its full path. A
+session that has waited 36 hours for an answer leaves the view until it is answered.

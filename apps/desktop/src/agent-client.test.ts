@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { countsOf, fetchCounts, probeHealth } from "./agent-client";
+import { checkToken, countsOf, fetchCounts, probeHealth } from "./agent-client";
 import { snapshot } from "./testing/snapshot";
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void;
@@ -49,22 +49,50 @@ describe("countsOf", () => {
 });
 
 describe("probeHealth", () => {
-  it("is true when the health endpoint answers ok, whatever else the body carries", async () => {
+  it("is ok when the health endpoint answers ok, whatever else the body carries, and asks as the app's page would", async () => {
     let path = "";
+    let origin: string | undefined;
     const port = await serve((req, res) => {
       path = req.url ?? "";
+      origin = req.headers.origin;
       reply({ ok: true, version: "9.9.9", sessions: 2, somethingNewer: 1 })(req, res);
     });
-    expect(await probeHealth(port)).toBe(true);
+    expect(await probeHealth(port)).toBe("ok");
     expect(path).toBe("/api/health");
+    expect(origin).toBe("app://clawd");
   });
 
-  it("is false for an error status, a body that is not ok, a body that is not JSON, a closed port or a reply too slow", async () => {
-    expect(await probeHealth(await serve(reply({ error: "not found" }, 404)))).toBe(false);
-    expect(await probeHealth(await serve(reply({ ok: false })))).toBe(false);
-    expect(await probeHealth(await serve(reply("<html>")))).toBe(false);
-    expect(await probeHealth(await closedPort())).toBe(false);
-    expect(await probeHealth(await serve(() => {}), 50)).toBe(false);
+  it("is refused when an agent answers the app's origin with its own 403, and none for a 403 from anything else", async () => {
+    expect(await probeHealth(await serve(reply({ error: "origin not allowed" }, 403)))).toBe("refused");
+    expect(await probeHealth(await serve(reply("<html>forbidden</html>", 403)))).toBe("none");
+    expect(await probeHealth(await serve(reply({ error: "something else" }, 403)))).toBe("none");
+  });
+
+  it("is none for an error status, a body that is not ok, a body that is not JSON, a closed port or a reply too slow", async () => {
+    expect(await probeHealth(await serve(reply({ error: "not found" }, 404)))).toBe("none");
+    expect(await probeHealth(await serve(reply({ ok: false })))).toBe("none");
+    expect(await probeHealth(await serve(reply("<html>")))).toBe("none");
+    expect(await probeHealth(await closedPort())).toBe("none");
+    expect(await probeHealth(await serve(() => {}), 50)).toBe("none");
+  });
+});
+
+describe("checkToken", () => {
+  it("posts the token to the status ingest route with an empty body and no origin, and reads 200 as held and 401 as refused", async () => {
+    const seen: { method?: string; url?: string; token?: string | string[]; origin?: string; length?: string } = {};
+    const held = await serve((req, res) => {
+      Object.assign(seen, { method: req.method, url: req.url, token: req.headers["x-clawd-token"], origin: req.headers.origin, length: req.headers["content-length"] });
+      reply({})(req, res);
+    });
+    expect(await checkToken(held, "a".repeat(64))).toBe("held");
+    expect(seen).toEqual({ method: "POST", url: "/ingest/status", token: "a".repeat(64), origin: undefined, length: "0" });
+    expect(await checkToken(await serve(reply({}, 401)), "a".repeat(64))).toBe("refused");
+  });
+
+  it("is unknown for any other status, a closed port or a reply too slow", async () => {
+    expect(await checkToken(await serve(reply({}, 403)), "t")).toBe("unknown");
+    expect(await checkToken(await closedPort(), "t")).toBe("unknown");
+    expect(await checkToken(await serve(() => {}), "t", 50)).toBe("unknown");
   });
 });
 

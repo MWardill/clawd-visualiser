@@ -1,9 +1,10 @@
 import { RedactedEventSchema, isAllowed, paneName, type DetailLevel } from "@clawd/core";
-import { exec, execFile } from "node:child_process";
+import { execFile, spawn } from "node:child_process";
 import { z } from "zod";
 import type { FleetHost } from "../host/host";
 import type { Logger } from "../log";
 import { listedIds, reconcile, type ListedDetail } from "./reconcile";
+import { taskkillPath } from "./taskkill";
 import type { TranscriptStats } from "./transcripts";
 
 export type ExecResult = { ok: true; stdout: string } | { ok: false };
@@ -11,10 +12,11 @@ export type Exec = (command: string, opts: { timeoutMs: number; maxBuffer: numbe
 
 /**
  * Runs a constant command through the shell (on Windows `claude` is a .cmd shim). stdout is
- * captured and stderr discarded, never inherited, and the error itself is never looked at. A
- * timeout or an aborted signal ends the command's whole process tree, because ending only the
- * shell would leave the CLI the shim started running, and it could still write into the Claude
- * directory.
+ * captured up to `maxBuffer` and stderr discarded, never inherited, and the error itself is never
+ * looked at. A timeout, an aborted signal or too much output ends the command's whole process tree,
+ * because ending only the shell would leave the CLI the shim started running, and it could still
+ * write into the Claude directory. The cap is this function's own: Node's `exec` enforces its
+ * `maxBuffer` by killing the shell alone.
  */
 export const nodeExec: Exec = (command, opts) =>
   new Promise((resolve) => {
@@ -22,21 +24,30 @@ export const nodeExec: Exec = (command, opts) =>
       resolve({ ok: false });
       return;
     }
-    const cleanup = (): void => {
+    let settled = false;
+    let size = 0;
+    const chunks: Buffer[] = [];
+    const finish = (result: ExecResult): void => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       opts.signal?.removeEventListener("abort", end);
+      resolve(result);
     };
     const end = (): void => {
-      cleanup();
       if (child.pid !== undefined && child.exitCode === null && child.signalCode === null) {
-        execFile("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true }, () => {});
+        execFile(taskkillPath(), ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true }, () => {});
       }
-      resolve({ ok: false });
+      finish({ ok: false });
     };
-    const child = exec(command, { maxBuffer: opts.maxBuffer, windowsHide: true, encoding: "utf8" }, (err, stdout) => {
-      cleanup();
-      resolve(err ? { ok: false } : { ok: true, stdout });
+    const child = spawn(command, { shell: true, windowsHide: true, stdio: ["ignore", "pipe", "ignore"] });
+    child.stdout.on("data", (chunk: Buffer) => {
+      size += chunk.length;
+      if (size > opts.maxBuffer) end();
+      else chunks.push(chunk);
     });
+    child.on("error", () => finish({ ok: false }));
+    child.on("close", (code) => finish(code === 0 ? { ok: true, stdout: Buffer.concat(chunks).toString("utf8") } : { ok: false }));
     const timer = setTimeout(end, opts.timeoutMs);
     opts.signal?.addEventListener("abort", end, { once: true });
   });
@@ -102,6 +113,13 @@ export function createPresencePoller(deps: {
   let running = false;
   let stopped = false;
   let listing: AbortController | null = null;
+  /**
+   * Raised by every stop. A run or a loop that began under an earlier generation is over, even when
+   * `start()` has cleared `stopped` again by the time it looks: without this, a stop followed at
+   * once by a start shared the aborted run, logged it as a failure, skipped a poll, and left the
+   * old loop scheduling polls beside the new one.
+   */
+  let generation = 0;
 
   /**
    * Transcript figures for the allowlisted, listed sessions not counted in this run and not ended,
@@ -123,7 +141,8 @@ export function createPresencePoller(deps: {
     return read;
   }
 
-  async function run(): Promise<boolean> {
+  async function run(mine: number): Promise<boolean> {
+    const over = (): boolean => stopped || mine !== generation;
     const aborter = new AbortController();
     listing = aborter;
     let result: ExecResult;
@@ -132,7 +151,7 @@ export function createPresencePoller(deps: {
     } finally {
       if (listing === aborter) listing = null;
     }
-    if (stopped) return false;
+    if (over()) return false;
     const entries = result.ok ? parseArray(result.stdout) : null;
     if (entries === null) {
       deps.log("presence.failed");
@@ -157,7 +176,7 @@ export function createPresencePoller(deps: {
     }
     deps.host.settleRestored(allowed);
     const read = await readUncounted(allowed);
-    if (stopped) return false;
+    if (over()) return false;
     const lastWriteAt = new Map<string, number>();
     for (const [id, stats] of read) if (stats) lastWriteAt.set(id, stats.lastWriteAt);
     const sessions = deps.host.sessions();
@@ -182,15 +201,19 @@ export function createPresencePoller(deps: {
   }
 
   const pollOnce = (): Promise<boolean> => {
-    inFlight ??= run()
+    if (inFlight !== null) return inFlight;
+    const mine = generation;
+    const current: Promise<boolean> = run(mine)
       .catch(() => {
-        deps.log("presence.failed");
+        if (!stopped && mine === generation) deps.log("presence.failed");
         return false;
       })
       .finally(() => {
-        inFlight = null;
+        // Only its own slot: a stop may have emptied it, and a start filled it, since this run began.
+        if (inFlight === current) inFlight = null;
       });
-    return inFlight;
+    inFlight = current;
+    return current;
   };
 
   return {
@@ -201,17 +224,21 @@ export function createPresencePoller(deps: {
       if (running) return;
       running = true;
       stopped = false;
+      const mine = generation;
       const loop = async (): Promise<void> => {
         await pollOnce();
-        if (running) timer = setTimeout(() => void loop(), deps.intervalMs);
+        if (running && mine === generation) timer = setTimeout(() => void loop(), deps.intervalMs);
       };
       void loop();
     },
     stop() {
       stopped = true;
       running = false;
+      generation++;
       listing?.abort();
       listing = null;
+      // The aborted run is no longer the one to share.
+      inFlight = null;
       if (timer !== null) {
         clearTimeout(timer);
         timer = null;

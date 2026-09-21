@@ -124,4 +124,20 @@ describe("deriveSnapshot", () => {
     expect(plain.sessions[0]).not.toHaveProperty("detail");
     expect(plain.panes[0]).not.toHaveProperty("detail");
   });
+
+  it("drops a wait nobody has answered for 36 hours, with its pane, and brings it back the moment it is answered", () => {
+    const ids = { sessionId: "s1", paneKey: "k1" };
+    let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, ids), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("permission.request", T0 + 1, { tool: "Bash", category: "run" }, ids), T0 + 1, DEFAULT_CONFIG);
+    const limit = T0 + 1 + DEFAULT_CONFIG.waitingHideMs;
+    expect(deriveSnapshot(f, emptyAliasMap(), limit - 1).snapshot.sessions.map((s) => s.state)).toEqual(["waiting"]);
+    const stale = deriveSnapshot(f, emptyAliasMap(), limit).snapshot;
+    expect(stale.sessions).toEqual([]);
+    expect(stale.panes).toEqual([]);
+    // Hidden, not re-stated: it is still waiting in the fleet.
+    expect(f.sessions.s1?.state).toBe("waiting");
+    const answeredAt = limit + 24 * 3_600_000;
+    f = reduceFleet(f, event("permission.denied", answeredAt, {}, ids), answeredAt, DEFAULT_CONFIG);
+    expect(deriveSnapshot(f, emptyAliasMap(), answeredAt).snapshot.sessions).toHaveLength(1);
+  });
 });

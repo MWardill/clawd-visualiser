@@ -3,7 +3,7 @@
 // commands follow the app wherever its folder is. This module also decides what the hooks' status
 // is: it reads the config, the settings file and the installed scripts, so main only wires it.
 // Electron-free, so every classification is tested.
-import { HOOK_SCRIPTS, hookStatus, installedRuntimeExe, isJsonObject, nodeRuntime, readConfig, readJsonFile, type AgentConfig, type AgentPaths, type HookStatus } from "@clawd/agent";
+import { HOOK_SCRIPTS, hookStatus, installedRuntimeExe, isJsonObject, nodeRuntime, readConfig, readJsonFile, type AgentConfig, type AgentPaths, type HookStatus, type Logger } from "@clawd/agent";
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 
@@ -50,6 +50,43 @@ export async function installedExe(settingsPath: string): Promise<string | null>
   const file = await readJsonFile(settingsPath).catch(() => null);
   if (file === null || !file.found || !file.ok || !isJsonObject(file.value)) return null;
   return installedRuntimeExe(file.value);
+}
+
+export type LaunchRepairDeps = {
+  packaged: boolean;
+  /** This app's own executable, `process.execPath`. */
+  thisExe: string;
+  /** The hooks' status now. Main calls this after the host's first start has settled, so a config that start created is seen. */
+  status(): Promise<HookStatus>;
+  /** The executable the installed SessionStart command names, or null. */
+  installedExe(): Promise<string | null>;
+  exists(path: string): Promise<boolean>;
+  install(): Promise<{ ok: boolean }>;
+  log: Logger;
+};
+
+/**
+ * The repair a packaged launch makes on its own: read the status, decide with `repairOnLaunch`
+ * whether stale hooks are this app's to rewrite, rewrite them, and log which way it went. Nothing is
+ * read in development. Never rejects.
+ */
+export async function launchRepair(deps: LaunchRepairDeps): Promise<"none" | "repaired" | "failed"> {
+  if (!deps.packaged) return "none";
+  try {
+    const status = await deps.status();
+    if (status !== "stale") return "none";
+    const named = await deps.installedExe();
+    const namedExists = named !== null && (await deps.exists(named));
+    if (!repairOnLaunch({ status, packaged: true, installedExe: named, installedExeExists: namedExists, thisExe: deps.thisExe })) return "none";
+    if ((await deps.install()).ok) {
+      deps.log("desktop.hooksRepaired");
+      return "repaired";
+    }
+  } catch {
+    // Logged below, as a refused install is.
+  }
+  deps.log("desktop.hooksFailed", { repair: true });
+  return "failed";
 }
 
 export type ConfigRead = { kind: "ok"; config: AgentConfig } | { kind: "missing" } | { kind: "unreadable" };

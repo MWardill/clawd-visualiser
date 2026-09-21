@@ -1,7 +1,8 @@
 import { ConfigError, PortInUseError, type RunningAgent } from "@clawd/agent";
 import type { Snapshot } from "@clawd/core";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ATTACHED_POLL_MS, BACKOFF_MS, FAULT_WINDOW_MS, createAgentHost, statusText, type AgentHostDeps, type HostState } from "./agent-host";
+import type { Probe } from "./agent-client";
+import { ATTACHED_POLL_MS, BACKOFF_MS, FAULT_WINDOW_MS, REFUSED_MESSAGE, createAgentHost, statusText, type AgentHostDeps, type HostState } from "./agent-host";
 import { snapshot } from "./testing/snapshot";
 
 /** Runs every queued promise callback. setImmediate is left real by the fake timers below. */
@@ -36,7 +37,7 @@ function harness(opts: { fail?: unknown[]; probe?: AgentHostDeps["probe"]; count
       agents.push(agent);
       return agent;
     },
-    probe: opts.probe ?? (async () => false),
+    probe: opts.probe ?? (async () => "none"),
     counts: opts.counts ?? (async () => null),
     log: (code) => void codes.push(code),
     now: () => Date.now(),
@@ -52,6 +53,51 @@ afterEach(() => {
 });
 
 describe("createAgentHost", () => {
+  it("attaches to an agent that refuses this app's page, says why, and stops saying it once a later probe is let in", async () => {
+    let found: Probe = "refused";
+    const { host, codes } = harness({ fail: [new PortInUseError(4750)], probe: async () => found });
+    host.start();
+    await flush();
+    expect(host.state()).toMatchObject({ mode: "attached", port: 4750, error: REFUSED_MESSAGE });
+    expect(codes).toEqual(["desktop.attachedRefused"]);
+
+    found = "ok";
+    await advance(ATTACHED_POLL_MS);
+    expect(host.state()).toMatchObject({ mode: "attached", error: null });
+
+    found = "none";
+    await advance(ATTACHED_POLL_MS);
+    expect(host.state()).toMatchObject({ mode: "own", error: null });
+  });
+
+  it("says when its first start has settled, however it went, and on stop", async () => {
+    const own = harness();
+    let settled = false;
+    void own.host.settled().then(() => {
+      settled = true;
+    });
+    await flush();
+    expect(settled).toBe(false);
+    own.host.start();
+    await flush();
+    expect(settled).toBe(true);
+
+    const attached = harness({ fail: [new PortInUseError(4750)], probe: async () => "ok" });
+    attached.host.start();
+    await flush();
+    await expect(attached.host.settled()).resolves.toBeUndefined();
+
+    const failed = harness({ fail: [new ConfigError("config.json is invalid at: port")] });
+    failed.host.start();
+    await flush();
+    await expect(failed.host.settled()).resolves.toBeUndefined();
+
+    const never = harness();
+    const waiting = never.host.settled();
+    await never.host.stop();
+    await expect(waiting).resolves.toBeUndefined();
+  });
+
   it("owns the agent it starts and counts sessions from its snapshots", async () => {
     const { host, agents } = harness();
     host.start();
@@ -63,7 +109,7 @@ describe("createAgentHost", () => {
 
   it("attaches to an agent already answering on the port, polls it, and takes over when it goes quiet", async () => {
     let answering = true;
-    const { host, codes, agents, starts } = harness({ fail: [new PortInUseError(4750)], probe: async () => answering, counts: async () => ({ sessions: 2, waiting: 1 }) });
+    const { host, codes, agents, starts } = harness({ fail: [new PortInUseError(4750)], probe: async () => (answering ? "ok" : "none"), counts: async () => ({ sessions: 2, waiting: 1 }) });
     host.start();
     await flush();
     expect(host.state()).toMatchObject({ mode: "attached", port: 4750, sessions: 2, waiting: 1 });
@@ -162,7 +208,7 @@ describe("createAgentHost", () => {
   });
 
   it("logs an uncaught error while attached and changes nothing", async () => {
-    const { host, codes, starts } = harness({ fail: [new PortInUseError(4750)], probe: async () => true });
+    const { host, codes, starts } = harness({ fail: [new PortInUseError(4750)], probe: async () => "ok" });
     host.start();
     await flush();
     host.fault();
@@ -196,7 +242,7 @@ describe("createAgentHost", () => {
         new Promise<RunningAgent>((resolve) => {
           resolveStart = resolve;
         }),
-      probe: async () => false,
+      probe: async () => "none",
       counts: async () => null,
       log: () => {},
     });
@@ -226,7 +272,7 @@ describe("createAgentHost", () => {
   });
 
   it("takes over from an attached agent on a restart, and starts nothing after stop", async () => {
-    const attached = harness({ fail: [new PortInUseError(4750)], probe: async () => true });
+    const attached = harness({ fail: [new PortInUseError(4750)], probe: async () => "ok" });
     attached.host.start();
     await flush();
     const codesBeforeRestart = [...attached.codes];
@@ -280,5 +326,6 @@ describe("statusText", () => {
     expect(statusText({ ...base, sessions: 1, waiting: 0 })).toBe("Clawd Visualiser · 1 session");
     expect(statusText({ ...base, mode: "attached" })).toBe("Clawd Visualiser · 3 sessions · 1 waiting · agent attached");
     expect(statusText({ ...base, mode: "failed", sessions: 0, waiting: 0 })).toBe("Clawd Visualiser · 0 sessions · agent failed");
+    expect(statusText({ ...base, mode: "attached", error: REFUSED_MESSAGE })).toBe("Clawd Visualiser · 3 sessions · 1 waiting · agent attached, refuses this app");
   });
 });

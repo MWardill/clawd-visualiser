@@ -8,8 +8,17 @@ const HOUR = 3_600_000;
 const quiet = (prompts: number, over: Partial<SessionState> = {}): SessionState => ({ ...newSession("s1", "k1", T0), state: "asleep", prompts, lastActiveAt: T0, ...over });
 
 describe("isShown", () => {
-  it("always shows a working or waiting session, prompted or not", () => {
-    for (const state of ["working", "waiting"] as const) expect(isShown(quiet(0, { state }), T0 + 1_000 * HOUR, DEFAULT_CONFIG)).toBe(true);
+  it("always shows a working session, prompted or not", () => {
+    expect(isShown(quiet(0, { state: "working" }), T0 + 1_000 * HOUR, DEFAULT_CONFIG)).toBe(true);
+  });
+
+  it("shows a waiting session until it has waited 36 hours, measured from when the wait began, whatever its prompts", () => {
+    for (const prompts of [0, 1, 9]) {
+      // Something else in the session was active 30 hours in (a subagent stopping, say): the wait is still dated from `since`.
+      const waiting = quiet(prompts, { state: "waiting", since: T0, lastActiveAt: T0 + 30 * HOUR });
+      expect(isShown(waiting, T0 + 36 * HOUR - 1, DEFAULT_CONFIG)).toBe(true);
+      expect(isShown(waiting, T0 + 36 * HOUR, DEFAULT_CONFIG)).toBe(false);
+    }
   });
 
   it("never shows a session nobody has prompted", () => {

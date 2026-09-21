@@ -15,12 +15,19 @@ export function checkOrigin(origin: string | undefined, allowed: readonly string
   return allowed.includes(origin) ? { kind: "allowed", origin } : { kind: "denied" };
 }
 
-/** Origins every agent accepts with no configuration: the web app's dev server and the desktop app's page. */
-export const BUILTIN_ORIGINS: readonly string[] = ["http://localhost:3000", "http://127.0.0.1:3000", DESKTOP_ORIGIN];
+/**
+ * The web app's dev server. Accepted with no configuration unless the agent's host leaves them out:
+ * the packaged desktop app does, because a teammate's machine has no dev server of ours, and
+ * whatever else listens on port 3000 there should not read the stream or send focus commands.
+ */
+export const DEV_ORIGINS: readonly string[] = ["http://localhost:3000", "http://127.0.0.1:3000"];
 
-/** The built-in origins, then those the config adds. A config that still lists a built-in one is harmless. */
-export function allowedOrigins(configured: readonly string[]): string[] {
-  return [...BUILTIN_ORIGINS, ...configured];
+/** Origins an agent accepts with no configuration: the dev server's and the desktop app's page. */
+export const BUILTIN_ORIGINS: readonly string[] = [...DEV_ORIGINS, DESKTOP_ORIGIN];
+
+/** The built-in origins, then those the config adds. A config that lists a built-in one is harmless, and is how a host without the dev origins gets one back. */
+export function allowedOrigins(configured: readonly string[], devOrigins = true): string[] {
+  return [...(devOrigins ? DEV_ORIGINS : []), DESKTOP_ORIGIN, ...configured];
 }
 
 /** Constant-time comparison of the hook token header. */

@@ -1,6 +1,12 @@
-/* The app's night palette, JetBrains Mono, no framework. */
+/* The app's night palette, JetBrains Mono, no framework. The two font files are copied beside this
+   page by build/bundle.mjs: the settings origin may load only its own files, so the visualiser's
+   copy of the face is out of reach. */
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: block; src: url("jetbrains-mono-400.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 700; font-display: block; src: url("jetbrains-mono-700.woff2") format("woff2"); }
 :root { color-scheme: dark; --bg: #0a0b10; --panel: #141721; --line: #262a3a; --text: #c9ccd6; --dim: #5d6274; --amber: #f2c35b; }
 * { box-sizing: border-box; }
+/* Rows are flex, which would otherwise beat the hidden attribute: the page hides rows rather than removing them. */
+[hidden] { display: none !important; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.5 "JetBrains Mono", Consolas, monospace; }
 main { padding: 16px; display: flex; flex-direction: column; gap: 16px; }
 section { background: var(--panel); border: 1px solid var(--line); border-radius: 6px; padding: 12px; }
@@ -8,9 +14,12 @@ h2 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing
 .row { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; }
 .dim { color: var(--dim); }
 .warn { color: var(--amber); }
-/* #notice sits before <main> in page.html, not inside its flex column, so it carries its own
+/* The notice's paragraph sits in #notice-region, before <main> in page.html, not inside its flex column, so it carries its own
    margin: 16px to match main's own padding on top and on the sides, none on the bottom so it
    plus main's padding-top adds up to the same 16px gap main's `gap` puts between sections. */
+/* A notice answering a click sits in its own section, under the heading, so it carries no margin of
+   its own beyond the gap to the rows below. */
+.section-notice .notice { margin: 0 0 8px; }
 .notice { margin: 16px 16px 0; padding: 8px 12px; border: 1px solid var(--amber); border-radius: 6px; color: var(--amber); }
 button { font: inherit; color: var(--text); background: #1f2330; border: 1px solid var(--line); border-radius: 4px; padding: 4px 10px; cursor: pointer; }
 button:hover { border-color: var(--dim); }

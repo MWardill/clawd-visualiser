@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from "vitest";
 import { FleetHost } from "../host/host";
 import { silentLogger } from "../log";
 import { T0, ev } from "../testing/events";
+import { waitFor } from "../testing/http";
 import { ALLOWED_ROOT, SESSION_CWD, OUTSIDE_CWD, rawAgentEntry } from "../testing/raw";
 import { createPresencePoller, nodeExec, type Exec, type ExecResult } from "./poller";
 import type { TranscriptStats } from "./transcripts";
@@ -283,6 +284,29 @@ describe("presence poller", () => {
       vi.useRealTimers();
     }
   });
+
+  it("starts cleanly straight after a stop: the aborted run logs no failure, the new loop polls at once, and only one loop survives", async () => {
+    vi.useFakeTimers();
+    try {
+      const t = setup();
+      t.exec.mockImplementationOnce((_command, opts) => new Promise((resolve) => opts.signal?.addEventListener("abort", () => resolve({ ok: false }))));
+      t.poller.start();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(t.exec).toHaveBeenCalledTimes(1);
+      t.poller.stop();
+      t.poller.start();
+      await vi.advanceTimersByTimeAsync(0);
+      // The new loop runs its own command rather than sharing the aborted one.
+      expect(t.exec).toHaveBeenCalledTimes(2);
+      expect(t.log).not.toHaveBeenCalledWith("presence.failed");
+      // One loop, not two: one more poll per interval.
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(t.exec).toHaveBeenCalledTimes(3);
+      t.poller.stop();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
 });
 
 describe.concurrent("nodeExec", () => {
@@ -294,7 +318,7 @@ describe.concurrent("nodeExec", () => {
       const command = `"${process.execPath}" -e "require('fs').writeFileSync('${started}', 'x'); setTimeout(() => require('fs').writeFileSync('${delayed}', 'x'), 1500)"`;
       const controller = new AbortController();
       const pending = nodeExec(command, { timeoutMs: 15_000, maxBuffer: 4 * 1024 * 1024, signal: controller.signal });
-      await new Promise((resolve) => setTimeout(resolve, 300));
+      await waitFor(() => existsSync(started), 5_000);
       controller.abort();
       expect(await pending).toEqual({ ok: false });
       expect(existsSync(started)).toBe(true);
@@ -310,10 +334,12 @@ describe.concurrent("nodeExec", () => {
     try {
       const started = join(dir, "started.txt").replace(/\\/g, "/");
       const delayed = join(dir, "delayed.txt").replace(/\\/g, "/");
-      const command = `"${process.execPath}" -e "require('fs').writeFileSync('${started}', 'x'); setTimeout(() => require('fs').writeFileSync('${delayed}', 'x'), 1500)"`;
-      expect(await nodeExec(command, { timeoutMs: 300, maxBuffer: 4 * 1024 * 1024 })).toEqual({ ok: false });
+      // The fuse is long because taskkill itself costs the better part of a second: the timeout fires
+      // at 1 s, the tree is gone by about 1.7 s, and the write it must beat is at 4 s.
+      const command = `"${process.execPath}" -e "require('fs').writeFileSync('${started}', 'x'); setTimeout(() => require('fs').writeFileSync('${delayed}', 'x'), 4000)"`;
+      expect(await nodeExec(command, { timeoutMs: 1_000, maxBuffer: 4 * 1024 * 1024 })).toEqual({ ok: false });
       expect(existsSync(started)).toBe(true);
-      await new Promise((resolve) => setTimeout(resolve, 2_500));
+      await new Promise((resolve) => setTimeout(resolve, 5_000));
       expect(existsSync(delayed)).toBe(false);
     } finally {
       await rm(dir, { recursive: true, force: true, maxRetries: 3 });
@@ -330,6 +356,24 @@ describe.concurrent("nodeExec", () => {
       expect(await nodeExec(command, { timeoutMs: 15_000, maxBuffer: 4 * 1024 * 1024, signal: controller.signal })).toEqual({ ok: false });
       await new Promise((resolve) => setTimeout(resolve, 1_000));
       expect(existsSync(file)).toBe(false);
+    } finally {
+      await rm(dir, { recursive: true, force: true, maxRetries: 3 });
+    }
+  }, 10_000);
+
+  it("returns what the command wrote when it exits cleanly", async () => {
+    expect(await nodeExec(`"${process.execPath}" -e "process.stdout.write('[]')"`, { timeoutMs: 15_000, maxBuffer: 4 * 1024 * 1024 })).toEqual({ ok: true, stdout: "[]" });
+    expect(await nodeExec(`"${process.execPath}" -e "process.exit(3)"`, { timeoutMs: 15_000, maxBuffer: 4 * 1024 * 1024 })).toEqual({ ok: false });
+  }, 10_000);
+
+  it("kills the whole process tree when the output overflows the cap, so a chatty CLI cannot outlive its shell", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "clawd-nodeexec-"));
+    try {
+      const delayed = join(dir, "delayed.txt").replace(/\\/g, "/");
+      const command = `"${process.execPath}" -e "process.stdout.write('x'.repeat(65536)); setTimeout(() => require('fs').writeFileSync('${delayed}', 'x'), 1500)"`;
+      expect(await nodeExec(command, { timeoutMs: 15_000, maxBuffer: 1024 })).toEqual({ ok: false });
+      await new Promise((resolve) => setTimeout(resolve, 2_500));
+      expect(existsSync(delayed)).toBe(false);
     } finally {
       await rm(dir, { recursive: true, force: true, maxRetries: 3 });
     }

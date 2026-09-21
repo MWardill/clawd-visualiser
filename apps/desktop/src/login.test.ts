@@ -1,6 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
-import { APP_ID, appUserModelId, loginItemTarget, loginOnLaunch } from "./login";
+import { APP_ID, appUserModelId, loginItemTarget, loginOnLaunch, shownAtLogin } from "./login";
 
 describe("APP_ID", () => {
   it("is the design's appId", () => {
@@ -46,19 +46,44 @@ describe("loginItemTarget", () => {
 
 describe("loginOnLaunch", () => {
   it("turns the login item on at the packaged app's first run, and not in development", () => {
-    expect(loginOnLaunch({ packaged: true, remembered: undefined, registered: false })).toBe("enableFirstRun");
-    expect(loginOnLaunch({ packaged: false, remembered: undefined, registered: false })).toBe("none");
+    expect(loginOnLaunch({ packaged: true, remembered: undefined, registered: false, stateUsable: true })).toBe("enableFirstRun");
+    expect(loginOnLaunch({ packaged: false, remembered: undefined, registered: false, stateUsable: true })).toBe("none");
   });
 
   it("writes the entry again when the user wants it and Windows has none for this path, packaged only", () => {
-    expect(loginOnLaunch({ packaged: true, remembered: true, registered: false })).toBe("reapply");
-    expect(loginOnLaunch({ packaged: false, remembered: true, registered: false })).toBe("none");
+    expect(loginOnLaunch({ packaged: true, remembered: true, registered: false, stateUsable: true })).toBe("reapply");
+    expect(loginOnLaunch({ packaged: false, remembered: true, registered: false, stateUsable: true })).toBe("none");
   });
 
   it("leaves an entry Windows already has, and a choice of off, alone", () => {
-    expect(loginOnLaunch({ packaged: true, remembered: true, registered: true })).toBe("none");
-    expect(loginOnLaunch({ packaged: true, remembered: false, registered: false })).toBe("none");
-    expect(loginOnLaunch({ packaged: true, remembered: false, registered: true })).toBe("none");
-    expect(loginOnLaunch({ packaged: true, remembered: undefined, registered: true })).toBe("enableFirstRun");
+    expect(loginOnLaunch({ packaged: true, remembered: true, registered: true, stateUsable: true })).toBe("none");
+    expect(loginOnLaunch({ packaged: true, remembered: false, registered: false, stateUsable: true })).toBe("none");
+    expect(loginOnLaunch({ packaged: true, remembered: false, registered: true, stateUsable: true })).toBe("none");
+    expect(loginOnLaunch({ packaged: true, remembered: undefined, registered: true, stateUsable: true })).toBe("enableFirstRun");
+  });
+
+  it("touches nothing when the state file could not be read, since a stored choice of off may be in it", () => {
+    expect(loginOnLaunch({ packaged: true, remembered: undefined, registered: false, stateUsable: false })).toBe("none");
+    expect(loginOnLaunch({ packaged: true, remembered: true, registered: false, stateUsable: false })).toBe("none");
+  });
+});
+
+describe("shownAtLogin", () => {
+  const NAME = "io.github.mwardill.clawd-visualiser";
+
+  it("is off when Windows has no entry for this exe", () => {
+    expect(shownAtLogin({ openAtLogin: false, launchItems: [] }, NAME)).toBe(false);
+    expect(shownAtLogin({ openAtLogin: false, launchItems: [{ name: NAME, enabled: true }] }, NAME)).toBe(false);
+  });
+
+  it("is off when our entry is there but switched off in Task Manager, and on when it is enabled", () => {
+    expect(shownAtLogin({ openAtLogin: true, launchItems: [{ name: NAME, enabled: false }] }, NAME)).toBe(false);
+    expect(shownAtLogin({ openAtLogin: true, launchItems: [{ name: NAME, enabled: true }] }, NAME)).toBe(true);
+  });
+
+  it("goes by the Run value when Electron reports no entry of ours, as it did for the packaged exe in stage 6", () => {
+    expect(shownAtLogin({ openAtLogin: true, launchItems: [] }, NAME)).toBe(true);
+    expect(shownAtLogin({ openAtLogin: true }, NAME)).toBe(true);
+    expect(shownAtLogin({ openAtLogin: true, launchItems: [{ name: "some.other.app", enabled: false }] }, NAME)).toBe(true);
   });
 });

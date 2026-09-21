@@ -65,8 +65,9 @@ the rest of a command, tool output and assistant text are never read. Design:
 | `GET /api/health` | `{ ok, version, sessions, detailLevel }`, `detailLevel` present only above level none |
 
 Browsers may call these only from a built-in origin (`http://localhost:3000`, `http://127.0.0.1:3000`
-and the desktop app's `app://clawd`) or one added to `corsOrigins`. `/ingest/hook` and `/ingest/status`
-are for the hook scripts and need the token from `config.json`.
+and the desktop app's `app://clawd`) or one added to `corsOrigins`. A host can leave the two dev
+server origins out with `startAgent({ devOrigins: false })`, which the packaged desktop app does.
+`/ingest/hook` and `/ingest/status` are for the hook scripts and need the token from `config.json`.
 
 ## Files
 

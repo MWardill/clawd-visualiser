@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BUILTIN_ORIGINS, allowedOrigins, checkOrigin, hostAllowed, tokenMatches } from "./guards";
+import { BUILTIN_ORIGINS, DEV_ORIGINS, allowedOrigins, checkOrigin, hostAllowed, tokenMatches } from "./guards";
 
 describe("guards", () => {
   it("accepts only loopback host names on the agent's port", () => {
@@ -20,10 +20,14 @@ describe("guards", () => {
     expect(checkOrigin("null", allowed)).toEqual({ kind: "denied" });
   });
 
-  it("allows the local web origins and the desktop app's before any configured ones", () => {
+  it("allows the dev server's origins and the desktop app's before any configured ones, and can leave the dev server's out", () => {
+    expect(DEV_ORIGINS).toEqual(["http://localhost:3000", "http://127.0.0.1:3000"]);
     expect(BUILTIN_ORIGINS).toEqual(["http://localhost:3000", "http://127.0.0.1:3000", "app://clawd"]);
     expect(allowedOrigins([])).toEqual(BUILTIN_ORIGINS);
     expect(allowedOrigins(["https://clawd.example"])).toEqual([...BUILTIN_ORIGINS, "https://clawd.example"]);
+    expect(allowedOrigins([], false)).toEqual(["app://clawd"]);
+    // Listing it in the config is the opt-in.
+    expect(allowedOrigins(["http://localhost:3000"], false)).toEqual(["app://clawd", "http://localhost:3000"]);
   });
 
   it("matches the token exactly", () => {

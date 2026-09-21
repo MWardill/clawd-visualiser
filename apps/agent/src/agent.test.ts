@@ -15,6 +15,18 @@ import { useTempDirs } from "./testing/tmp";
 describe("startAgent", () => {
   const tempDir = useTempDirs();
 
+  it("leaves the dev server's origins out when its host asks, which the packaged desktop app does", async () => {
+    const home = await tempDir();
+    await saveConfig(agentPaths(home), { ...defaultConfig(), allowlist: [ALLOWED_ROOT] });
+    const agent = await startAgent({ home, port: 0, devOrigins: false, exec: async () => ({ ok: true, stdout: "[]" }), log: silentLogger, platform: "linux", transcriptsDir: await tempDir() });
+    try {
+      expect((await send(agent.port, { path: "/api/health", headers: { origin: "http://localhost:3000" } })).status).toBe(403);
+      expect((await send(agent.port, { path: "/api/health", headers: { origin: "app://clawd" } })).status).toBe(200);
+    } finally {
+      await agent.stop();
+    }
+  });
+
   it("names panes after their folder by default, and keeps every folder name out when the config asks for generated names", async () => {
     for (const [paneLabels, label] of [["folder", "repo"], ["generated", "Oak"]] as const) {
       const home = await tempDir();

@@ -26,7 +26,7 @@ if (!existsSync(exe)) {
 const bundled = await build({
   stdin: {
     contents: [
-      'export { agentPaths, readConfig } from "@clawd/agent";',
+      'export { agentPaths, readConfig, taskkillPath } from "@clawd/agent";',
       'export { DESKTOP_ORIGIN, ENDPOINTS } from "@clawd/core";',
       'export { createDesktopStore, desktopStatePath } from "./src/desktop-state.ts";',
       'export { logFileName } from "./src/log.ts";',
@@ -41,7 +41,7 @@ const bundled = await build({
   write: false,
   logLevel: "warning",
 });
-const { agentPaths, readConfig, DESKTOP_ORIGIN, ENDPOINTS, createDesktopStore, desktopStatePath, logFileName } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
+const { agentPaths, readConfig, taskkillPath, DESKTOP_ORIGIN, ENDPOINTS, createDesktopStore, desktopStatePath, logFileName } = await import(`data:text/javascript;base64,${Buffer.from(bundled.outputFiles[0].text).toString("base64")}`);
 
 const home = await mkdtemp(join(tmpdir(), "clawd-smoke-home-"));
 const claudeDir = await mkdtemp(join(tmpdir(), "clawd-smoke-claude-"));
@@ -124,17 +124,17 @@ const logRecords = async () =>
   });
 
 try {
-  await waitFor("desktop.started in the log", async () => (await logText()).includes('"code":"desktop.started","packaged":true'), 20_000);
+  await waitFor("desktop.started in the log", async () => (await logRecords()).some((record) => record.code === "desktop.started" && record.packaged === true), 20_000);
   console.log("smoke: the app started, and knows it is packaged");
   // Who serves the port, from the log and never from a missing line: the app's own agent logs
   // agent.started with the port it bound, and an app that found another agent answering there logs
   // desktop.attached. The config is written before the port is tried, so neither can be judged sooner.
   const owner = await waitFor(
-    "the log to say whose agent serves the port (agent.started or desktop.attached)",
-    async () => (await logRecords()).find((record) => record.code === "agent.started" || record.code === "desktop.attached"),
+    "the log to say whose agent serves the port (agent.started, desktop.attached or desktop.attachedRefused)",
+    async () => (await logRecords()).find((record) => record.code === "agent.started" || record.code === "desktop.attached" || record.code === "desktop.attachedRefused"),
     10_000,
   );
-  if (owner.code === "desktop.attached") throw new Error(`another agent holds port ${owner.port} and answered instead; stop it (the CLI's, or a development run) and run the smoke again`);
+  if (owner.code !== "agent.started") throw new Error(`another agent holds port ${owner.port} and answered instead; stop it (the CLI's, or a development run) and run the smoke again`);
   const config = await waitFor("config.json", () => readConfig(agentPaths(home)), 10_000);
   if (owner.port !== config.port) throw new Error(`the app's agent started on port ${owner.port}, but its config says ${config.port}`);
   const health = await waitFor(`health on port ${owner.port}`, async () => {
@@ -147,15 +147,25 @@ try {
 } finally {
   // The app's own process tree, nothing else: the app and everything it started, such as a Claude CLI
   // call still in flight that would otherwise write into the scratch folder after it is gone. No quit
-  // sequence: the scratch home is about to go. If the tree is still there, taskkill is missing or
-  // timed out: the app is killed by its own id, and the smoke fails, since what it started may live on.
+  // sequence: the scratch home is about to go. If the tree is still there, taskkill failed or timed
+  // out: the app is killed by its own id, its handle is let go if even that fails, and the smoke
+  // fails, since what it started may live on. An app that exits on its own mid-poll leaves its
+  // children orphaned and out of reach of a tree kill; the cost is a scratch folder that may not
+  // delete, which removeScratch warns about.
   if (ended === null) {
-    const kill = spawnSync("taskkill", ["/pid", String(app.pid), "/T", "/F"], { windowsHide: true, timeout: 10_000 });
+    // taskkill by its full path: by name, Windows would search this directory and PATH for it.
+    const kill = spawnSync(taskkillPath(), ["/pid", String(app.pid), "/T", "/F"], { windowsHide: true, timeout: 10_000 });
     await once(app, "exit", { signal: AbortSignal.timeout(5_000) }).catch(() => {});
     if (ended === null) {
       app.kill();
       await once(app, "exit", { signal: AbortSignal.timeout(5_000) }).catch(() => {});
-      fail(`the app did not stop when its process tree was ended (taskkill ${kill.error?.message ?? `exit ${kill.status}`}); it was killed by its own id, and what it started may still be running`);
+      // Still there: let go of its handle, or this script would wait on it for ever.
+      if (ended === null) app.unref();
+      fail(`the app did not stop when its process tree was ended (taskkill ${kill.error?.message ?? `exit ${kill.status}`}); ${ended === null ? "killing it by its own id did not end it either, and it was left running" : "it was killed by its own id"}, and what it started may still be running`);
+    } else if (kill.status !== 0) {
+      // The app is gone but taskkill was not clean. A child that exits between the listing and the
+      // kill earns the same code, so this warns rather than fails.
+      console.warn(`smoke: taskkill reported ${kill.error?.message ?? `exit ${kill.status}`} though the app stopped; something it started may still be running`);
     }
   }
   await removeScratch();

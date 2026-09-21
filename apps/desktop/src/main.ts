@@ -17,22 +17,24 @@ import {
 import { Menu, Tray, app, dialog, ipcMain, nativeImage, protocol, screen, shell, type BrowserWindow, type NativeImage, type OpenDialogOptions } from "electron";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
-import { fetchCounts, probeHealth } from "./agent-client";
+import { checkToken, fetchCounts, probeHealth } from "./agent-client";
 import { createAgentHost, statusText, type HostState } from "./agent-host";
 import { ownArgs, parseArgs, resolveRendererUrl } from "./args";
 import { restoredBounds } from "./bounds";
 import { createDesktopStore, desktopStatePath } from "./desktop-state";
-import { currentHookStatus, installedExe, readConfigState, repairOnLaunch, runtimePrefix } from "./hooks";
+import { currentHookStatus, installedExe, launchRepair, readConfigState, runtimePrefix } from "./hooks";
 import { isQuitShortcut } from "./keys";
 import { createFileSink, readRetentionDays } from "./log";
-import { appUserModelId, loginItemTarget, loginOnLaunch } from "./login";
+import { appUserModelId, loginItemTarget, loginOnLaunch, shownAtLogin } from "./login";
 import { distPaths } from "./paths";
-import { createQuitHandler } from "./quit";
-import { APP_SCHEME, createSchemeHandler } from "./scheme";
+import { showOrCreate } from "./reveal";
+import { createQuitHandler, settleWithin } from "./quit";
+import { APP_SCHEME, APP_URL, createSchemeHandler } from "./scheme";
 import { settingsState, type SettingsState } from "./settings-state";
 import { createSettingsActions } from "./settings/actions";
 import { createCoalescer } from "./settings/coalesce";
-import { CHANNELS, createHandlers } from "./settings/ipc";
+import { CHANNELS } from "./settings/channels";
+import { createHandlers } from "./settings/ipc";
 import { trayIconFile, trayMenuTemplate, trayTooltip } from "./tray";
 import { createMainWindow, createSettingsWindow } from "./window";
 
@@ -43,7 +45,7 @@ else app.exit(0);
 
 function run(): void {
   const args = parseArgs(ownArgs(process.argv, app.isPackaged));
-  const url = resolveRendererUrl(args, process.env, app.isPackaged);
+  const url = resolveRendererUrl(args, process.env, app.isPackaged, APP_URL);
   const home = defaultHome();
 
   // The id matches electron-builder.yml's appId, but for the dir and zip targets electron-builder
@@ -54,7 +56,7 @@ function run(): void {
   // A custom scheme is declared before `ready`, with what it may do. `standard` makes app://clawd/
   // behave like http: relative and root-relative URLs resolve under it and the page's origin is
   // app://clawd. `secure` makes the page a secure context. `supportFetchAPI` lets fetch reach the scheme,
-  // though the CSP's connect-src currently allows fetch to the agent only.
+  // which the CSP's connect-src allows for the page's own files.
   protocol.registerSchemesAsPrivileged([{ scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 
   // The agent's own logger, writing to a dated file: codes and numbers only. In development the
@@ -65,8 +67,10 @@ function run(): void {
     if (!app.isPackaged) process.stdout.write(line);
   });
 
-  const store = createDesktopStore(desktopStatePath(home, app.isPackaged));
+  const store = createDesktopStore(desktopStatePath(home, app.isPackaged), log);
   const login = loginItemTarget(app.isPackaged, process.execPath, app.getAppPath());
+  /** The Run value's name, which is the AppUserModelId set above: how Electron names our entry in launchItems. */
+  const loginName = appUserModelId(app.isPackaged);
   // Packaged, the bundle and the pages are inside resources/app.asar and the icons and scripts beside it.
   const dist = distPaths(__dirname, app.isPackaged ? process.resourcesPath : __dirname);
   const settingsPath = defaultSettingsPath();
@@ -83,10 +87,14 @@ function run(): void {
   // reads two files and asks Electron for the login item synchronously, on the same event loop the
   // agent runs on. A burst of snapshots is collapsed into one rebuild rather than one each.
   const STATE_COALESCE_MS = 150;
+  /** How long the launch repair waits for the host's first start; an agent starts in well under a second. */
+  const FIRST_START_CAP_MS = 10_000;
   const pushStateSoon = createCoalescer(STATE_COALESCE_MS, pushState);
 
   const host = createAgentHost({
-    start: (onSnapshot) => startAgent({ home, log, onSnapshot }),
+    // Packaged, the agent accepts this app's page and whatever the config lists, and not the dev
+    // server's origins: a teammate's machine has no dev server of ours on port 3000.
+    start: (onSnapshot) => startAgent({ home, log, onSnapshot, devOrigins: !app.isPackaged }),
     probe: (port) => probeHealth(port),
     counts: (port) => fetchCounts(port),
     log,
@@ -104,33 +112,27 @@ function run(): void {
 
   /** Shows the window, making it the first time; from the tray, a second launch, or startup. */
   function showWindow(): void {
-    // Quitting has begun: neither a second launch nor startup may bring a window back while the app exits.
-    if (quitting) return;
-    if (win !== null) {
-      if (win.isMinimized()) win.restore();
-      win.show();
-      win.focus();
-      return;
-    }
-    const workAreas = screen.getAllDisplays().map((display) => display.workArea);
-    const created = createMainWindow(url, statusText(host.state()), restoredBounds(store.get().bounds, workAreas));
-    // Closing hides the window, and the app and its agent carry on in the tray. Once quitting has
-    // begun the close goes through. Either way the bounds are remembered.
-    created.on("close", (event) => {
-      store.update({ bounds: created.getNormalBounds() });
-      if (quitting) return;
-      event.preventDefault();
-      created.hide();
+    win = showOrCreate(win, quitting, () => {
+      const workAreas = screen.getAllDisplays().map((display) => display.workArea);
+      const created = createMainWindow(url, statusText(host.state()), restoredBounds(store.get().bounds, workAreas), store.get().maximized === true);
+      // Closing hides the window, and the app and its agent carry on in the tray. Once quitting has
+      // begun the close goes through. Either way where it was, and whether it filled the screen, is remembered.
+      created.on("close", (event) => {
+        store.update({ bounds: created.getNormalBounds(), maximized: created.isMaximized() });
+        if (quitting) return;
+        event.preventDefault();
+        created.hide();
+      });
+      created.webContents.on("before-input-event", (event, input) => {
+        if (!isQuitShortcut(input)) return;
+        event.preventDefault();
+        app.quit();
+      });
+      created.on("closed", () => {
+        win = null;
+      });
+      return created;
     });
-    created.webContents.on("before-input-event", (event, input) => {
-      if (!isQuitShortcut(input)) return;
-      event.preventDefault();
-      app.quit();
-    });
-    created.on("closed", () => {
-      win = null;
-    });
-    win = created;
   }
 
   const version = app.getVersion();
@@ -161,8 +163,9 @@ function run(): void {
     }
   }
 
+  /** What the tray checkbox and the settings page show: off too when the entry is switched off in Task Manager. The launch rule below goes by the Run value alone, so it never re-enables an entry the user switched off there. */
   function openAtLogin(): boolean {
-    return app.getLoginItemSettings(login).openAtLogin;
+    return shownAtLogin(app.getLoginItemSettings(login), loginName);
   }
 
   function applyOpenAtLogin(on: boolean): void {
@@ -212,6 +215,11 @@ function run(): void {
     },
     hostMode: () => host.state().mode,
     hasConfig: async () => (await readConfigState(agentPaths(home))).kind === "ok",
+    tokenCheck: async () => {
+      const read = await readConfigState(agentPaths(home));
+      const port = host.state().port;
+      return read.kind === "ok" && port !== null ? checkToken(port, read.config.token) : "unknown";
+    },
     restartAgent: () => host.restart(),
     retryAgent: () => host.retry(),
     setAllowlist: (change) => setAllowlist({ home, cwd: home, ...("add" in change ? { add: [change.add] } : { remove: change.remove }) }),
@@ -233,14 +241,12 @@ function run(): void {
   }
 
   function showSettings(): void {
-    if (settingsWin !== null && !settingsWin.isDestroyed()) {
-      settingsWin.show();
-      settingsWin.focus();
-      return;
-    }
-    settingsWin = createSettingsWindow(join(dist.settings, "preload.js"));
-    settingsWin.on("closed", () => {
-      settingsWin = null;
+    settingsWin = showOrCreate(settingsWin, quitting, () => {
+      const created = createSettingsWindow(join(dist.settings, "preload.js"));
+      created.on("closed", () => {
+        settingsWin = null;
+      });
+      return created;
     });
   }
 
@@ -248,7 +254,7 @@ function run(): void {
   const started = app.whenReady().then(async () => {
     // Every app:// request is answered from the export beside main.cjs, under a CSP that lets the
     // page reach only the agent in use.
-    protocol.handle(APP_SCHEME, createSchemeHandler({ dirs: { clawd: dist.renderer, settings: dist.settings }, port: () => host.state().port ?? DEFAULT_PORT }));
+    protocol.handle(APP_SCHEME, createSchemeHandler({ dirs: { clawd: dist.renderer, settings: dist.settings }, port: () => host.state().port ?? DEFAULT_PORT, fallbackPort: DEFAULT_PORT }));
     log("desktop.started", { packaged: app.isPackaged });
     host.start();
     await store.load();
@@ -269,21 +275,36 @@ function run(): void {
     refreshTray(host.state());
     refreshMenu();
 
-    // The packaged app rewrites our hooks when what they name is this exe or an exe that is gone; a
-    // live install by another exe is left alone, and the settings window shows it as stale instead.
-    const named = fallback.hooks === "stale" && app.isPackaged ? await installedExe(settingsPath) : null;
-    const namedExists = named !== null && (await access(named).then(() => true, () => false));
-    if (repairOnLaunch({ status: fallback.hooks, packaged: app.isPackaged, installedExe: named, installedExeExists: namedExists, thisExe: process.execPath })) {
-      try {
-        const repaired = await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
-        if (repaired.ok) log("desktop.hooksRepaired");
-        else log("desktop.hooksFailed", { repair: true });
-      } catch {
-        log("desktop.hooksFailed", { repair: true });
-      }
-    }
+    // Decided once the host's first start has settled, and not awaited, so the window is not held up.
+    // That start writes config.json when there is none; hooks left from before then carry the old
+    // token, which only a status read after the write can see as stale.
+    void settleWithin(host.settled(), FIRST_START_CAP_MS)
+      .then(() =>
+        quitting
+          ? ("none" as const)
+          : launchRepair({
+              packaged: app.isPackaged,
+              thisExe: process.execPath,
+              status: async () => currentHookStatus({ config: await readConfigState(agentPaths(home)), settingsPath, runtime, binDir: agentPaths(home).bin, hooksDir: dist.hooks }),
+              installedExe: () => installedExe(settingsPath),
+              exists: (path) =>
+                access(path).then(
+                  () => true,
+                  () => false,
+                ),
+              install: () => installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now }),
+              log,
+            }),
+      )
+      .then((outcome) => {
+        if (outcome !== "none") pushState();
+      });
 
-    const action = loginOnLaunch({ packaged: app.isPackaged, remembered: store.get().openAtLogin, registered: openAtLogin() });
+    // What Electron says about the entry, at every launch: numbers and booleans, so whether
+    // `launchItems` can be trusted for a packaged path with spaces is on record from the first run.
+    const item = app.getLoginItemSettings(login);
+    log("desktop.loginItem", { openAtLogin: item.openAtLogin, willLaunch: item.executableWillLaunchAtLogin, items: item.launchItems.length, shown: shownAtLogin(item, loginName) });
+    const action = loginOnLaunch({ packaged: app.isPackaged, remembered: store.get().openAtLogin, registered: item.openAtLogin, stateUsable: store.usable() });
     if (action !== "none") {
       app.setLoginItemSettings({ ...login, openAtLogin: true });
       store.update({ openAtLogin: true });
@@ -307,19 +328,29 @@ function run(): void {
   app.on("window-all-closed", () => {});
 
   // Quitting, from the tray, Ctrl+Q or Ctrl+C in the terminal: set the flag so the window's close goes
-  // through, and take the window and the tray icon away at once while the agent stops.
+  // through, and take the window away at once. The tray icon goes in will-quit, once the quit is certain.
   app.on("before-quit", () => {
     quitting = true;
     // A rebuild waiting on the coalescer would only build state for a window that is going away.
     pushStateSoon.cancel();
     win?.hide();
-    tray?.destroy();
-    tray = null;
   });
 
   // `will-quit` comes after every window has closed. The handler holds it until the agent has stopped
   // (at most five seconds), writes out the log and desktop.json, then exits.
-  app.on("will-quit", createQuitHandler({ stop: () => host.stop(), flush: () => Promise.all([sink.flush(), store.flush()]).then(() => {}), exit: (code) => app.exit(code), log }));
+  app.on(
+    "will-quit",
+    createQuitHandler({
+      begin: () => {
+        tray?.destroy();
+        tray = null;
+      },
+      stop: () => host.stop(),
+      flush: () => Promise.all([sink.flush(), store.flush()]).then(() => {}),
+      exit: (code) => app.exit(code),
+      log,
+    }),
+  );
 
   // Ctrl+C in the terminal asks for the same sequence.
   process.on("SIGINT", () => app.quit());

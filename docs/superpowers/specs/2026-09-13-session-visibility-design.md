@@ -12,7 +12,8 @@ view should show the sessions that matter and leave the dormant ones out.
 
 | Session | Shown |
 |---|---|
-| Working or waiting | Always |
+| Working | Always |
+| Waiting | Until it has waited 36 hours (`waitingHideMs`), measured from when the wait began; it stays `waiting` in the fleet, so an answer brings it back at once (desktop stage 8) |
 | No typed prompts | Never |
 | One prompt | Until 3 hours after its last activity |
 | Two to eight prompts | Until 24 hours after its last activity |
