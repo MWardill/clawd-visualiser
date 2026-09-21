@@ -6,7 +6,7 @@ import type { AllowlistResult, HooksResult, Logger, UninstallResult } from "@cla
 import type { DetailLevel } from "@clawd/core";
 import type { HostMode } from "../agent-host";
 import type { SettingsState } from "../settings-state";
-import type { SettingsActions } from "./ipc";
+import type { BridgeActions } from "./ipc";
 
 export type ActionDeps = {
   /** The state the page renders, built fresh with no notice; the actions add one. */
@@ -33,27 +33,20 @@ export const NO_CONFIG_NOTICE = "this app is attached to another agent and has n
 export const NO_CONFIG_TO_CHANGE = "there is no config to change yet";
 export const SEE_LOG = "see the log";
 
-/**
- * `SettingsActions` plus `pushedState`, for a push main makes on its own (a host snapshot, the
- * tray's login toggle) rather than in answer to something the page asked for.
- */
-export type SettingsActionsWithPush = SettingsActions & {
+export function createSettingsActions(deps: ActionDeps): BridgeActions {
   /**
-   * The state for a push main makes on its own. Carries whatever notice the last action's answer
-   * left, so a background push cannot erase a refusal or ATTACHED_NOTICE before the page has shown
-   * it. The notice lasts until the next action answers (a success clears it, a refusal or failure
-   * replaces it) or until the page loads again (`getState` answers with none and so clears it).
-   * The one case `pushedState` itself changes what is remembered: once the notice is
-   * ATTACHED_NOTICE and the host is no longer attached, this app's own agent has read the saved
-   * config, so the change did apply; `pushedState` forgets the notice and answers with none.
-   */
-  pushedState(): Promise<SettingsState>;
-};
-
-export function createSettingsActions(deps: ActionDeps): SettingsActionsWithPush {
-  /**
-   * The notice the last action's answer carried; see `pushedState`, whose one exception forgets
-   * ATTACHED_NOTICE once the host is no longer attached.
+   * The notice the last action's answer carried, which `pushedState` hands to a push main makes on
+   * its own (a host snapshot, the tray's login toggle) so the push cannot erase a refusal or
+   * ATTACHED_NOTICE before the page has shown it. It lasts until the next action answers (a success
+   * clears it, a refusal or failure replaces it) or until the page loads again (`getState` answers
+   * with none and so clears it).
+   *
+   * The one case `pushedState` itself forgets one: the notice is ATTACHED_NOTICE and this app's own
+   * agent is running, so that agent has read the saved config and the change did apply. Every other
+   * mode keeps it, because none of them has read the config: a takeover under way (`starting`), one
+   * that faulted (`restarting`, `failed`), and `attached` itself, where the agent holding the port
+   * is still the other one. A single missed health probe therefore cannot make the page stop saying
+   * that a saved change has not been applied.
    */
   let lastNotice: string | null = null;
   const answer = async (notice: string | null = null): Promise<SettingsState> => {
@@ -136,16 +129,26 @@ export function createSettingsActions(deps: ActionDeps): SettingsActionsWithPush
       }
     },
     async setOpenAtLogin(on) {
-      deps.applyOpenAtLogin(on);
+      try {
+        deps.applyOpenAtLogin(on);
+      } catch {
+        deps.log("desktop.loginFailed");
+        return answer(`the login setting could not be applied; ${SEE_LOG}`);
+      }
       return answer();
     },
     async retryAgent() {
-      deps.retryAgent();
+      try {
+        deps.retryAgent();
+      } catch {
+        deps.log("desktop.agentFailed", { retry: true });
+        return answer(`the agent could not be started again; ${SEE_LOG}`);
+      }
       return answer();
     },
     openLogs: () => deps.openLogs(),
     pushedState: async () => {
-      if (lastNotice === ATTACHED_NOTICE && deps.hostMode() !== "attached") lastNotice = null;
+      if (lastNotice === ATTACHED_NOTICE && deps.hostMode() === "own") lastNotice = null;
       return { ...(await deps.state()), notice: lastNotice };
     },
   };
