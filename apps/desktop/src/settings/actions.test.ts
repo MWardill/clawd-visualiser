@@ -1,8 +1,9 @@
 import type { AllowlistResult, HooksResult, LogFields, UninstallResult } from "@clawd/agent";
 import { describe, expect, it } from "vitest";
+import type { TokenCheck } from "../agent-client";
 import type { HostMode } from "../agent-host";
 import type { SettingsState } from "../settings-state";
-import { ATTACHED_NOTICE, NO_CONFIG_NOTICE, NO_CONFIG_TO_CHANGE, createSettingsActions, type ActionDeps } from "./actions";
+import { ATTACHED_NOTICE, CONFIG_GONE_NOTICE, NO_CONFIG_NOTICE, NO_CONFIG_TO_CHANGE, OTHER_HOME_NOTICE, createSettingsActions, type ActionDeps } from "./actions";
 
 const STATE: SettingsState = {
   agent: { mode: "own", port: 4750, version: "0.1.0", sessions: 0, waiting: 0, error: null },
@@ -17,7 +18,7 @@ const STATE: SettingsState = {
 
 const OK_HOOKS: HooksResult = { ok: true, statusLine: "added", events: [], backup: null, port: 4750 };
 
-function harness(over: Partial<ActionDeps> & { mode?: HostMode; config?: boolean } = {}) {
+function harness(over: Partial<ActionDeps> & { mode?: HostMode; config?: boolean; token?: TokenCheck } = {}) {
   const calls: string[] = [];
   const codes: string[] = [];
   const fields: LogFields[] = [];
@@ -26,6 +27,7 @@ function harness(over: Partial<ActionDeps> & { mode?: HostMode; config?: boolean
     pickFolder: async () => "C:\\repos\\one",
     hostMode: () => over.mode ?? "own",
     hasConfig: async () => over.config ?? true,
+    tokenCheck: async () => over.token ?? "held",
     restartAgent: () => void calls.push("restart"),
     retryAgent: () => void calls.push("retry"),
     setAllowlist: async (change) => {
@@ -136,6 +138,40 @@ describe("createSettingsActions", () => {
     expect(refused.fields).toEqual([{ repair: false }]);
   });
 
+  it("never mints a config from the settings window: with none, it restarts the agent it is not attached to, so one is written, and says to install again", async () => {
+    for (const mode of ["own", "starting", "restarting", "failed"] as const) {
+      const t = harness({ mode, config: false });
+      expect((await t.actions.installHooks()).notice, mode).toBe(CONFIG_GONE_NOTICE);
+      expect(t.calls, mode).toEqual(["restart"]);
+      expect(t.fields, mode).toEqual([{ repair: false, noConfig: true }]);
+    }
+  });
+
+  it("asks the serving agent about the token first: attached to one that refuses it, nothing is written and the page says why", async () => {
+    const other = harness({ mode: "attached", token: "refused" });
+    expect((await other.actions.installHooks()).notice).toBe(OTHER_HOME_NOTICE);
+    expect(other.calls).toEqual([]);
+    expect(other.codes).toEqual(["desktop.hooksFailed"]);
+    expect(other.fields).toEqual([{ repair: false, attached: true, otherHome: true }]);
+  });
+
+  it("restarts its own agent when that agent refuses the token on disk, then installs, since the restart reads the config the hooks will carry", async () => {
+    const own = harness({ mode: "own", token: "refused" });
+    expect((await own.actions.installHooks()).notice).toBeNull();
+    expect(own.calls).toEqual(["restart", "install"]);
+    expect(own.codes).toEqual([]);
+  });
+
+  it("installs without a restart when the agent holds the token, or does not say", async () => {
+    for (const token of ["held", "unknown"] as const) {
+      for (const mode of ["own", "attached"] as const) {
+        const t = harness({ mode, token });
+        expect((await t.actions.installHooks()).notice).toBeNull();
+        expect(t.calls).toEqual(["install"]);
+      }
+    }
+  });
+
   it("says what uninstall found", async () => {
     expect((await harness().actions.uninstallHooks()).notice).toBeNull();
     const nothing = harness({ uninstallHooks: async () => ({ ok: true, outcome: "nothing", backup: null }) });
@@ -230,6 +266,33 @@ describe("createSettingsActions", () => {
     expect((await actions.pushedState()).notice).toBe(ATTACHED_NOTICE);
     mode = "failed";
     expect((await actions.pushedState()).notice).toBe(ATTACHED_NOTICE);
+  });
+
+  it("judges a change made between agents when the host settles: attached means it was not applied, said once", async () => {
+    let mode: HostMode = "restarting";
+    const { actions, calls, codes } = harness({ hostMode: () => mode });
+    expect((await actions.setDetail("hints")).notice).toBeNull();
+    expect(calls).toEqual(["detail hints", "restart"]);
+    expect((await actions.pushedState()).notice).toBeNull();
+
+    mode = "attached";
+    expect((await actions.pushedState()).notice).toBe(ATTACHED_NOTICE);
+    expect((await actions.pushedState()).notice).toBe(ATTACHED_NOTICE);
+    expect(codes).toEqual(["desktop.attachedChange"]);
+
+    mode = "own";
+    expect((await actions.pushedState()).notice).toBeNull();
+  });
+
+  it("says nothing about a change made between agents once this app's own agent has it, even if the host attaches later", async () => {
+    let mode: HostMode = "starting";
+    const { actions, codes } = harness({ hostMode: () => mode });
+    await actions.addFolder();
+    mode = "own";
+    expect((await actions.pushedState()).notice).toBeNull();
+    mode = "attached";
+    expect((await actions.pushedState()).notice).toBeNull();
+    expect(codes).toEqual([]);
   });
 
   it("says why, and logs it, when the login choice cannot be applied", async () => {

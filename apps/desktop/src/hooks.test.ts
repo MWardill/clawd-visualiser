@@ -2,8 +2,8 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { agentPaths, applyInstall, defaultConfig, saveConfig } from "@clawd/agent";
-import { currentHookStatus, installedExe, readConfigState, repairOnLaunch, runtimePrefix, samePath, scriptsMatch, type ConfigRead } from "./hooks";
+import { agentPaths, applyInstall, defaultConfig, saveConfig, type LogFields } from "@clawd/agent";
+import { currentHookStatus, installedExe, launchRepair, readConfigState, repairOnLaunch, runtimePrefix, samePath, scriptsMatch, type ConfigRead, type LaunchRepairDeps } from "./hooks";
 
 const made: string[] = [];
 afterEach(async () => {
@@ -140,5 +140,83 @@ describe("currentHookStatus", () => {
     const updated = await scenario("{}", "clawd-statusline.mjs");
     await writeFile(updated.settingsPath, written(updated.binDir));
     expect(await currentHookStatus({ config: ok, settingsPath: updated.settingsPath, runtime, binDir: updated.binDir, hooksDir: updated.hooksDir })).toBe("stale");
+  });
+});
+
+describe("launchRepair", () => {
+  function harness(over: Partial<LaunchRepairDeps> = {}) {
+    const codes: string[] = [];
+    const fields: LogFields[] = [];
+    const calls: string[] = [];
+    const deps: LaunchRepairDeps = {
+      packaged: true,
+      thisExe: "C:\\Apps\\Clawd Visualiser\\Clawd Visualiser.exe",
+      status: async () => "stale",
+      installedExe: async () => "C:/Apps/Clawd Visualiser/Clawd Visualiser.exe",
+      exists: async () => true,
+      install: async () => {
+        calls.push("install");
+        return { ok: true };
+      },
+      log: (code, logFields = {}) => {
+        codes.push(code);
+        fields.push(logFields);
+      },
+      ...over,
+    };
+    return { deps, codes, fields, calls };
+  }
+
+  it("rewrites stale hooks that are this app's to rewrite, and logs the repair", async () => {
+    const mine = harness();
+    expect(await launchRepair(mine.deps)).toBe("repaired");
+    expect(mine.calls).toEqual(["install"]);
+    expect(mine.codes).toEqual(["desktop.hooksRepaired"]);
+
+    const moved = harness({ installedExe: async () => "C:/Old/Clawd Visualiser.exe", exists: async () => false });
+    expect(await launchRepair(moved.deps)).toBe("repaired");
+  });
+
+  it("does nothing in development, for any status but stale, or for a live install by another exe", async () => {
+    for (const over of [
+      { packaged: false },
+      { status: async () => "current" as const },
+      { status: async () => "missing" as const },
+      { status: async () => "unreadable" as const },
+      { installedExe: async () => "C:/Program Files/nodejs/node.exe" },
+    ]) {
+      const t = harness(over);
+      expect(await launchRepair(t.deps)).toBe("none");
+      expect(t.calls).toEqual([]);
+      expect(t.codes).toEqual([]);
+    }
+  });
+
+  it("never reads anything in development, so a development launch costs no file reads", async () => {
+    let reads = 0;
+    const t = harness({
+      packaged: false,
+      status: async () => {
+        reads++;
+        return "stale";
+      },
+    });
+    await launchRepair(t.deps);
+    expect(reads).toBe(0);
+  });
+
+  it("logs a failed repair when the install refuses, or when anything throws", async () => {
+    const refused = harness({ install: async () => ({ ok: false }) });
+    expect(await launchRepair(refused.deps)).toBe("failed");
+    expect(refused.codes).toEqual(["desktop.hooksFailed"]);
+    expect(refused.fields).toEqual([{ repair: true }]);
+
+    const threw = harness({
+      install: async () => {
+        throw new Error("EPERM");
+      },
+    });
+    expect(await launchRepair(threw.deps)).toBe("failed");
+    expect(threw.fields).toEqual([{ repair: true }]);
   });
 });

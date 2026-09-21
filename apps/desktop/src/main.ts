@@ -17,17 +17,17 @@ import {
 import { Menu, Tray, app, dialog, ipcMain, nativeImage, protocol, screen, shell, type BrowserWindow, type NativeImage, type OpenDialogOptions } from "electron";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
-import { fetchCounts, probeHealth } from "./agent-client";
+import { checkToken, fetchCounts, probeHealth } from "./agent-client";
 import { createAgentHost, statusText, type HostState } from "./agent-host";
 import { ownArgs, parseArgs, resolveRendererUrl } from "./args";
 import { restoredBounds } from "./bounds";
 import { createDesktopStore, desktopStatePath } from "./desktop-state";
-import { currentHookStatus, installedExe, readConfigState, repairOnLaunch, runtimePrefix } from "./hooks";
+import { currentHookStatus, installedExe, launchRepair, readConfigState, runtimePrefix } from "./hooks";
 import { isQuitShortcut } from "./keys";
 import { createFileSink, readRetentionDays } from "./log";
 import { appUserModelId, loginItemTarget, loginOnLaunch } from "./login";
 import { distPaths } from "./paths";
-import { createQuitHandler } from "./quit";
+import { createQuitHandler, settleWithin } from "./quit";
 import { APP_SCHEME, createSchemeHandler } from "./scheme";
 import { settingsState, type SettingsState } from "./settings-state";
 import { createSettingsActions } from "./settings/actions";
@@ -83,6 +83,8 @@ function run(): void {
   // reads two files and asks Electron for the login item synchronously, on the same event loop the
   // agent runs on. A burst of snapshots is collapsed into one rebuild rather than one each.
   const STATE_COALESCE_MS = 150;
+  /** How long the launch repair waits for the host's first start; an agent starts in well under a second. */
+  const FIRST_START_CAP_MS = 10_000;
   const pushStateSoon = createCoalescer(STATE_COALESCE_MS, pushState);
 
   const host = createAgentHost({
@@ -214,6 +216,11 @@ function run(): void {
     },
     hostMode: () => host.state().mode,
     hasConfig: async () => (await readConfigState(agentPaths(home))).kind === "ok",
+    tokenCheck: async () => {
+      const read = await readConfigState(agentPaths(home));
+      const port = host.state().port;
+      return read.kind === "ok" && port !== null ? checkToken(port, read.config.token) : "unknown";
+    },
     restartAgent: () => host.restart(),
     retryAgent: () => host.retry(),
     setAllowlist: (change) => setAllowlist({ home, cwd: home, ...("add" in change ? { add: [change.add] } : { remove: change.remove }) }),
@@ -271,19 +278,30 @@ function run(): void {
     refreshTray(host.state());
     refreshMenu();
 
-    // The packaged app rewrites our hooks when what they name is this exe or an exe that is gone; a
-    // live install by another exe is left alone, and the settings window shows it as stale instead.
-    const named = fallback.hooks === "stale" && app.isPackaged ? await installedExe(settingsPath) : null;
-    const namedExists = named !== null && (await access(named).then(() => true, () => false));
-    if (repairOnLaunch({ status: fallback.hooks, packaged: app.isPackaged, installedExe: named, installedExeExists: namedExists, thisExe: process.execPath })) {
-      try {
-        const repaired = await installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now });
-        if (repaired.ok) log("desktop.hooksRepaired");
-        else log("desktop.hooksFailed", { repair: true });
-      } catch {
-        log("desktop.hooksFailed", { repair: true });
-      }
-    }
+    // Decided once the host's first start has settled, and not awaited, so the window is not held up.
+    // That start writes config.json when there is none; hooks left from before then carry the old
+    // token, which only a status read after the write can see as stale.
+    void settleWithin(host.settled(), FIRST_START_CAP_MS)
+      .then(() =>
+        quitting
+          ? ("none" as const)
+          : launchRepair({
+              packaged: app.isPackaged,
+              thisExe: process.execPath,
+              status: async () => currentHookStatus({ config: await readConfigState(agentPaths(home)), settingsPath, runtime, binDir: agentPaths(home).bin, hooksDir: dist.hooks }),
+              installedExe: () => installedExe(settingsPath),
+              exists: (path) =>
+                access(path).then(
+                  () => true,
+                  () => false,
+                ),
+              install: () => installHooks({ home, settingsPath, runtime, hooksDir: dist.hooks, now: Date.now }),
+              log,
+            }),
+      )
+      .then((outcome) => {
+        if (outcome !== "none") pushState();
+      });
 
     const action = loginOnLaunch({ packaged: app.isPackaged, remembered: store.get().openAtLogin, registered: openAtLogin() });
     if (action !== "none") {

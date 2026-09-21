@@ -4,6 +4,7 @@
 // main hands in the picker, the installer, the host and the log, and only wires.
 import type { AllowlistResult, HooksResult, Logger, UninstallResult } from "@clawd/agent";
 import type { DetailLevel } from "@clawd/core";
+import type { TokenCheck } from "../agent-client";
 import type { HostMode } from "../agent-host";
 import type { SettingsState } from "../settings-state";
 import type { BridgeActions } from "./ipc";
@@ -16,6 +17,8 @@ export type ActionDeps = {
   hostMode(): HostMode;
   /** Whether this app's home has a usable config.json. */
   hasConfig(): Promise<boolean>;
+  /** Whether the agent serving the port holds the token in this home's config, asked of that agent. `unknown` with no config, no port yet, or no answer. */
+  tokenCheck(): Promise<TokenCheck>;
   restartAgent(): void;
   retryAgent(): void;
   setAllowlist(change: { add: string } | { remove: string }): Promise<AllowlistResult>;
@@ -30,6 +33,8 @@ export type ActionDeps = {
 
 export const ATTACHED_NOTICE = "saved; the agent this app is attached to keeps its own settings until it is restarted";
 export const NO_CONFIG_NOTICE = "this app is attached to another agent and has no config of its own, so it cannot write hooks that agent would accept";
+export const CONFIG_GONE_NOTICE = "the agent's config file was missing, so the agent has been started again to write a new one; choose Install hooks again";
+export const OTHER_HOME_NOTICE = "the agent this app is attached to was started from another home and would refuse these hooks; stop it and this app will start its own";
 export const NO_CONFIG_TO_CHANGE = "there is no config to change yet";
 export const SEE_LOG = "see the log";
 
@@ -47,6 +52,9 @@ export function createSettingsActions(deps: ActionDeps): BridgeActions {
    * that faulted (`restarting`, `failed`), and `attached` itself, where the agent holding the port
    * is still the other one. A single missed health probe therefore cannot make the page stop saying
    * that a saved change has not been applied.
+   *
+   * `pushedState` also raises ATTACHED_NOTICE itself, once, when a change made between agents
+   * (`unsettled`) is followed by the host settling as attached.
    */
   let lastNotice: string | null = null;
   const answer = async (notice: string | null = null): Promise<SettingsState> => {
@@ -54,13 +62,22 @@ export function createSettingsActions(deps: ActionDeps): BridgeActions {
     return { ...(await deps.state()), notice };
   };
 
+  /**
+   * A change saved while the host was between agents (starting, restarting, failed): the restart it
+   * queued has yet to settle, and may settle as attached, where the change was not applied. The next
+   * push that finds the host settled decides, in `pushedState`.
+   */
+  let unsettled = false;
+
   /** After a successful save: the agent this app owns reads the config again; an attached one cannot be made to. */
   const applied = (): string | null => {
-    if (deps.hostMode() === "attached") {
+    const mode = deps.hostMode();
+    if (mode === "attached") {
       deps.log("desktop.attachedChange");
       return ATTACHED_NOTICE;
     }
     deps.restartAgent();
+    unsettled = mode !== "own";
     return null;
   };
 
@@ -94,9 +111,26 @@ export function createSettingsActions(deps: ActionDeps): BridgeActions {
       return changeAllowlist({ remove: dir });
     },
     async installHooks() {
-      if (deps.hostMode() === "attached" && !(await deps.hasConfig())) {
-        deps.log("desktop.hooksFailed", { repair: false, attached: true });
-        return answer(NO_CONFIG_NOTICE);
+      const mode = deps.hostMode();
+      // Never mint a config here: the installer would fall back to a fresh token no running agent holds.
+      if (!(await deps.hasConfig())) {
+        if (mode === "attached") {
+          deps.log("desktop.hooksFailed", { repair: false, attached: true });
+          return answer(NO_CONFIG_NOTICE);
+        }
+        deps.log("desktop.hooksFailed", { repair: false, noConfig: true });
+        // The agent's start writes the config; the next Install then carries the token it holds.
+        deps.restartAgent();
+        return answer(CONFIG_GONE_NOTICE);
+      }
+      if ((await deps.tokenCheck()) === "refused") {
+        if (mode === "attached") {
+          deps.log("desktop.hooksFailed", { repair: false, attached: true, otherHome: true });
+          return answer(OTHER_HOME_NOTICE);
+        }
+        // This app's own agent started before the config now on disk was written. A restart reads it,
+        // and the install below only reads the token, so the two cannot disagree.
+        deps.restartAgent();
       }
       try {
         const result = await deps.installHooks();
@@ -148,7 +182,15 @@ export function createSettingsActions(deps: ActionDeps): BridgeActions {
     },
     openLogs: () => deps.openLogs(),
     pushedState: async () => {
-      if (lastNotice === ATTACHED_NOTICE && deps.hostMode() === "own") lastNotice = null;
+      const mode = deps.hostMode();
+      if (mode === "attached" && unsettled) {
+        unsettled = false;
+        deps.log("desktop.attachedChange");
+        lastNotice = ATTACHED_NOTICE;
+      } else if (mode === "own") {
+        unsettled = false;
+        if (lastNotice === ATTACHED_NOTICE) lastNotice = null;
+      }
       return { ...(await deps.state()), notice: lastNotice };
     },
   };
