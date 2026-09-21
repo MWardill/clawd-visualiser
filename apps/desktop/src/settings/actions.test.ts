@@ -210,6 +210,48 @@ describe("createSettingsActions", () => {
     expect((await actions.pushedState()).notice).toBeNull();
   });
 
+  it("keeps the attached notice while the takeover is under way, since the other agent may answer again", async () => {
+    let mode: HostMode = "attached";
+    const { actions } = harness({ hostMode: () => mode });
+    await actions.addFolder();
+    // One missed health probe: the host tries to take the port, and the attached agent answers it
+    // again. Nothing has read the saved config, so the notice still holds.
+    mode = "starting";
+    expect((await actions.pushedState()).notice).toBe(ATTACHED_NOTICE);
+    mode = "attached";
+    expect((await actions.pushedState()).notice).toBe(ATTACHED_NOTICE);
+  });
+
+  it("keeps the attached notice when the takeover leaves the agent restarting or failed", async () => {
+    let mode: HostMode = "attached";
+    const { actions } = harness({ hostMode: () => mode });
+    await actions.addFolder();
+    mode = "restarting";
+    expect((await actions.pushedState()).notice).toBe(ATTACHED_NOTICE);
+    mode = "failed";
+    expect((await actions.pushedState()).notice).toBe(ATTACHED_NOTICE);
+  });
+
+  it("says why, and logs it, when the login choice cannot be applied", async () => {
+    const { codes, actions } = harness({
+      applyOpenAtLogin: () => {
+        throw new Error("the Run key is denied");
+      },
+    });
+    expect((await actions.setOpenAtLogin(true)).notice).toContain("see the log");
+    expect(codes).toEqual(["desktop.loginFailed"]);
+  });
+
+  it("says why, and logs it, when the agent cannot be retried", async () => {
+    const { codes, actions } = harness({
+      retryAgent: () => {
+        throw new Error("boom");
+      },
+    });
+    expect((await actions.retryAgent()).notice).toContain("see the log");
+    expect(codes).toEqual(["desktop.agentFailed"]);
+  });
+
   it("does not drop a refusal's notice when the host stops being attached", async () => {
     let mode: HostMode = "attached";
     const { actions } = harness({

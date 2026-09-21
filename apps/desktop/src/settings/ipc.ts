@@ -32,7 +32,15 @@ export type SettingsActions = {
   openLogs(): Promise<void>;
 };
 
-export function createHandlers(actions: SettingsActions, fallback: SettingsState): Record<string, (raw: unknown) => Promise<unknown>> {
+/**
+ * What main hands the bridge: the page's calls, plus `pushedState`, the read that leaves the notice
+ * the last action left alone (actions.ts holds the rule). It is what main pushes state with, and
+ * what the bridge refreshes with after a failed action, since `getState` means "the page is asking
+ * again" and so clears the notice.
+ */
+export type BridgeActions = SettingsActions & { pushedState(): Promise<SettingsState> };
+
+export function createHandlers(actions: BridgeActions, fallback: SettingsState): Record<string, (raw: unknown) => Promise<unknown>> {
   const Folder = z.string().min(1);
   // The page treats every answer as the whole new state, so a handler must never reject. `last` is
   // the newest state built successfully; it starts as what main knew when it registered these.
@@ -42,9 +50,10 @@ export function createHandlers(actions: SettingsActions, fallback: SettingsState
       last = await run();
       return last;
     } catch {
-      // The action failed. Try to read the state; if that fails too, the page keeps what it last saw.
+      // The action failed. Read the state again, keeping the notice the action recorded before it
+      // threw; if that read fails too, the page keeps what it last saw.
       try {
-        last = await actions.getState();
+        last = await actions.pushedState();
       } catch {
         // Nothing fresher is available.
       }

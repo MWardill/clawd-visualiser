@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { SettingsState } from "../settings-state";
-import { CHANNELS, createHandlers, type SettingsActions } from "./ipc";
+import { CHANNELS, createHandlers, type BridgeActions } from "./ipc";
 
 const STATE: SettingsState = {
   agent: { mode: "own", port: 4750, version: "0.1.0", sessions: 0, waiting: 0, error: null },
@@ -17,10 +17,11 @@ const STATE: SettingsState = {
 // from "a state a handler actually tracked."
 const SEED: SettingsState = { ...STATE, logDir: "C:\\seed-logs" };
 
-function actions(over: Partial<SettingsActions> = {}, fallback: SettingsState = STATE) {
+function actions(over: Partial<BridgeActions> = {}, fallback: SettingsState = STATE) {
   const calls: string[] = [];
-  const base: SettingsActions = {
+  const base: BridgeActions = {
     getState: async () => STATE,
+    pushedState: async () => STATE,
     addFolder: async () => {
       calls.push("addFolder");
       return STATE;
@@ -95,14 +96,29 @@ describe("createHandlers", () => {
     expect(await handlers[CHANNELS.installHooks]!(undefined)).toEqual(STATE);
   });
 
+  it("refreshes after a failed action with the read that keeps the notice the action left", async () => {
+    // Both reads build the state; only `pushedState` leaves the remembered notice alone, and an
+    // action that threw after recording one (a refusal, or the attached notice) must not lose it.
+    const refused: SettingsState = { ...STATE, notice: "refusing to allow a whole filesystem root: C:\\" };
+    const { handlers } = actions({
+      pushedState: async () => refused,
+      installHooks: async () => {
+        throw new Error("boom");
+      },
+    });
+    expect(await handlers[CHANNELS.installHooks]!(undefined)).toEqual(refused);
+  });
+
   it("answers with the last state it built when the action and the refresh both fail", async () => {
     let broken = false;
+    const read = async () => {
+      if (broken) throw new Error("cannot read the config");
+      return STATE;
+    };
     const { handlers } = actions(
       {
-        getState: async () => {
-          if (broken) throw new Error("cannot read the config");
-          return STATE;
-        },
+        getState: read,
+        pushedState: read,
         installHooks: async () => {
           throw new Error("boom");
         },
@@ -120,11 +136,13 @@ describe("createHandlers", () => {
   });
 
   it("answers with the fallback it was given when the action and the refresh both fail on the first call", async () => {
+    const broken = async (): Promise<SettingsState> => {
+      throw new Error("cannot read the config");
+    };
     const { handlers } = actions(
       {
-        getState: async () => {
-          throw new Error("cannot read the config");
-        },
+        getState: broken,
+        pushedState: broken,
         installHooks: async () => {
           throw new Error("boom");
         },
@@ -135,14 +153,10 @@ describe("createHandlers", () => {
   });
 
   it("still answers when a refused argument's refresh fails", async () => {
-    const { calls, handlers } = actions(
-      {
-        getState: async () => {
-          throw new Error("cannot read the config");
-        },
-      },
-      SEED,
-    );
+    const broken = async (): Promise<SettingsState> => {
+      throw new Error("cannot read the config");
+    };
+    const { calls, handlers } = actions({ getState: broken, pushedState: broken }, SEED);
     expect(await handlers[CHANNELS.removeFolder]!(42)).toEqual(SEED);
     expect(calls).toEqual([]);
   });

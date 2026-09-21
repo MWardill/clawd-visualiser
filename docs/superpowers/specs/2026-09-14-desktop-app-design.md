@@ -235,7 +235,12 @@ never a value. The actions that decide them live in `settings/actions.ts`, teste
 clears it and a refusal replaces it, or until the page loads again, when `getState` clears it. The
 pushes main makes on its own, a host change or the tray's login toggle, send `pushedState()`, the
 fresh state carrying the remembered notice, so a background push does not erase it; this matters
-because the host polls every ten seconds while attached. The page shows the notice in a permanent
+because the host polls every ten seconds while attached. `pushedState` forgets one notice on its
+own: the attached one, once the host reads `own`, because only this app's own running agent has
+read the saved config. A takeover that is still `starting`, or that faulted into `restarting` or
+`failed`, has read nothing and keeps the notice, so a single missed health probe cannot make the
+page stop saying that a saved change has not been applied. The bridge refreshes with `pushedState()`
+too when an action throws, since `getState` means the page is asking again and clears the notice. The page shows the notice in a permanent
 live region: `page.html` holds an always-present `<p id="notice" role="status">` above the
 sections, which `render` fills and hides, so a screen reader can announce it; not yet checked with one.
 
@@ -259,11 +264,15 @@ sections, which `render` fills and hides, so a screen reader can announce it; no
 - Logs: `~/.clawd/logs/desktop-YYYY-MM-DD.log`, one JSON line per entry, written by the agent's
   `createLogger` with a file sink, so the codes-only rule holds for the desktop. New codes:
   `desktop.started`, `desktop.attached`, `desktop.takeover`, `desktop.agentFault`,
-  `desktop.agentFailed`, `desktop.hooksRepaired`, `desktop.hooksFailed` (a hook write that failed,
-  was refused or threw, carrying `repair`, whether it was a launch repair, and `attached` when the
-  refusal was the attached one), `desktop.folderFailed` (a watched-folder change that was refused or
-  threw), `desktop.attachedChange` (a config change saved while attached to another agent, which
-  will not see it), `desktop.loginItemReapplied`. Retention follows
+  `desktop.agentFailed` (a start that gave up, carrying `config` or the fault count, and `retry`
+  when the page's Retry itself threw), `desktop.hooksRepaired`, `desktop.hooksFailed` (a hook write
+  that failed, was refused or threw, carrying `repair`, whether it was a launch repair, and
+  `attached` when the refusal was the attached one), `desktop.folderFailed` (a watched-folder change
+  that was refused or threw), `desktop.detailFailed` (a detail level that could not be saved),
+  `desktop.loginFailed` (a login choice the system would not take), `desktop.attachedChange` (a
+  config change saved while attached to another agent, which will not see it),
+  `desktop.stopTimedOut`, `desktop.loginItemReapplied`. Every action that writes says why in the
+  notice as well, so no failure is silent. Retention follows
   `logRetentionDays`.
 
 ## 11. Packaging and distribution
