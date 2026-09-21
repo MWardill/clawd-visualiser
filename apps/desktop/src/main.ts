@@ -86,7 +86,9 @@ function run(): void {
   const pushStateSoon = createCoalescer(STATE_COALESCE_MS, pushState);
 
   const host = createAgentHost({
-    start: (onSnapshot) => startAgent({ home, log, onSnapshot }),
+    // Packaged, the agent accepts this app's page and whatever the config lists, and not the dev
+    // server's origins: a teammate's machine has no dev server of ours on port 3000.
+    start: (onSnapshot) => startAgent({ home, log, onSnapshot, devOrigins: !app.isPackaged }),
     probe: (port) => probeHealth(port),
     counts: (port) => fetchCounts(port),
     log,
