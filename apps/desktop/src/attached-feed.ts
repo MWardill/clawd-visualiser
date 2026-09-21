@@ -16,6 +16,7 @@ export function feedPort(host: Pick<HostState, "mode" | "port">, view: View): nu
 export type AttachedFeedDeps = {
   /** The snapshot of the agent on the port, or null. */
   fetch(port: number): Promise<Snapshot | null>;
+  /** Called with each snapshot and the port it came from; an answer to a watch that has since changed is never delivered; it may throw without ending the feed. */
   onSnapshot(s: Snapshot, port: number): void;
   intervalMs?: number;
 };
@@ -41,12 +42,14 @@ export function createAttachedFeed(deps: AttachedFeedDeps): AttachedFeed {
       // No answer this time.
     }
     if (mine !== turn) return;
-    if (s !== null) deps.onSnapshot(s, port);
-    // Timed from the answer, so a slow agent never has two requests out.
+    // The next request is timed from the answer, so a slow agent never has two out. It is set
+    // before the snapshot is handed on: a listener that throws must not end the loop, since nothing
+    // would start it again, and one that calls watch() finds the timer it has to clear.
     timer = setTimeout(() => {
       timer = null;
       void ask(mine, port);
     }, interval);
+    if (s !== null) deps.onSnapshot(s, port);
   };
 
   const watch = (port: number | null): void => {

@@ -95,4 +95,51 @@ describe("createAttachedFeed", () => {
     feed.watch(4751);
     expect(asked).toEqual([4750, 4751]);
   });
+
+  it("keeps asking when the listener throws", async () => {
+    const asked: number[] = [];
+    let calls = 0;
+    const laterCalls: Array<[number, number]> = [];
+    const feed = createAttachedFeed({
+      fetch: async (port) => {
+        asked.push(port);
+        return snapshot(["working"]);
+      },
+      onSnapshot: (s, port) => {
+        calls++;
+        if (calls === 1) throw new Error("listener boom");
+        laterCalls.push([s.sessions.length, port]);
+      },
+    });
+    const rejections: unknown[] = [];
+    const onUnhandledRejection = (reason: unknown) => rejections.push(reason);
+    process.on("unhandledRejection", onUnhandledRejection);
+    try {
+      feed.watch(4750);
+      await flush();
+      await advance(ATTACHED_FEED_MS);
+      await flush();
+      expect(asked).toHaveLength(2);
+      expect(laterCalls).toEqual([[1, 4750]]);
+      expect(rejections).toHaveLength(1);
+      expect((rejections[0] as Error).message).toBe("listener boom");
+    } finally {
+      process.off("unhandledRejection", onUnhandledRejection);
+    }
+  });
+
+  it("a listener that stops the feed from inside its own call leaves no timer running", async () => {
+    const asked: number[] = [];
+    const feed = createAttachedFeed({
+      fetch: async (port) => {
+        asked.push(port);
+        return snapshot(["working"]);
+      },
+      onSnapshot: () => feed.stop(),
+    });
+    feed.watch(4750);
+    await flush();
+    await advance(5 * ATTACHED_FEED_MS);
+    expect(asked).toHaveLength(1);
+  });
 });
