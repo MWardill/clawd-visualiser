@@ -67,7 +67,7 @@ export function lerp(a: number, b: number, t: number): number { return a + (b - 
 // ─── ENGINE ──────────────────────────────────────────────────
 
 /** The subset of a 2D context the pixel functions need; a fake of it makes the engine testable. */
-export type PixelContext = Pick<CanvasRenderingContext2D, "fillStyle" | "fillRect" | "font" | "textAlign" | "textBaseline" | "fillText" | "globalAlpha">;
+export type PixelContext = Pick<CanvasRenderingContext2D, "fillStyle" | "fillRect" | "font" | "textAlign" | "textBaseline" | "fillText" | "globalAlpha" | "clearRect" | "save" | "restore" | "beginPath" | "rect" | "clip">;
 
 export type Particle = { x: number; y: number; vx: number; vy: number; life: number; col: string };
 

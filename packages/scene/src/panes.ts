@@ -4,7 +4,7 @@ import type { Snapshot } from "@clawd/core";
 import { emptyWorld, reconcile, seatsUsed, tick, type Actor, type ScenePane, type World } from "./actors";
 import { createAtmosphere, drawNight, type Atmosphere } from "./atmosphere";
 import { CLAWD_BODY, PALETTE, createEngine, type EyeVariant, type PixelContext } from "./engine";
-import { CAPTION_ROW, CELL, CONTEXT_ROW, CONTEXT_W, NAME_ROW, SEAT_H, SEAT_W, SPRITE_DX, SPRITE_DY, STATUS_ROW, layoutPanes, type PaneRect } from "./layout";
+import { CAPTION_ROW, CELL, CONTEXT_ROW, CONTEXT_W, MARGIN, NAME_ROW, SEAT_H, SEAT_W, SPRITE_DX, SPRITE_DY, STATUS_ROW, contentExtent, layoutPanes, type PaneRect } from "./layout";
 import { ACTIVITY_COLOURS, poseFor } from "./poses";
 import { drawBox, drawClawdWalking, drawClawdWave, drawExclaim, drawMini, drawSparkle, drawSweat, drawZzz } from "./sprites";
 import { caption, drawText, nameplate, paneTitle } from "./text";
@@ -26,11 +26,21 @@ export type PanesSceneOptions = {
   cancelAnimationFrame?: (handle: number) => void;
   /** Where visibilitychange is listened for; null disables the listener. Default the global document. */
   document?: Pick<Document, "hidden" | "addEventListener" | "removeEventListener"> | null;
+  /** "none" leaves the canvas transparent and fills each pane's interior with the night colour instead: a widget on the desktop. Default "night". */
+  background?: "night" | "none";
+  /** Draw a pane's Clawds only inside its border, so one on its way in or out shows only while it is inside the box. Default false. */
+  clipActors?: boolean;
+  /** Draw the lone "no sessions" Clawd when there is no pane. Default true. */
+  emptyState?: boolean;
+  /** Cells kept clear at the grid's edges. Default the layout's MARGIN. */
+  margin?: number;
+  /** The CSS pixels that hold everything laid out, whenever that changes, and null once nothing is. Never called with null first. */
+  onContentSize?: (size: { width: number; height: number } | null) => void;
 };
 
 export type PanesScene = {
-  /** Reconcile the world with a snapshot: arrivals walk in, departures walk out. */
-  setSnapshot(s: Snapshot): void;
+  /** Reconcile the world with a snapshot: arrivals walk in, departures walk out. With `seated`, arrivals are simply there. */
+  setSnapshot(s: Snapshot, opts?: { seated?: boolean }): void;
   /** Drop every pane and actor at once, for a source switch. */
   clear(): void;
   /** CSS size of the canvas; the backing store is scaled by the pixel ratio. */
@@ -64,6 +74,12 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
   const raf = opts.requestAnimationFrame ?? ((fn) => requestAnimationFrame(fn));
   const caf = opts.cancelAnimationFrame ?? ((h) => cancelAnimationFrame(h));
   const doc = opts.document === undefined ? (typeof document === "undefined" ? null : document) : opts.document;
+  const night = (opts.background ?? "night") === "night";
+  const clip = opts.clipActors ?? false;
+  const emptyState = opts.emptyState ?? true;
+  const margin = opts.margin ?? MARGIN;
+  /** The size last reported, as text; null is also what nothing laid out reads as, so an empty start reports nothing. */
+  let reported: string | null = null;
 
   let dpr = opts.devicePixelRatio ?? (typeof devicePixelRatio === "number" ? devicePixelRatio : 1);
   let PX = Math.max(1, Math.round(cell * dpr));
@@ -104,8 +120,27 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
   let hidden = doc?.hidden ?? false;
   let hover: string | null = null;
 
+  /** Tells the host what the layout needs, from where the panes are going, not from where they have eased to so far. */
+  function reportSize(extent: { w: number; h: number } | null): void {
+    if (!opts.onContentSize) return;
+    const size = extent === null ? null : { width: Math.ceil((extent.w * PX) / dpr), height: Math.ceil((extent.h * PX) / dpr) };
+    const key = size === null ? null : `${size.width}x${size.height}`;
+    if (key === reported) return;
+    reported = key;
+    opts.onContentSize(size);
+  }
+
+  /** Limits drawing to the inside of these panes' borders, until the restore() that must follow. */
+  function clipTo(panes: readonly PaneRect[]): void {
+    ctx.save();
+    ctx.beginPath();
+    for (const r of panes) ctx.rect((Math.round(r.x) + 1) * PX, (Math.round(r.y) + 1) * PX, (r.w - 2) * PX, (r.h - 2) * PX);
+    ctx.clip();
+  }
+
   function paneRects(): Map<string, PaneRect> {
-    const laid = layoutPanes(world.panes.map((p) => ({ alias: p.alias, seatsUsed: seatsUsed(p) })), gridW);
+    const laid = layoutPanes(world.panes.map((p) => ({ alias: p.alias, seatsUsed: seatsUsed(p) })), gridW, margin);
+    reportSize(contentExtent(laid, margin));
     const out = new Map<string, PaneRect>();
     for (const r of laid) {
       const cur = origins.get(r.alias) ?? { x: r.x, y: r.y };
@@ -124,6 +159,11 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
     const line = waiting ? PALETTE.state.amber : PALETTE.night.line;
     const x = Math.round(r.x);
     const y = Math.round(r.y);
+    if (!night) {
+      // With no night behind it the box carries its own, so its text reads on any wallpaper.
+      ctx.fillStyle = PALETTE.night.bg;
+      ctx.fillRect(x * PX, y * PX, r.w * PX, r.h * PX);
+    }
     drawBox(engine, x, y, r.w, r.h, line);
     const title = paneTitle(p.label);
     ctx.fillStyle = PALETTE.night.bg;
@@ -193,8 +233,9 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
   function render(): void {
     const t = now();
     tick(world, t);
-    drawNight(ctx, engine, atmo, frame);
-    if (world.panes.length === 0) drawEmpty();
+    if (night) drawNight(ctx, engine, atmo, frame);
+    else ctx.clearRect(0, 0, canvas.width, canvas.height);
+    if (world.panes.length === 0 && emptyState) drawEmpty();
     rects = paneRects();
     for (const p of world.panes) {
       const r = rects.get(p.alias);
@@ -207,9 +248,13 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
           const lb = b.phase === "leaving" ? 1 : 0;
           return la - lb || a.pos.y - b.pos.y;
         });
+      if (clip) clipTo([r]);
       for (const a of actors) drawActor(a, r, t);
+      if (clip) ctx.restore();
     }
+    if (clip) clipTo([...rects.values()]);
     engine.tickParticles();
+    if (clip) ctx.restore();
   }
 
   function schedule(): void {
@@ -246,7 +291,7 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
     canvas.height = Math.max(PX, Math.round(cssH * dpr));
     gridW = Math.floor(canvas.width / PX);
     gridH = Math.floor(canvas.height / PX);
-    atmo = createAtmosphere(gridW, gridH);
+    if (night) atmo = createAtmosphere(gridW, gridH);
     render();
   }
 
@@ -296,8 +341,8 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
   schedule();
 
   return {
-    setSnapshot(s) {
-      reconcile(world, s, now());
+    setSnapshot(s, o) {
+      reconcile(world, s, now(), o ?? {});
     },
     clear() {
       world.panes.length = 0;
