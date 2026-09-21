@@ -61,17 +61,18 @@ export function miniSlot(k: number): XY {
 /**
  * Flows panes left to right in the order given, wrapping into a new band when the next pane would
  * cross the right margin; a band is as tall as its tallest pane. The first pane of a band is never
- * wrapped, so a grid narrower than a pane still lays out.
+ * wrapped, so a grid narrower than a pane still lays out. `margin` is the cells kept clear at every
+ * edge: the scene's own by default, one cell for a widget, whose window is the box and little else.
  */
-export function layoutPanes(panes: readonly PaneSize[], gridWidth: number): PaneRect[] {
+export function layoutPanes(panes: readonly PaneSize[], gridWidth: number, margin: number = MARGIN): PaneRect[] {
   const out: PaneRect[] = [];
-  let x = MARGIN;
-  let y = MARGIN;
+  let x = margin;
+  let y = margin;
   let bandH = 0;
   for (const p of panes) {
     const h = paneHeight(p.seatsUsed);
-    if (x > MARGIN && x + PANE_W > gridWidth - MARGIN) {
-      x = MARGIN;
+    if (x > margin && x + PANE_W > gridWidth - margin) {
+      x = margin;
       y += bandH + PANE_GAP;
       bandH = 0;
     }
@@ -80,4 +81,16 @@ export function layoutPanes(panes: readonly PaneSize[], gridWidth: number): Pane
     bandH = Math.max(bandH, h);
   }
   return out;
+}
+
+/** The cells that hold everything laid out, from the grid's origin: the far edges plus the margin. Null with nothing laid out. */
+export function contentExtent(rects: readonly Rect[], margin: number): { w: number; h: number } | null {
+  if (rects.length === 0) return null;
+  let w = 0;
+  let h = 0;
+  for (const r of rects) {
+    w = Math.max(w, r.x + r.w);
+    h = Math.max(h, r.y + r.h);
+  }
+  return { w: w + margin, h: h + margin };
 }
