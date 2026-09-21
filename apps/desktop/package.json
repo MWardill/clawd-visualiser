@@ -19,6 +19,7 @@
     "@clawd/agent": "workspace:*",
     "@clawd/core": "workspace:*",
     "@clawd/scene": "workspace:*",
+    "@fontsource/jetbrains-mono": "^5.3.0",
     "@types/node": "^22.20.2",
     "electron": "^44.3.0",
     "electron-builder": "^26.15.3",

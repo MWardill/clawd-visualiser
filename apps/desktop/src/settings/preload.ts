@@ -2,8 +2,8 @@
 // this code cannot see the page's. `contextBridge` publishes exactly these functions on
 // window.clawd, and each one is a message to main. The page has no other way out.
 import { contextBridge, ipcRenderer } from "electron";
-import { CHANNELS } from "./ipc";
-import type { SettingsState } from "../settings-state";
+import { CHANNELS } from "./channels";
+import type { SettingsApi, SettingsState } from "./state";
 
 const invoke = <T>(channel: string, arg?: unknown): Promise<T> => ipcRenderer.invoke(channel, arg) as Promise<T>;
 
@@ -22,4 +22,4 @@ contextBridge.exposeInMainWorld("clawd", {
     ipcRenderer.on(CHANNELS.state, listener);
     return () => void ipcRenderer.off(CHANNELS.state, listener);
   },
-});
+} satisfies SettingsApi);

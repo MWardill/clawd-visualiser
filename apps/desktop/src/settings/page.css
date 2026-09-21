@@ -1,4 +1,8 @@
-/* The app's night palette, JetBrains Mono, no framework. */
+/* The app's night palette, JetBrains Mono, no framework. The two font files are copied beside this
+   page by build/bundle.mjs: the settings origin may load only its own files, so the visualiser's
+   copy of the face is out of reach. */
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: block; src: url("jetbrains-mono-400.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 700; font-display: block; src: url("jetbrains-mono-700.woff2") format("woff2"); }
 :root { color-scheme: dark; --bg: #0a0b10; --panel: #141721; --line: #262a3a; --text: #c9ccd6; --dim: #5d6274; --amber: #f2c35b; }
 * { box-sizing: border-box; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.5 "JetBrains Mono", Consolas, monospace; }

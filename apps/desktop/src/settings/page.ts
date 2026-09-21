@@ -1,20 +1,8 @@
 // The settings page. It renders whatever state the bridge gives it and sends one message per change;
 // every decision is main's. No framework, no network: window.clawd is its only way out.
-import type { SettingsState } from "./state";
+import type { SettingsApi, SettingsState } from "./state";
 
-type Api = {
-  getState(): Promise<SettingsState>;
-  addFolder(): Promise<SettingsState>;
-  removeFolder(dir: string): Promise<SettingsState>;
-  installHooks(): Promise<SettingsState>;
-  uninstallHooks(): Promise<SettingsState>;
-  setDetail(level: SettingsState["detail"]): Promise<SettingsState>;
-  setOpenAtLogin(on: boolean): Promise<SettingsState>;
-  retryAgent(): Promise<SettingsState>;
-  openLogs(): Promise<void>;
-  onState(cb: (s: SettingsState) => void): () => void;
-};
-declare const window: { clawd: Api } & Window;
+declare const window: { clawd: SettingsApi } & Window;
 
 const AGENT_WORDS: Record<SettingsState["agent"]["mode"], string> = {
   starting: "starting",

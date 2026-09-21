@@ -33,7 +33,8 @@ import { APP_SCHEME, APP_URL, createSchemeHandler } from "./scheme";
 import { settingsState, type SettingsState } from "./settings-state";
 import { createSettingsActions } from "./settings/actions";
 import { createCoalescer } from "./settings/coalesce";
-import { CHANNELS, createHandlers } from "./settings/ipc";
+import { CHANNELS } from "./settings/channels";
+import { createHandlers } from "./settings/ipc";
 import { trayIconFile, trayMenuTemplate, trayTooltip } from "./tray";
 import { createMainWindow, createSettingsWindow } from "./window";
 
