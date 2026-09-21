@@ -29,11 +29,14 @@ asar: true
 # No native modules and no dependencies to rebuild.
 npmRebuild: false
 # Fuses are switches baked into the binary. runAsNode stays on because every installed hook runs
-# the exe as Node; the other two close doors the app never uses.
+# the exe as Node. The rest close doors the app never uses: it reads no NODE_OPTIONS, takes no
+# --inspect, and loads its code from the archive only.
 electronFuses:
   runAsNode: true
   enableCookieEncryption: true
   onlyLoadAppFromAsar: true
+  enableNodeOptionsEnvironmentVariable: false
+  enableNodeCliInspectArguments: false
 win:
   target:
     - dir
