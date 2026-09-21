@@ -383,6 +383,9 @@ list is rebuilt, and only when it changes (stage 8).
 Each stage has its own plan and branch and is merged before the next starts. Stage 5's detail
 section lands with whichever of stage 5 and the detail levels design is later.
 
+Stages 9 and 10, the widget view and the finished popup, have a design of their own:
+`2026-09-21-desktop-widgets-design.md`.
+
 ### 12.1 Post-dev hardening
 
 Found in the reviews of stage 3 (15 September 2026), and left out of that stage because none of
