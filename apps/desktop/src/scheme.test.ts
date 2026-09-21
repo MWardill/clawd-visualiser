@@ -13,7 +13,7 @@ import {
   mapRequest,
   mimeFor,
   SETTINGS_URL,
-  settingsPolicy,
+  SETTINGS_POLICY,
 } from "./scheme";
 
 const made: string[] = [];
@@ -81,6 +81,16 @@ describe("mapRequest", () => {
       expect(mapRequest(url, DIRS), url).toBeNull();
     }
   });
+
+  it("refuses a segment whose name before the first dot is a Windows device, which Windows 10 would open as one", () => {
+    for (const url of ["app://clawd/CON", "app://clawd/con.txt", "app://clawd/NUL.js", "app://clawd/_next/COM1.json", "app://clawd/lpt9.tar.gz", "app://clawd/aux%20.css", "app://clawd/PRN/index.html", "app://clawd/CONIN$"]) {
+      expect(mapRequest(url, DIRS), url).toBeNull();
+    }
+    // Only the whole name before the first dot counts: these are ordinary files.
+    expect(mapRequest("app://clawd/console.js", DIRS)).toBe(join(ROOT, "console.js"));
+    expect(mapRequest("app://clawd/com10.js", DIRS)).toBe(join(ROOT, "com10.js"));
+    expect(mapRequest("app://clawd/icon.con", DIRS)).toBe(join(ROOT, "icon.con"));
+  });
 });
 
 describe("the settings host", () => {
@@ -92,7 +102,7 @@ describe("the settings host", () => {
   });
 
   it("gives the settings page a policy that lets it reach nothing", () => {
-    expect(settingsPolicy()).toBe(
+    expect(SETTINGS_POLICY).toBe(
       "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'none'; frame-ancestors 'none'",
     );
   });
@@ -116,7 +126,7 @@ describe("mimeFor", () => {
 describe("contentSecurityPolicy", () => {
   it("is the design's policy with the agent's port", () => {
     expect(contentSecurityPolicy(4750)).toBe(
-      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src http://127.0.0.1:4750 http://localhost:4750; frame-ancestors 'none'",
+      "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' http://127.0.0.1:4750 http://localhost:4750; frame-ancestors 'none'",
     );
   });
 });
@@ -126,7 +136,7 @@ describe("createSchemeHandler", () => {
     const dir = await tempDir();
     await writeFile(join(dir, "index.html"), "<p>hi</p>");
     await writeFile(join(dir, "setup.exe"), "MZ");
-    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => 4750 });
+    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => 4750, fallbackPort: 4750 });
 
     const page = await handle({ url: "app://clawd/" });
     expect(page.status).toBe(200);
@@ -134,39 +144,88 @@ describe("createSchemeHandler", () => {
     expect(page.headers.get("content-security-policy")).toBe(contentSecurityPolicy(4750));
     expect(await page.text()).toBe("<p>hi</p>");
 
-    for (const url of ["app://clawd/setup.exe", "app://clawd/missing.js", "app://clawd/..%2Fsecret.txt", "app://other/"]) {
+    for (const url of ["app://clawd/setup.exe", "app://clawd/missing.js", "app://clawd/..%2Fsecret.txt"]) {
       const res = await handle({ url });
       expect(res.status, url).toBe(404);
       expect(res.headers.get("content-security-policy")).toBe(contentSecurityPolicy(4750));
     }
+    const other = await handle({ url: "app://other/" });
+    expect(other.status).toBe(404);
+    expect(other.headers.get("content-security-policy")).toBe(SETTINGS_POLICY);
   });
 
   it("reads the port for each response, so the policy follows the agent in use", async () => {
     const dir = await tempDir();
     await writeFile(join(dir, "index.html"), "");
     let port = 4750;
-    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => port });
+    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => port, fallbackPort: 4750 });
     port = 4800;
-    expect((await handle({ url: "app://clawd/" })).headers.get("content-security-policy")).toContain("connect-src http://127.0.0.1:4800 http://localhost:4800;");
+    expect((await handle({ url: "app://clawd/" })).headers.get("content-security-policy")).toContain("connect-src 'self' http://127.0.0.1:4800 http://localhost:4800;");
   });
 
   it("serves the settings page under its own policy", async () => {
     const dir = await tempDir();
     await writeFile(join(dir, "index.html"), "<p>settings</p>");
-    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => 4750 });
+    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => 4750, fallbackPort: 4750 });
     const page = await handle({ url: "app://settings/" });
     expect(page.status).toBe(200);
-    expect(page.headers.get("content-security-policy")).toBe(settingsPolicy());
+    expect(page.headers.get("content-security-policy")).toBe(SETTINGS_POLICY);
   });
 
   it("answers 404 under the settings host with the settings policy, and treats a host that merely starts with it as unknown", async () => {
     const dir = await tempDir();
-    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => 4750 });
+    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => 4750, fallbackPort: 4750 });
     const missing = await handle({ url: "app://settings/missing.js" });
     expect(missing.status).toBe(404);
-    expect(missing.headers.get("content-security-policy")).toBe(settingsPolicy());
+    expect(missing.headers.get("content-security-policy")).toBe(SETTINGS_POLICY);
     const other = await handle({ url: "app://settingsfoo/index.html" });
     expect(other.status).toBe(404);
-    expect(other.headers.get("content-security-policy")).toBe(contentSecurityPolicy(4750));
+    expect(other.headers.get("content-security-policy")).toBe(SETTINGS_POLICY);
+  });
+
+  it("never rejects: a port getter that throws falls back to the given port, and a read that rejects is a 404", async () => {
+    const dir = await tempDir();
+    await writeFile(join(dir, "index.html"), "<p>hi</p>");
+    const throwing = createSchemeHandler({
+      dirs: { clawd: dir, settings: dir },
+      port: () => {
+        throw new Error("no host yet");
+      },
+      fallbackPort: 4750,
+    });
+    const page = await throwing({ url: "app://clawd/" });
+    expect(page.status).toBe(200);
+    expect(page.headers.get("content-security-policy")).toBe(contentSecurityPolicy(4750));
+
+    const unreadable = createSchemeHandler({
+      dirs: { clawd: dir, settings: dir },
+      port: () => 4750,
+      fallbackPort: 4750,
+      readFile: async () => {
+        throw new Error("EIO");
+      },
+    });
+    const res = await unreadable({ url: "app://clawd/" });
+    expect(res.status).toBe(404);
+    expect(await res.text()).toBe("not found");
+  });
+
+  it("answers a missing page with the export's 404.html when there is one, and anything else with plain text", async () => {
+    const dir = await tempDir();
+    await writeFile(join(dir, "404.html"), "<p>gone</p>");
+    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => 4750, fallbackPort: 4750 });
+    for (const url of ["app://clawd/nowhere", "app://clawd/nowhere.html", "app://clawd/a/b/"]) {
+      const res = await handle({ url });
+      expect(res.status, url).toBe(404);
+      expect(res.headers.get("content-type"), url).toBe("text/html; charset=utf-8");
+      expect(res.headers.get("content-security-policy"), url).toBe(contentSecurityPolicy(4750));
+      expect(await res.text(), url).toBe("<p>gone</p>");
+    }
+    const script = await handle({ url: "app://clawd/missing.js" });
+    expect(script.headers.get("content-type")).toBe("text/plain; charset=utf-8");
+    expect(await script.text()).toBe("not found");
+    // The settings page has one route and no 404 page of its own.
+    const settings = await handle({ url: "app://settings/nowhere" });
+    expect(settings.headers.get("content-type")).toBe("text/plain; charset=utf-8");
   });
 });

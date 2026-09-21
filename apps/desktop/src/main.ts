@@ -28,7 +28,7 @@ import { createFileSink, readRetentionDays } from "./log";
 import { appUserModelId, loginItemTarget, loginOnLaunch } from "./login";
 import { distPaths } from "./paths";
 import { createQuitHandler, settleWithin } from "./quit";
-import { APP_SCHEME, createSchemeHandler } from "./scheme";
+import { APP_SCHEME, APP_URL, createSchemeHandler } from "./scheme";
 import { settingsState, type SettingsState } from "./settings-state";
 import { createSettingsActions } from "./settings/actions";
 import { createCoalescer } from "./settings/coalesce";
@@ -43,7 +43,7 @@ else app.exit(0);
 
 function run(): void {
   const args = parseArgs(ownArgs(process.argv, app.isPackaged));
-  const url = resolveRendererUrl(args, process.env, app.isPackaged);
+  const url = resolveRendererUrl(args, process.env, app.isPackaged, APP_URL);
   const home = defaultHome();
 
   // The id matches electron-builder.yml's appId, but for the dir and zip targets electron-builder
@@ -54,7 +54,7 @@ function run(): void {
   // A custom scheme is declared before `ready`, with what it may do. `standard` makes app://clawd/
   // behave like http: relative and root-relative URLs resolve under it and the page's origin is
   // app://clawd. `secure` makes the page a secure context. `supportFetchAPI` lets fetch reach the scheme,
-  // though the CSP's connect-src currently allows fetch to the agent only.
+  // which the CSP's connect-src allows for the page's own files.
   protocol.registerSchemesAsPrivileged([{ scheme: APP_SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 
   // The agent's own logger, writing to a dated file: codes and numbers only. In development the
@@ -257,7 +257,7 @@ function run(): void {
   const started = app.whenReady().then(async () => {
     // Every app:// request is answered from the export beside main.cjs, under a CSP that lets the
     // page reach only the agent in use.
-    protocol.handle(APP_SCHEME, createSchemeHandler({ dirs: { clawd: dist.renderer, settings: dist.settings }, port: () => host.state().port ?? DEFAULT_PORT }));
+    protocol.handle(APP_SCHEME, createSchemeHandler({ dirs: { clawd: dist.renderer, settings: dist.settings }, port: () => host.state().port ?? DEFAULT_PORT, fallbackPort: DEFAULT_PORT }));
     log("desktop.started", { packaged: app.isPackaged });
     host.start();
     await store.load();
