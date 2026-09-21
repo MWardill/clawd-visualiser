@@ -20,26 +20,45 @@ export function sessionFromHash(hash: string): string | null {
 }
 
 /**
- * A followed `#session=<alias>` link: the alias it named, and the feed generation it was read
- * under (0 when it was read before any feed had started, such as at page load).
+ * A followed `#session=<alias>` link. It belongs to one LIVE feed: `generation` names that feed
+ * once it is known, and is null while the link still waits for it.
+ *
+ * A link belongs to the live feed running when it was read. When none was running -- at page
+ * load, during the initial probe, or under the simulated feed -- it cannot belong to a feed yet,
+ * because the first feed to start need not be a live one: the default mode probes the agent
+ * first, and while that probe is outstanding (or fails) the simulated feed runs and takes a
+ * generation of its own. Such a link waits (`generation: null`) until the first live feed
+ * starts, whichever generation number that turns out to be, and is pinned to it then. Once a
+ * link belongs to a generation it never moves to another, so a later feed switch still closes
+ * any sheet it opened rather than reopening it, or naming a different session that now answers
+ * to the same alias.
  */
-export type SessionLink = { alias: string; generation: number };
+export type SessionLink = { alias: string; generation: number | null };
+
+/** Reads a link under the feed running now: it belongs to that feed if it is live, else it waits. */
+export function readLink(alias: string, mode: FeedStatus["mode"], generation: number): SessionLink {
+  return { alias, generation: mode === "live" ? generation : null };
+}
+
+/**
+ * Pins a waiting link to a live feed the moment one is running, so it stops waiting for the first
+ * live feed once that feed exists. A link that already belongs to a generation, or that isn't
+ * there, comes back unchanged -- by the same reference, so a caller can tell nothing happened.
+ */
+export function pinLink(link: SessionLink | null, mode: FeedStatus["mode"], generation: number): SessionLink | null {
+  if (link !== null && link.generation === null && mode === "live") return { ...link, generation };
+  return link;
+}
 
 /**
  * The linked session to show: the link's alias, once a snapshot from the live agent holds it. Never
- * from the simulated feed, whose `agent-3` is somebody else.
- *
- * A link belongs to the feed it was made under, the same as a Clawd chosen by hand: it is honoured
- * only while `generation` still matches `link.generation`, so a feed switch (a new live agent, or a
- * fallback to the simulated feed and back) closes any sheet the link opened rather than reopening
- * one, or naming a different session that now answers to the same alias. The one exception is a
- * link read before any feed had started, when `feed.generation` is still 0: that link has no feed
- * of its own yet, so it is honoured by the first feed to start (`generation === 1`) -- otherwise a
- * link in a freshly opened window, read before the feed exists, could never be honoured at all.
+ * from the simulated feed, whose `agent-3` is somebody else, and never a link still waiting for its
+ * first live feed -- pin it first. A pinned link is honoured only while `generation` still matches
+ * the generation it belongs to, so a feed switch (a new live agent, or a fallback to the simulated
+ * feed and back) closes any sheet the link opened rather than reopening one, or naming a different
+ * session that now answers to the same alias.
  */
 export function linkedSelection(link: SessionLink | null, generation: number, mode: FeedStatus["mode"], snapshot: Snapshot | null): string | null {
-  if (link === null || mode !== "live" || snapshot === null) return null;
-  const belongsToThisFeed = link.generation === generation || (link.generation === 0 && generation === 1);
-  if (!belongsToThisFeed) return null;
+  if (link === null || link.generation !== generation || mode !== "live" || snapshot === null) return null;
   return snapshot.sessions.some((session) => session.alias === link.alias) ? link.alias : null;
 }
