@@ -120,9 +120,39 @@ function check<T extends string>(group: Choices<T>, key: string, current: T, ans
   for (const [value, input] of group.inputs) input.checked = value === current;
 }
 
-function section(title: string, rows: HTMLElement[]): HTMLElement {
+/**
+ * Which section owns each control, so a notice answering a click appears beside the control that
+ * earned it rather than at the top of the window, where it was missed. A control with no section of
+ * its own leaves its notice above the sections.
+ */
+const SECTION_OF: Readonly<Record<string, string>> = {
+  retry: "agent",
+  "open-logs": "agent",
+  "add-folder": "folders",
+  "install-hooks": "hooks",
+  "remove-hooks": "hooks",
+  detail: "detail",
+  login: "login",
+};
+
+function sectionOf(key: string | undefined): string | null {
+  if (key === undefined) return null;
+  // Each watched folder has its own Remove button, keyed by the folder.
+  if (key.startsWith("remove-folder:")) return "folders";
+  return SECTION_OF[key] ?? null;
+}
+
+/** A section's live region: rendered from the first draw and never hidden, as the one in page.html is. */
+function noticeRegion(name: string): HTMLElement {
+  const node = el("div", undefined, "section-notice");
+  node.id = `notice-${name}`;
+  node.setAttribute("role", "status");
+  return node;
+}
+
+function section(title: string, rows: HTMLElement[], region?: HTMLElement): HTMLElement {
   const node = el("section");
-  node.append(el("h2", title), ...rows);
+  node.append(el("h2", title), ...(region === undefined ? [] : [region]), ...rows);
   return node;
 }
 
@@ -150,6 +180,8 @@ type View = {
   removeRow: HTMLElement;
   detail: Choices<Detail>;
   login: Choices<Login>;
+  /** One live region per section that owns a control, by the name `sectionOf` returns. */
+  notices: ReadonlyMap<string, HTMLElement>;
 };
 let view: View | undefined;
 /** The folder list last drawn, as text: the one part of the page that is rebuilt, and only when this changes. */
@@ -172,15 +204,16 @@ function build(app: HTMLElement): View {
   const removeRow = row("", button("remove-hooks", "Remove hooks", () => window.clawd.uninstallHooks()));
   const detail = choices<Detail>("detail", "What the local view shows", DETAIL_CHOICES, (level) => window.clawd.setDetail(level));
   const login = choices<Login>("login", "Start the app when you sign in", LOGIN_CHOICES, (value) => window.clawd.setOpenAtLogin(value === "on"));
+  const notices = new Map(["agent", "folders", "hooks", "detail", "login"].map((name) => [name, noticeRegion(name)]));
   app.replaceChildren(
-    section("Agent", [row("state", agent), reasonRow, row("sessions", sessions), row("logs", logs), row("", button("open-logs", "Open logs folder", () => window.clawd.openLogs())), retryRow]),
+    section("Agent", [row("state", agent), reasonRow, row("sessions", sessions), row("logs", logs), row("", button("open-logs", "Open logs folder", () => window.clawd.openLogs())), retryRow], notices.get("agent")),
     section("This app", [row("version", version), row("runs from", exe)]),
-    section("Watched folders", [folders, row("", addFolder)]),
-    section("Hooks", [row("status", hooks), installRow, removeRow]),
-    section("Detail level", [detail.group]),
-    section("Start on login", [login.group]),
+    section("Watched folders", [folders, row("", addFolder)], notices.get("folders")),
+    section("Hooks", [row("status", hooks), installRow, removeRow], notices.get("hooks")),
+    section("Detail level", [detail.group], notices.get("detail")),
+    section("Start on login", [login.group], notices.get("login")),
   );
-  return { agent, reasonRow, reason, sessions, logs, retryRow, version, exe, folders, addFolder, hooks, installRow, install, removeRow, detail, login };
+  return { agent, reasonRow, reason, sessions, logs, retryRow, version, exe, folders, addFolder, hooks, installRow, install, removeRow, detail, login, notices };
 }
 
 /** The folder list is the one thing rebuilt, and only when it differs. Focus inside it goes to the same folder's button, or to Add folder when that folder has gone. */
@@ -201,18 +234,30 @@ function drawFolders(v: View, allowlist: readonly string[]): void {
   (again ?? v.addFolder).focus();
 }
 
+/** The notice last drawn and the section it was drawn in, so a push that changes neither leaves it alone. */
+let noticeText: string | null = null;
+let noticeOwner: string | null = null;
+
 /**
- * The notice, in the live region page.html always renders. The paragraph is replaced only when its
- * text changes, so a push that carries the same notice is not read out again, or when the user's own
- * action has just earned the same sentence a second time, which should be.
+ * The notice. One that answers the user's own click goes in that control's section, under its
+ * heading, where the eye already is; one that arrives on its own, such as the attached notice a push
+ * raises, goes in the region page.html always renders above the sections. Every region is there from
+ * the first draw and never hidden, so each is in the accessibility tree before any text reaches it.
+ * The paragraph is replaced only when the text or its section changes, so a push carrying the same
+ * notice is not read out again, or when the user's own action has just earned the same sentence a
+ * second time, which should be.
  */
-function announce(notice: string | null, again: boolean): void {
-  const region = document.getElementById("notice-region");
-  if (region === null) return;
-  const shown = region.firstElementChild?.textContent ?? null;
-  if (shown === notice && !(again && notice !== null)) return;
-  if (notice === null) region.replaceChildren();
-  else region.replaceChildren(el("p", notice, "notice"));
+function announce(v: View, notice: string | null, again: boolean, answered: string | undefined): void {
+  const top = document.getElementById("notice-region");
+  // A push answers no click, so it leaves a notice it did not change where the click put it.
+  const owner = answered !== undefined ? sectionOf(answered) : notice === noticeText ? noticeOwner : null;
+  if (notice === noticeText && owner === noticeOwner && !(again && notice !== null)) return;
+  noticeText = notice;
+  noticeOwner = owner;
+  for (const region of [top, ...v.notices.values()]) if (region !== null && region.firstElementChild !== null) region.replaceChildren();
+  if (notice === null) return;
+  const target = (owner === null ? null : (v.notices.get(owner) ?? null)) ?? top;
+  target?.replaceChildren(el("p", notice, "notice"));
 }
 
 /**
@@ -227,7 +272,7 @@ function render(state: SettingsState, answered?: string, announceAgain = false):
   drawn = state;
   const focused = document.activeElement;
 
-  announce(state.notice, announceAgain);
+  announce(v, state.notice, announceAgain, answered);
   setText(v.agent, `${AGENT_WORDS[state.agent.mode]} · port ${state.agent.port} · version ${state.agent.version}`);
   setText(v.reason, state.agent.error ?? "");
   v.reasonRow.hidden = state.agent.error === null;

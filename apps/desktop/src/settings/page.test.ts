@@ -80,6 +80,13 @@ const region = (): HTMLElement => {
   return node;
 };
 
+/** The live region inside one section, where a notice answering a click in that section appears. */
+const sectionRegion = (name: string): HTMLElement => {
+  const node = document.getElementById(`notice-${name}`);
+  if (node === null) throw new Error(`no live region for ${name}`);
+  return node;
+};
+
 describe("the settings page", () => {
   it("is built once: a push patches the text in place and keeps every node, so focus survives it", async () => {
     const page = await load();
@@ -143,7 +150,7 @@ describe("the settings page", () => {
     await flush();
     expect(radio("detail:none").checked).toBe(true);
     expect(radio("detail:paths").checked).toBe(false);
-    expect(region().textContent).toContain("could not be saved");
+    expect(sectionRegion("detail").textContent).toContain("could not be saved");
   });
 
   it("puts a radio back when its request fails, by drawing main's last state again", async () => {
@@ -227,13 +234,64 @@ describe("the settings page", () => {
     expect(region().children).toHaveLength(0);
   });
 
-  it("reads the same refusal out again when the user's own action earns it again", async () => {
+  it("reads the same refusal out again when the user's own action earns it again, from that action's own section", async () => {
     const refusal = { ...STATE, notice: "no hooks of ours were found; nothing was changed" };
     await load({ uninstallHooks: async () => refusal }, refusal);
-    const said = region().firstElementChild;
+    // It came with the first draw, which answered no click, so it starts above the sections.
+    expect(region().textContent).toBe("no hooks of ours were found; nothing was changed");
+
     control("remove-hooks").click();
     await flush();
-    expect(region().firstElementChild).not.toBe(said);
-    expect(region().textContent).toBe("no hooks of ours were found; nothing was changed");
+    expect(region().children).toHaveLength(0);
+    expect(sectionRegion("hooks").textContent).toBe("no hooks of ours were found; nothing was changed");
+
+    const said = sectionRegion("hooks").firstElementChild;
+    control("remove-hooks").click();
+    await flush();
+    expect(sectionRegion("hooks").firstElementChild).not.toBe(said);
+  });
+
+  it("gives every section that owns a control its own live region, there from the first draw", async () => {
+    await load();
+    for (const name of ["agent", "folders", "hooks", "detail", "login"]) {
+      expect(sectionRegion(name).getAttribute("role"), name).toBe("status");
+      expect(sectionRegion(name).hidden, name).toBe(false);
+      expect(sectionRegion(name).children, name).toHaveLength(0);
+    }
+  });
+
+  it("puts a notice that answers a click beside the control that earned it, and a push carrying the same one leaves it there", async () => {
+    const refused = "the agent this app is attached to was started from another home and would refuse these hooks; stop it and this app will start its own";
+    const page = await load({ installHooks: async () => ({ ...STATE, notice: refused }) });
+    control("install-hooks").click();
+    await flush();
+    expect(sectionRegion("hooks").textContent).toBe(refused);
+    expect(region().children).toHaveLength(0);
+
+    // The host polls while attached: a push carrying the same notice must not move it or replace it.
+    const said = sectionRegion("hooks").firstElementChild;
+    page.push({ ...STATE, agent: { ...STATE.agent, sessions: 7 }, notice: refused });
+    expect(sectionRegion("hooks").firstElementChild).toBe(said);
+    expect(region().children).toHaveLength(0);
+  });
+
+  it("keeps a notice nobody's click earned above the sections, where it was before", async () => {
+    const page = await load();
+    page.push({ ...STATE, notice: "saved; the agent this app is attached to keeps its own settings until it is restarted" });
+    expect(region().textContent).toContain("keeps its own settings");
+    for (const name of ["agent", "folders", "hooks", "detail", "login"]) expect(sectionRegion(name).children, name).toHaveLength(0);
+  });
+
+  it("takes a notice out of one section when the next one belongs to another", async () => {
+    const root = "refusing to allow a whole filesystem root: C:\\";
+    await load({ installHooks: async () => ({ ...STATE, notice: "the hooks could not be written; see the log" }), addFolder: async () => ({ ...STATE, notice: root }) });
+    control("install-hooks").click();
+    await flush();
+    expect(sectionRegion("hooks").children).toHaveLength(1);
+
+    control("add-folder").click();
+    await flush();
+    expect(sectionRegion("hooks").children).toHaveLength(0);
+    expect(sectionRegion("folders").textContent).toBe(root);
   });
 });

@@ -271,10 +271,16 @@ read the saved config. A takeover that is still `starting`, or that faulted into
 `failed`, has read nothing and keeps the notice, so a single missed health probe cannot make the
 page stop saying that a saved change has not been applied. The bridge refreshes with `pushedState()`
 too when an action throws, since `getState` means the page is asking again and clears the notice. The
-page shows the notice in a live region that is always rendered: `page.html` holds an empty
-`<div id="notice-region" role="status">` above the sections, and `render` puts the styled paragraph
-inside it and takes it out, replacing it only when the text changes or the user's own action earns
-the same sentence again, so a push that carries an old notice is not read out twice. The page is
+page shows the notice in a live region that is always rendered, and puts it where the eye already
+is. A notice answering the user's own click appears in that control's section, under its heading; one
+that arrives on its own, such as the attached notice a push raises, appears in the region
+`page.html` holds above the sections, an empty `<div id="notice-region" role="status">`. Each section
+that owns a control carries its own `role="status"` container, made once in `build` and never hidden,
+so every one is in the accessibility tree before any text reaches it. `render` puts the styled
+paragraph in and takes it out, replacing it only when the text or its section changes, so a push
+carrying an old notice is not read out twice, or when the user's own action earns the same sentence
+again, which should be. Placing it by the control came from walking stage 8's checklist: the
+attached-to-another-home refusal was correct but went unread at the top of the window. The page is
 built once and patched after that: text, `hidden` and `checked` are set in place, only the folder
 list is rebuilt, and only when it changes (stage 8).
 
@@ -783,6 +789,15 @@ window" left unenforced in `own` mode too, `applied()` reading the host's mode a
 action, the launch repair decided before the host's first start has settled, and the exported
 `hookCommand` and `statusCommand` with no consumer, which a tested `launchRepair(deps)` in `hooks.ts`
 would join with the guard `main.ts` repeats.
+
+Found while walking stage 8's own checklist (21 September 2026):
+
+- **A refusal shown only at the top of the window goes unread.** Walking the attached-to-another-home
+  check, the maintainer clicked Install hooks repeatedly and saw nothing happen: the refusal was
+  logged and the notice was drawn, correctly, but at the top of the window, far from the button that
+  had just done nothing. A refusal nobody reads is barely better than a silent one. Done in stage 8:
+  every section that owns a control has its own `role="status"` region, and a notice answering a
+  click appears in that section; only a notice that arrives on its own stays above the sections.
 
 Stage 8 closed the list (21 September 2026). Dropped, each with its reason beside the item: one
 source for the agent's port, zod's eval probe, and a CLI call that outlives an app that exits on its
