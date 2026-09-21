@@ -511,6 +511,26 @@ and is settled in its plan; the rest wait like the items above.
   missing exe repaired, the attached-to-another-home gap confirmed (below, stage 8), the attached
   notice gone once the app's own agent took over, the notice read by Narrator, a sign-out and
   sign-in with the login item on, and the folder deleted under a running session.
+- **Stage 8's manual checks: done.** On 21 September 2026 the maintainer walked them against a
+  packaged build and scratch folders: the settings window in JetBrains Mono, a text selection
+  surviving 36 pushed state changes over 30 seconds, and the arrow keys moving a Detail level choice
+  with focus following it; Narrator reading the whole-filesystem-root refusal on a freshly opened
+  window, and reading it again when the same refusal was earned a second time; the packaged agent
+  answering `http://localhost:3000` and `http://127.0.0.1:3000` with 403 and `app://clawd` with 200;
+  `(await fetch("/CON.txt")).status` returning 404 at once with no policy error; Install hooks with
+  `config.json` deleted refusing, restarting the agent and then installing, after which the old token
+  read 401 and the new one 200; a relaunch with the config deleted and the hooks left logging
+  `desktop.hooksRepaired` 16 ms after `agent.started`, on that launch; an agent served from another
+  home taking the port, the app attaching and refusing ten Install clicks with
+  `desktop.hooksFailed repair:false attached:true otherHome:true` and writing nothing, then taking
+  over twelve seconds after that agent stopped; a maximised window quitting and reopening maximised,
+  with the pre-maximise size restored, and the tray icon outliving the window. The login item fell to
+  the documented fallback: every `desktop.loginItem` line read `items:0 willLaunch:false`, before and
+  after Task Manager's switch, so the control went by the Run value and stayed ticked while Windows
+  had it disabled; toggling it in the app removed Windows' `StartupApproved` entry, re-enabling it.
+  The fuses were read off the binary: RunAsNode enabled, EnableNodeOptionsEnvironmentVariable and
+  EnableNodeCliInspectArguments disabled. The walk found one thing, fixed the same day and recorded
+  below: a refusal shown only at the top of the window goes unread.
 
 Found in the reviews of stage 5 (16 September 2026).
 
