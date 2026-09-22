@@ -168,7 +168,7 @@ describe("the widget page", () => {
     page.canvas.dispatchEvent(pointer("pointermove", { screenX: 502, screenY: 302 }));
     page.frame();
     page.canvas.dispatchEvent(pointer("pointerup", { screenX: 502, screenY: 302, clientX: 62, clientY: 72 }));
-    expect(page.calls).toEqual(["dragStart", "dragEnd", "select agent-1"]);
+    expect(page.calls).toEqual(["dragStart", "select agent-1", "dragEnd"]);
     expect(page.hits).toEqual([[52, 62]]);
   });
 

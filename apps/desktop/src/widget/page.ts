@@ -109,11 +109,14 @@ function start(canvas: HTMLCanvasElement, pin: HTMLElement): void {
       cancelAnimationFrame(moveFrame);
       moveFrame = null;
     }
-    api.dragEnd();
-    if (!click || moved) return;
-    const box = canvas.getBoundingClientRect();
-    const alias = scene?.hitTest(e.clientX - box.left, e.clientY - box.top) ?? null;
+    let alias: string | null = null;
+    if (click && !moved) {
+      const box = canvas.getBoundingClientRect();
+      alias = scene?.hitTest(e.clientX - box.left, e.clientY - box.top) ?? null;
+    }
+    // The select goes first because a press on a temporary popup closes it, and a select after that finds no window.
     if (alias !== null) api.select(alias);
+    api.dragEnd();
   };
   canvas.addEventListener("pointerup", (e) => release(e, true));
   canvas.addEventListener("pointercancel", (e) => release(e, false));

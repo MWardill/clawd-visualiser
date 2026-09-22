@@ -639,6 +639,19 @@ describe("the finished popup in window view", () => {
     expect(h.windows).toHaveLength(1);
   });
 
+  it("opens the session a click on a temporary widget names, then closes the popup", () => {
+    const h = windowView();
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    const id = h.w(0).win.id;
+    h.c.ready(id);
+    h.c.resize(id, DEFAULT_WIDGET_SIZE);
+    h.c.select(id, "agent-1");
+    h.c.dragStart(id);
+    h.c.dragEnd(id);
+    expect(h.opened).toEqual(["session agent-1"]);
+    expect(h.w(0).calls.at(-1)).toBe("close");
+  });
+
   it("walks a temporary widget out and closes it when the session is prompted again or leaves", () => {
     const h = windowView();
     h.c.setSnapshot(REPO_IDLE, "own:1");

@@ -107,7 +107,9 @@ Turning the popup off lowers every raised box.
 - **The cue.** A raised box draws its border and its title green, `PALETTE.state.green`, so a widget
   that was pinned, and so already on top, still says so. Amber for a waiting session wins over green.
 - **What lowers it.** A press on the widget, when it is released: a click, or the end of a drag, so a
-  temporary widget can be moved before it goes and the place is remembered. Or every session that
+  temporary widget can be moved before it goes and the place is remembered. A click on a Clawd in a
+  temporary widget opens the full window on that session first, and the release then closes the
+  popup: the page sends the selection before the release. Or every session that
   raised it has since gone to `working` or `waiting`, which means it was answered in its terminal, or
   has left the snapshot. `asleep` does not lower it.
 - **Afterwards** a pinned widget stays on top at the pinned level, an unpinned one becomes an
@@ -406,6 +408,7 @@ watched folders. Not yet done.
 - [ ] Attached (the CLI agent holding the port), window view, popup on: the box still pops up within a second or so of the finish.
 - [ ] The log holds `desktop.popupChanged` with `on` and `remembered`, and `desktop.popupRaised` with `temporary`, and no folder name.
 - [ ] With boxes raised, Quit from the tray: every box goes and no `electron.exe` remains.
+- [ ] A click on a Clawd in a popup opens the full window on that session's sheet, and the popup closes.
 - [ ] Widget view, popup on: a raised widget sits above a pinned one and above the taskbar, or the two levels turn out to be one band on this Windows and the raise still shows (record which).
 
 ## 11. Tests
