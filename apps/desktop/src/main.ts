@@ -90,6 +90,9 @@ function run(): void {
   /** One window, or a widget per pane. Read fresh: the settings window changes it while the app runs. */
   const view = (): View => store.get().view ?? "window";
 
+  /** Whether a finished turn pops its box up. Read fresh, as `view` is. */
+  const popup = (): boolean => store.get().finishedPopup ?? false;
+
   // The widgets: one frameless window per pane. Every rule is in the controller; this hands it Electron.
   const widgets = createWidgetController({
     createWindow: (bounds) => asWidgetWindow(createWidgetWindow(join(dist.widget, "preload.js"), bounds, dist.appIcon)),
@@ -97,6 +100,8 @@ function run(): void {
     cursor: () => screen.getCursorScreenPoint(),
     workAreas: () => screen.getAllDisplays().map((display) => display.workArea),
     primaryWorkArea: () => screen.getPrimaryDisplay().workArea,
+    // The maintainer is already looking at the full window: no popup is made over it.
+    windowFocused: () => win !== null && !win.isDestroyed() && win.isFocused(),
     placement: (label) => placementOf(store.get(), label),
     savePlacement: (label, placement) => store.update({ widgets: withPlacement(store.get().widgets, label, placement) }),
     openSession: (alias) => showWindow(alias),
@@ -111,8 +116,8 @@ function run(): void {
   /** The port the feed is asking, or null; what it was last told, so a stop can be told from a repeat. */
   let feeding: number | null = null;
   const followFeed = (): void => {
-    const port = quitting ? null : feedPort(host.state(), view(), false); // Task 9 passes the popup setting.
-    // Leaving widget view while attached stops the feed, and what the controller holds goes stale
+    const port = quitting ? null : feedPort(host.state(), view(), popup());
+    // Leaving widget view, or turning the popup off, while attached stops the feed, and what the controller holds goes stale
     // from then on: forgotten now, so the next widget view opens from a fresh answer, not from minutes ago.
     if (port === null && feeding !== null && host.state().mode === "attached") widgets.noSource();
     feeding = port;
@@ -245,6 +250,14 @@ function run(): void {
     return store.usable();
   }
 
+  /** The popup choice, from the settings window: remembered, applied at once, and answered with whether it could be remembered. Off lowers every raised box. */
+  function applyPopup(on: boolean): boolean {
+    store.update({ finishedPopup: on });
+    widgets.setPopup(on);
+    followFeed();
+    return store.usable();
+  }
+
   /** The menu is rebuilt whenever the login checkbox or the view could have changed. */
   function refreshMenu(): void {
     tray?.setContextMenu(
@@ -317,11 +330,7 @@ function run(): void {
     saveDetail: (level) => saveDetail({ home, level }),
     applyOpenAtLogin,
     applyView,
-    // Remembered here; Task 9 hands it to the widgets' controller too.
-    applyPopup: (on) => {
-      store.update({ finishedPopup: on });
-      return store.usable();
-    },
+    applyPopup,
     openLogs: () => shell.openPath(agentPaths(home).logs).then(() => {}),
     log,
   });
@@ -364,6 +373,7 @@ function run(): void {
     for (const [channel, handler] of Object.entries(widgetHandlers.on)) ipcMain.on(channel, (event, arg: unknown) => handler(event.sender.id, arg));
 
     // desktop.json is read: the remembered view takes effect, and with it the question of whom to ask for snapshots.
+    widgets.setPopup(popup());
     widgets.setView(view());
     followFeed();
 
