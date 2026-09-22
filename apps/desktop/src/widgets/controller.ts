@@ -1,15 +1,20 @@
-// The widgets' controller: which windows exist, what each was last sent, where each is, and what a
-// page may ask of main. One window per pane, keyed by the pane's label, which outlives an agent
-// restart where its alias does not. Electron-free: main hands in a window factory, the cursor and
-// the displays, so every rule here is tested over doubles.
+// The widgets' controller: which windows exist, what each was last sent, where each is, which are
+// raised, and what a page may ask of main. One window per pane, keyed by the pane's label, which
+// outlives an agent restart where its alias does not. Electron-free: main hands in a window
+// factory, the cursor, the displays and whether the full window has the keyboard, so every rule
+// here is tested over doubles.
 import type { Logger } from "@clawd/agent";
 import type { Snapshot } from "@clawd/core";
 import type { MenuItemConstructorOptions } from "electron";
 import type { Bounds, Placement, View } from "../desktop-state";
 import type { WidgetSize, WidgetState } from "../widget/state";
+import { finishedTurns, stillRaising } from "./finished";
 import { widgetMenuTemplate } from "./menu";
 import { DEFAULT_WIDGET_SIZE, clampDrop, placeWidget } from "./placement";
 import { emptied, paneSnapshot, planWidgets } from "./plan";
+
+/** How a widget sits among other windows: an ordinary window; above ordinary ones, pinned; above everything, raised. Each is a band, not a nudge. */
+export type WidgetLevel = "normal" | "pinned" | "raised";
 
 /** A widget's window, as much of it as the controller uses. `window.ts` fits a BrowserWindow to it. */
 export type WidgetWindow = {
@@ -17,7 +22,7 @@ export type WidgetWindow = {
   readonly id: number;
   bounds(): Bounds;
   setBounds(bounds: Bounds): void;
-  setPinned(on: boolean): void;
+  setLevel(level: WidgetLevel): void;
   /** Shows the window, or brings it above its neighbours, without giving it the keyboard. */
   reveal(): void;
   send(state: WidgetState): void;
@@ -37,6 +42,8 @@ export type ControllerDeps = {
   primaryWorkArea(): Bounds;
   placement(label: string): Placement | undefined;
   savePlacement(label: string, placement: Placement): void;
+  /** Whether the full window has the keyboard: then the maintainer is already looking, and no popup is made. */
+  windowFocused(): boolean;
   /** A Clawd was clicked: the full window, on that session. */
   openSession(alias: string): void;
   openWindow(): void;
@@ -46,6 +53,8 @@ export type ControllerDeps = {
 
 export type WidgetController = {
   setView(view: View): void;
+  /** Whether a finished turn raises its pane's box. Off lowers every raised one. */
+  setPopup(on: boolean): void;
   /** `source` names the agent the snapshot came from (`own:<run>`, `attached:<port>`); a new name is a new generation. */
   setSnapshot(s: Snapshot, source: string): void;
   /** There is no agent to hear from: the Clawds walk out, same as any pane that leaves, and what is shown goes after the cap. */
@@ -80,6 +89,10 @@ type Entry = {
   pane: string;
   size: WidgetSize;
   pinned: boolean;
+  /** Its label is in the raised set: on top at the highest level and drawn green. */
+  raised: boolean;
+  /** A popup in window view: made for a raise, closed once lowered, never pinned. */
+  temporary: boolean;
   /** The page has asked for its state. Nothing is sent before that: it would arrive before the page listens. */
   ready: boolean;
   /** Shown once its page has reported a size, so it never appears empty or at the wrong size. */
@@ -102,22 +115,29 @@ type Entry = {
  */
 const keyOf = (state: WidgetState): string => JSON.stringify({ ...state, snapshot: state.snapshot === null ? null : { ...state.snapshot, generatedAt: "" } });
 
+const levelOf = (e: Entry): WidgetLevel => (e.raised ? "raised" : e.pinned ? "pinned" : "normal");
+
 export function createWidgetController(deps: ControllerDeps): WidgetController {
   let view: View = "window";
+  let popup = false;
   let snapshot: Snapshot | null = null;
+  /** The snapshot before `snapshot`, from the same source: what a finish is measured against. Null at a source's first. */
+  let previous: Snapshot | null = null;
   let source: string | null = null;
   let generation = 0;
   // Set by shutdown, for the quit: once true, nothing here opens a window again.
   let down = false;
   const entries = new Map<string, Entry>();
   const tries = new Map<string, number>();
+  /** The panes where a turn has finished and nobody has looked: the label, and the sessions holding the raise. */
+  const raised = new Map<string, Set<string>>();
 
   const bySender = (sender: number): Entry | undefined => {
     for (const e of entries.values()) if (e.win.id === sender) return e;
     return undefined;
   };
 
-  const stateOf = (e: Entry): WidgetState => ({ snapshot: e.shown, generation, pinned: e.pinned });
+  const stateOf = (e: Entry): WidgetState => ({ snapshot: e.shown, generation, pinned: e.pinned, raised: e.raised, temporary: e.temporary });
 
   const push = (e: Entry): void => {
     if (!e.ready) return;
@@ -140,7 +160,7 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     e.win.close();
   };
 
-  const open = (label: string, pane: string): Entry | undefined => {
+  const open = (label: string, pane: string, temporary: boolean): Entry | undefined => {
     if ((tries.get(label) ?? 0) >= MAX_TRIES) return undefined;
     const remembered = deps.placement(label);
     const bounds = placeWidget({
@@ -149,11 +169,15 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
       workAreas: deps.workAreas(),
       primary: deps.primaryWorkArea(),
       taken: [...entries.values()].map((other) => other.win.bounds()),
+      // A popup comes up from the bottom right, away from where the widgets stack.
+      stack: temporary ? "up" : "down",
     });
     const win = deps.createWindow(bounds);
-    const e: Entry = { label, win, pane, size: DEFAULT_WIDGET_SIZE, pinned: remembered?.pinned ?? false, ready: false, revealed: false, shown: null, sent: "", closing: null, drag: null };
+    // A temporary widget has no pin, so a remembered one is not honoured; its level is raised anyway.
+    const pinned = !temporary && (remembered?.pinned ?? false);
+    const e: Entry = { label, win, pane, size: DEFAULT_WIDGET_SIZE, pinned, raised: false, temporary, ready: false, revealed: false, shown: null, sent: "", closing: null, drag: null };
     entries.set(label, e);
-    if (e.pinned) win.setPinned(true);
+    if (pinned) win.setLevel("pinned");
     win.onFailed(() => {
       if (entries.get(label) !== e) return;
       const n = (tries.get(label) ?? 0) + 1;
@@ -165,25 +189,39 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     return e;
   };
 
+  /** Puts an entry's level where the raised set says, and brings a newly raised one forward. Called before its push, so the page hears of it in the same state. */
+  const settleLevel = (e: Entry): void => {
+    const shouldRaise = raised.has(e.label);
+    if (shouldRaise === e.raised) return;
+    e.raised = shouldRaise;
+    e.win.setLevel(levelOf(e));
+    if (!shouldRaise) return;
+    deps.log("desktop.popupRaised", { temporary: e.temporary });
+    // Not yet revealed: the first size report shows it, raised already.
+    if (e.revealed) e.win.reveal();
+  };
+
   const reconcile = (leaving: Snapshot | null = snapshot): void => {
     if (down) return;
     const current = snapshot;
     const wanted = new Set<string>();
     if (current !== null) {
-      for (const w of planWidgets({ snapshot: current, view, raised: new Set() })) {
-        const e = entries.get(w.label) ?? open(w.label, w.pane);
+      for (const w of planWidgets({ snapshot: current, view, raised: new Set(raised.keys()) })) {
+        const e = entries.get(w.label) ?? open(w.label, w.pane, w.temporary);
         if (e === undefined) continue;
         wanted.add(w.label);
         if (e.closing !== null) clearTimeout(e.closing);
         e.closing = null;
         e.pane = w.pane;
         e.shown = paneSnapshot(current, w.pane);
+        settleLevel(e);
         push(e);
       }
     }
     for (const e of [...entries.values()]) {
       if (wanted.has(e.label)) continue;
       // Its pane has left (or there is no source at all): the page plays the walk out and then says it has nothing left to draw.
+      settleLevel(e);
       if (leaving !== null) {
         e.shown = emptied(leaving);
         push(e);
@@ -196,11 +234,35 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     for (const e of [...entries.values()]) close(e);
   };
 
+  /** Forgets every raise. The entries follow on the next reconcile. */
+  const lowerAll = (): void => {
+    raised.clear();
+  };
+
+  /**
+   * A press on a raised box lowers it: the maintainer has looked. The label leaves the set, so the
+   * next snapshot does not raise it again, until a new turn finishes there. A temporary widget goes
+   * at once; an ordinary one drops to its own level where it stands.
+   */
+  const lowerByPress = (e: Entry): void => {
+    if (!e.raised) return;
+    raised.delete(e.label);
+    if (e.temporary) {
+      close(e);
+      return;
+    }
+    e.raised = false;
+    e.win.setLevel(levelOf(e));
+    push(e);
+  };
+
   const togglePin = (e: Entry): void => {
     // The menu's closure may outlive its entry.
     if (entries.get(e.label) !== e) return;
+    // A temporary widget goes when it is pressed; a pin on it would promise something it cannot keep.
+    if (e.temporary) return;
     e.pinned = !e.pinned;
-    e.win.setPinned(e.pinned);
+    e.win.setLevel(levelOf(e));
     // A pinned widget should be where it was pinned next time too, dragged or not.
     const b = e.win.bounds();
     deps.savePlacement(e.label, { x: b.x, y: b.y, pinned: e.pinned });
@@ -212,14 +274,42 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
       if (down) return;
       if (next === view) return;
       view = next;
-      if (view === "window") closeAll();
-      else reconcile();
+      // A raise belongs to the view it happened in: never carried across, and never a popup left behind.
+      lowerAll();
+      closeAll();
+      if (view === "widgets") reconcile();
+    },
+    setPopup(on) {
+      if (on === popup) return;
+      popup = on;
+      if (on) return;
+      lowerAll();
+      reconcile();
     },
     setSnapshot(s, from) {
       if (from !== source) {
         source = from;
         generation++;
+        // A new agent: its aliases and states owe nothing to the last one's, so nothing has finished and nothing is raised.
+        previous = null;
+        lowerAll();
       }
+      if (popup) {
+        for (const turn of finishedTurns(previous, s)) {
+          // In window view the box would pop up over what the maintainer is looking at; a finish seen then is a finish seen.
+          if (view === "window" && deps.windowFocused()) continue;
+          const holders = raised.get(turn.label) ?? new Set<string>();
+          holders.add(turn.alias);
+          raised.set(turn.label, holders);
+        }
+      }
+      // A raise holds while any of its sessions is neither working nor waiting again, and still there.
+      for (const [label, holders] of [...raised]) {
+        const kept = stillRaising(holders, s);
+        if (kept.size === 0) raised.delete(label);
+        else raised.set(label, kept);
+      }
+      previous = s;
       snapshot = s;
       reconcile();
     },
@@ -227,6 +317,8 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
       const leaving = snapshot;
       source = null;
       snapshot = null;
+      previous = null;
+      lowerAll();
       reconcile(leaving);
     },
     showAll() {
@@ -290,11 +382,14 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
       if (e === undefined || e.drag === null) return;
       const moved = e.drag.moved;
       e.drag = null;
-      if (!moved) return;
-      const b = e.win.bounds();
-      const kept = clampDrop({ x: b.x, y: b.y, ...e.size }, deps.workAreas());
-      if (kept.x !== b.x || kept.y !== b.y) e.win.setBounds(kept);
-      deps.savePlacement(e.label, { x: kept.x, y: kept.y, pinned: e.pinned });
+      if (moved) {
+        const b = e.win.bounds();
+        const kept = clampDrop({ x: b.x, y: b.y, ...e.size }, deps.workAreas());
+        if (kept.x !== b.x || kept.y !== b.y) e.win.setBounds(kept);
+        deps.savePlacement(e.label, { x: kept.x, y: kept.y, pinned: e.pinned });
+      }
+      // Every press ends here, moved or not: the one place a press lowers anything. After the save, so a moved popup is remembered before it goes.
+      lowerByPress(e);
     },
     togglePin(sender) {
       const e = bySender(sender);
@@ -308,7 +403,7 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     menu(sender) {
       const e = bySender(sender);
       if (e === undefined) return;
-      e.win.popupMenu(widgetMenuTemplate(e.pinned, { togglePin: () => togglePin(e), openWindow: deps.openWindow, settings: deps.openSettings }));
+      e.win.popupMenu(widgetMenuTemplate(e.pinned, { togglePin: () => togglePin(e), openWindow: deps.openWindow, settings: deps.openSettings }, e.temporary));
     },
   };
 }

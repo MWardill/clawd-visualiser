@@ -4,7 +4,7 @@ import type { MenuItemConstructorOptions } from "electron";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Bounds, Placement } from "../desktop-state";
 import type { WidgetState } from "../widget/state";
-import { CLOSE_CAP_MS, MAX_TRIES, createWidgetController, type ControllerDeps, type WidgetWindow } from "./controller";
+import { CLOSE_CAP_MS, MAX_TRIES, createWidgetController, type ControllerDeps, type WidgetLevel, type WidgetWindow } from "./controller";
 import { DEFAULT_WIDGET_SIZE, SLOT_GAP } from "./placement";
 
 const AREA: Bounds = { x: 0, y: 0, width: 1920, height: 1040 };
@@ -43,7 +43,7 @@ function fakeWindow(id: number, initial: Bounds): FakeWindow {
       bounds = next;
       calls.push(`bounds ${next.x},${next.y} ${next.width}x${next.height}`);
     },
-    setPinned: (on) => void calls.push(`pinned ${on}`),
+    setLevel: (level: WidgetLevel) => void calls.push(`level ${level}`),
     reveal: () => void calls.push("reveal"),
     send: (state) => void sent.push(state),
     popupMenu: (template) => void menus.push(template),
@@ -67,6 +67,7 @@ function harness(over: Partial<ControllerDeps> = {}) {
   const opened: string[] = [];
   const logged: Array<[string, LogFields]> = [];
   let cursor = { x: 0, y: 0 };
+  let focused = false;
   const c = createWidgetController({
     createWindow: (bounds) => {
       const made = fakeWindow(100 + windows.length, bounds);
@@ -76,6 +77,7 @@ function harness(over: Partial<ControllerDeps> = {}) {
     cursor: () => cursor,
     workAreas: () => [AREA],
     primaryWorkArea: () => AREA,
+    windowFocused: () => focused,
     placement: () => undefined,
     savePlacement: (label, placement) => void saved.push([label, placement]),
     openSession: (alias) => void opened.push(`session ${alias}`),
@@ -90,7 +92,7 @@ function harness(over: Partial<ControllerDeps> = {}) {
     if (found === undefined) throw new Error(`no window ${n}`);
     return found;
   };
-  return { c, windows, w, saved, opened, logged, setCursor: (x: number, y: number) => (cursor = { x, y }) };
+  return { c, windows, w, saved, opened, logged, setCursor: (x: number, y: number) => (cursor = { x, y }), setFocused: (on: boolean) => (focused = on) };
 }
 
 /** Widget view, two panes, both pages ready and shown. */
@@ -130,9 +132,9 @@ describe("which windows there are", () => {
     h.c.setView("widgets");
     h.c.setSnapshot(TWO, "own:1");
     expect(h.w(0).win.bounds()).toEqual({ x: 40, y: 60, ...DEFAULT_WIDGET_SIZE });
-    expect(h.w(0).calls).toContain("pinned true");
+    expect(h.w(0).calls).toContain("level pinned");
     expect(h.w(1).win.bounds()).toEqual(FIRST);
-    expect(h.w(1).calls).not.toContain("pinned true");
+    expect(h.w(1).calls).not.toContain("level pinned");
   });
 
   it("closes every widget at once when the view goes back to the window", () => {
@@ -357,11 +359,11 @@ describe("the pin, the menu and a clicked Clawd", () => {
     const h = shown();
     const id = h.w(0).win.id;
     h.c.togglePin(id);
-    expect(h.w(0).calls).toEqual(["pinned true"]);
+    expect(h.w(0).calls).toEqual(["level pinned"]);
     expect(h.saved).toEqual([["repo", { x: FIRST.x, y: FIRST.y, pinned: true }]]);
     expect(h.w(0).sent.at(-1)).toMatchObject({ pinned: true });
     h.c.togglePin(id);
-    expect(h.w(0).calls).toEqual(["pinned true", "pinned false"]);
+    expect(h.w(0).calls).toEqual(["level pinned", "level normal"]);
     expect(h.w(0).sent.at(-1)).toMatchObject({ pinned: false });
   });
 
@@ -374,7 +376,7 @@ describe("the pin, the menu and a clicked Clawd", () => {
     (menu[0]?.click as () => void)();
     (menu[2]?.click as () => void)();
     (menu[3]?.click as () => void)();
-    expect(h.w(1).calls).toEqual(["pinned true"]);
+    expect(h.w(1).calls).toEqual(["level pinned"]);
     expect(h.opened).toEqual(["window", "settings"]);
   });
 
@@ -460,5 +462,197 @@ describe("shutdown", () => {
     h.c.setSnapshot(TWO, "own:3");
     expect(h.windows).toHaveLength(2);
     expect(h.c.ready(999)).toBeNull();
+  });
+});
+
+const BOTTOM: Bounds = { x: FIRST.x, y: AREA.height - DEFAULT_WIDGET_SIZE.height - SLOT_GAP, ...DEFAULT_WIDGET_SIZE };
+/** TWO with repo's session idle: agent-1 finished its turn. */
+const REPO_IDLE: Snapshot = { ...TWO, sessions: TWO.sessions.map((s) => (s.alias === "agent-1" ? { ...s, state: "idle" as const } : s)) };
+const REPO_ASLEEP: Snapshot = { ...TWO, sessions: TWO.sessions.map((s) => (s.alias === "agent-1" ? { ...s, state: "asleep" as const } : s)) };
+
+describe("the finished popup in widget view", () => {
+  it("raises the pane's widget when a turn there finishes: the highest level, brought forward, drawn green, and logged", () => {
+    const h = shown();
+    h.c.setPopup(true);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.w(0).calls).toEqual(["level raised", "reveal"]);
+    expect(h.w(0).sent.at(-1)).toMatchObject({ raised: true, temporary: false });
+    expect(h.w(1).calls).toEqual([]);
+    expect(h.w(1).sent).toEqual([]);
+    expect(h.logged).toEqual([["desktop.popupRaised", { temporary: false }]]);
+  });
+
+  it("raises nothing while the popup is off, and nothing from the first snapshot of a source", () => {
+    const h = shown();
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.w(0).calls).toEqual([]);
+    h.c.setPopup(true);
+    // a new source: REPO_IDLE is its baseline, and agent-1 was never seen working under it
+    h.c.setSnapshot(REPO_IDLE, "own:2");
+    expect(h.w(0).calls).toEqual([]);
+    expect(h.logged).toEqual([]);
+  });
+
+  it("lowers the widget when the session works or waits again, or leaves, and not when it falls asleep", () => {
+    const h = shown();
+    h.c.setPopup(true);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    h.c.setSnapshot(REPO_ASLEEP, "own:1");
+    expect(h.w(0).calls).toEqual(["level raised", "reveal"]);
+    h.c.setSnapshot(TWO, "own:1");
+    expect(h.w(0).calls).toEqual(["level raised", "reveal", "level normal"]);
+    expect(h.w(0).sent.at(-1)).toMatchObject({ raised: false });
+
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.w(0).calls.at(-1)).toBe("reveal");
+    h.c.setSnapshot(snap({ repo: [], docs: ["agent-2"] }), "own:1");
+    expect(h.w(0).calls.at(-1)).toBe("level normal");
+  });
+
+  it("lowers the widget when it is pressed, back to pinned if it was pinned, and the next finish raises it again", () => {
+    const h = shown();
+    h.c.togglePin(h.w(0).win.id);
+    h.c.setPopup(true);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.w(0).calls).toEqual(["level pinned", "level raised", "reveal"]);
+    h.c.dragStart(h.w(0).win.id);
+    h.c.dragEnd(h.w(0).win.id);
+    expect(h.w(0).calls).toEqual(["level pinned", "level raised", "reveal", "level pinned"]);
+    expect(h.w(0).sent.at(-1)).toMatchObject({ raised: false, pinned: true });
+    // still idle: pressing it was the answer, and no new turn has finished
+    h.c.setSnapshot(REPO_ASLEEP, "own:1");
+    expect(h.w(0).calls).toHaveLength(4);
+    h.c.setSnapshot(TWO, "own:1");
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.w(0).calls.at(-2)).toBe("level raised");
+  });
+
+  it("raises a widget the full window's focus does not stop, in widget view", () => {
+    const h = shown();
+    h.setFocused(true);
+    h.c.setPopup(true);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.w(0).calls).toEqual(["level raised", "reveal"]);
+  });
+
+  it("lowers everything when the popup is switched off, and when the source changes", () => {
+    const h = shown();
+    h.c.setPopup(true);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    h.c.setPopup(false);
+    expect(h.w(0).calls).toEqual(["level raised", "reveal", "level normal"]);
+
+    h.c.setPopup(true);
+    h.c.setSnapshot(TWO, "own:1");
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.w(0).calls.at(-1)).toBe("reveal");
+    h.c.setSnapshot(REPO_IDLE, "attached:4750");
+    expect(h.w(0).calls.at(-1)).toBe("level normal");
+    expect(h.w(0).sent.at(-1)).toMatchObject({ generation: 2, raised: false });
+  });
+});
+
+describe("the finished popup in window view", () => {
+  /** Window view, the popup on, TWO as the baseline. */
+  function windowView(over: Partial<ControllerDeps> = {}) {
+    const h = harness(over);
+    h.c.setPopup(true);
+    h.c.setSnapshot(TWO, "own:1");
+    return h;
+  }
+
+  it("makes a temporary widget for the pane at the bottom right, raised from the start, with no pin", () => {
+    const h = windowView();
+    expect(h.windows).toHaveLength(0);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.windows).toHaveLength(1);
+    expect(h.w(0).win.bounds()).toEqual(BOTTOM);
+    expect(h.w(0).calls).toEqual(["level raised"]);
+    expect(h.logged).toEqual([["desktop.popupRaised", { temporary: true }]]);
+    const state = h.c.ready(h.w(0).win.id);
+    expect(state).toMatchObject({ raised: true, temporary: true, pinned: false });
+    expect(state?.snapshot?.panes).toEqual([{ pane: "pane-1", label: "repo" }]);
+    h.c.resize(h.w(0).win.id, DEFAULT_WIDGET_SIZE);
+    expect(h.w(0).calls).toEqual(["level raised", `bounds ${BOTTOM.x},${BOTTOM.y} ${DEFAULT_WIDGET_SIZE.width}x${DEFAULT_WIDGET_SIZE.height}`, "reveal"]);
+    h.c.menu(h.w(0).win.id);
+    expect(h.w(0).menus[0]?.map((item) => item.label ?? item.type)).toEqual(["Open full window", "Settings"]);
+    h.c.togglePin(h.w(0).win.id);
+    expect(h.saved).toEqual([]);
+    expect(h.w(0).calls).toHaveLength(3);
+  });
+
+  it("puts a temporary widget back where the folder's widget was left, if anywhere", () => {
+    const h = windowView({ placement: (label) => (label === "repo" ? { x: 40, y: 60, pinned: true } : undefined) });
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.w(0).win.bounds()).toEqual({ x: 40, y: 60, ...DEFAULT_WIDGET_SIZE });
+    // the remembered pin is not honoured: a temporary widget has no pin, and its level is raised anyway
+    expect(h.w(0).calls).toEqual(["level raised"]);
+  });
+
+  it("makes none while the full window is focused, and does not pop it up later when the focus moves", () => {
+    const h = windowView();
+    h.setFocused(true);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.windows).toHaveLength(0);
+    h.setFocused(false);
+    h.c.setSnapshot(REPO_ASLEEP, "own:1");
+    expect(h.windows).toHaveLength(0);
+    expect(h.logged).toEqual([]);
+  });
+
+  it("closes a temporary widget at once when it is pressed, remembering a drag first, and does not remake it", () => {
+    const h = windowView();
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    const id = h.w(0).win.id;
+    h.c.ready(id);
+    h.c.resize(id, DEFAULT_WIDGET_SIZE);
+    h.setCursor(BOTTOM.x, BOTTOM.y);
+    h.c.dragStart(id);
+    h.setCursor(BOTTOM.x - 100, BOTTOM.y - 50);
+    h.c.dragMove(id);
+    h.c.dragEnd(id);
+    expect(h.saved).toEqual([["repo", { x: BOTTOM.x - 100, y: BOTTOM.y - 50, pinned: false }]]);
+    expect(h.w(0).calls.at(-1)).toBe("close");
+    h.c.setSnapshot(REPO_ASLEEP, "own:1");
+    expect(h.windows).toHaveLength(1);
+  });
+
+  it("walks a temporary widget out and closes it when the session is prompted again or leaves", () => {
+    const h = windowView();
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    const id = h.w(0).win.id;
+    h.c.ready(id);
+    h.c.setSnapshot(TWO, "own:1");
+    expect(h.w(0).sent.at(-1)?.snapshot).toMatchObject({ panes: [], sessions: [] });
+    expect(h.w(0).calls.at(-1)).toBe("level normal");
+    h.c.resize(id, null);
+    expect(h.w(0).calls.at(-1)).toBe("close");
+  });
+
+  it("closes a temporary widget after the cap when the popup is switched off", () => {
+    const h = windowView();
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    h.c.setPopup(false);
+    vi.advanceTimersByTime(CLOSE_CAP_MS);
+    expect(h.w(0).calls.at(-1)).toBe("close");
+    expect(h.windows).toHaveLength(1);
+  });
+
+  it("closes the temporary widgets when the view changes to widgets, and the ordinary ones then open unraised", () => {
+    const h = windowView();
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    h.c.setView("widgets");
+    expect(h.w(0).calls.at(-1)).toBe("close");
+    expect(h.windows).toHaveLength(3);
+    expect(h.c.ready(h.w(1).win.id)).toMatchObject({ raised: false, temporary: false });
+  });
+
+  it("raises a temporary widget for a second pane too, above the first", () => {
+    const h = windowView();
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    const both: Snapshot = { ...REPO_IDLE, sessions: REPO_IDLE.sessions.map((s) => ({ ...s, state: "idle" as const })) };
+    h.c.setSnapshot(both, "own:1");
+    expect(h.windows).toHaveLength(2);
+    expect(h.w(1).win.bounds()).toEqual({ ...BOTTOM, y: BOTTOM.y - DEFAULT_WIDGET_SIZE.height - SLOT_GAP });
   });
 });
