@@ -1,4 +1,4 @@
-// The main process: the one Node program in the app. It owns the lifecycle, the window and the tray,
+// The main process: the one Node program in the app. It owns the lifecycle, the window, the widgets and the tray,
 // and runs the agent itself; Chromium draws, in a sandboxed renderer process per window.
 import {
   AGENT_VERSION,
@@ -17,15 +17,17 @@ import {
 import { Menu, Tray, app, dialog, ipcMain, nativeImage, protocol, screen, shell, type BrowserWindow, type NativeImage, type OpenDialogOptions } from "electron";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
-import { checkToken, fetchCounts, probeHealth } from "./agent-client";
+import { checkToken, fetchCounts, fetchSnapshot, probeHealth } from "./agent-client";
 import { createAgentHost, statusText, type HostState } from "./agent-host";
 import { ownArgs, parseArgs, resolveRendererUrl } from "./args";
 import { restoredBounds } from "./bounds";
-import { createDesktopStore, desktopStatePath } from "./desktop-state";
+import { createAttachedFeed, feedPort } from "./attached-feed";
+import { createDesktopStore, desktopStatePath, placementOf, withPlacement, type View } from "./desktop-state";
 import { currentHookStatus, installedExe, launchRepair, readConfigState, runtimePrefix } from "./hooks";
 import { isQuitShortcut } from "./keys";
 import { createFileSink, readRetentionDays } from "./log";
 import { appUserModelId, loginItemTarget, loginOnLaunch, shownAtLogin } from "./login";
+import { sessionUrl } from "./navigation";
 import { distPaths } from "./paths";
 import { showOrCreate } from "./reveal";
 import { createQuitHandler, settleWithin } from "./quit";
@@ -36,7 +38,9 @@ import { createCoalescer } from "./settings/coalesce";
 import { CHANNELS } from "./settings/channels";
 import { createHandlers } from "./settings/ipc";
 import { trayIconFile, trayMenuTemplate, trayTooltip } from "./tray";
-import { createMainWindow, createSettingsWindow } from "./window";
+import { createWidgetHandlers } from "./widget/ipc";
+import { createWidgetController } from "./widgets/controller";
+import { asWidgetWindow, createMainWindow, createSettingsWindow, createWidgetWindow } from "./window";
 
 // One copy of the app per user. The first launch holds the lock; a second one hands its command
 // line to the first, through `second-instance`, and exits here before doing anything else.
@@ -83,6 +87,29 @@ function run(): void {
   // Set once quitting has begun, so that closing the window really closes it rather than hiding it.
   let quitting = false;
 
+  /** One window, or a widget per pane. Read fresh: the settings window changes it while the app runs. */
+  const view = (): View => store.get().view ?? "window";
+
+  // The widgets: one frameless window per pane. Every rule is in the controller; this hands it Electron.
+  const widgets = createWidgetController({
+    createWindow: (bounds) => asWidgetWindow(createWidgetWindow(join(dist.widget, "preload.js"), bounds, dist.appIcon)),
+    // In the units setBounds takes. A page's own screenX is not, on a machine with two scale factors.
+    cursor: () => screen.getCursorScreenPoint(),
+    workAreas: () => screen.getAllDisplays().map((display) => display.workArea),
+    primaryWorkArea: () => screen.getPrimaryDisplay().workArea,
+    placement: (label) => placementOf(store.get(), label),
+    savePlacement: (label, placement) => store.update({ widgets: withPlacement(store.get().widgets, label, placement) }),
+    openSession: (alias) => showWindow(alias),
+    openWindow: () => showWindow(),
+    openSettings: () => showSettings(),
+    log,
+  });
+
+  // The app's own agent hands main every snapshot. An agent it is only attached to does not, so
+  // while widgets are shown it is asked once a second.
+  const feed = createAttachedFeed({ fetch: (port) => fetchSnapshot(port), onSnapshot: (s, port) => widgets.setSnapshot(s, `attached:${port}`) });
+  const followFeed = (): void => feed.watch(quitting ? null : feedPort(host.state(), view()));
+
   // The host's change callback fires on every snapshot the agent produces, and building the state
   // reads two files and asks Electron for the login item synchronously, on the same event loop the
   // agent runs on. A burst of snapshots is collapsed into one rebuild rather than one each.
@@ -98,9 +125,14 @@ function run(): void {
     probe: (port) => probeHealth(port),
     counts: (port) => fetchCounts(port),
     log,
+    // `run` counts the host's starts: a new number is a new agent, and a new generation for the widgets.
+    onSnapshot: (s, run) => widgets.setSnapshot(s, `own:${run}`),
     onChange: (state) => {
       if (win !== null && !win.isDestroyed()) win.setTitle(statusText(state));
       refreshTray(state);
+      // A failed host has no agent to hear from; what the widgets show is stale.
+      if (state.mode === "failed") widgets.noSource();
+      followFeed();
       pushStateSoon.ask();
     },
   });
@@ -110,11 +142,13 @@ function run(): void {
   process.on("uncaughtException", () => host.fault());
   process.on("unhandledRejection", () => host.fault());
 
-  /** Shows the window, making it the first time; from the tray, a second launch, or startup. */
-  function showWindow(): void {
+  /** Shows the window, making it the first time; from the tray, a second launch, startup, or a Clawd clicked in a widget, which names the session to open it on. */
+  function showWindow(alias?: string): void {
+    const target = alias === undefined ? url : sessionUrl(url, alias);
+    const existed = win !== null && !win.isDestroyed();
     win = showOrCreate(win, quitting, () => {
       const workAreas = screen.getAllDisplays().map((display) => display.workArea);
-      const created = createMainWindow(url, statusText(host.state()), restoredBounds(store.get().bounds, workAreas), store.get().maximized === true, dist.appIcon);
+      const created = createMainWindow(target, statusText(host.state()), restoredBounds(store.get().bounds, workAreas), store.get().maximized === true, dist.appIcon);
       // Closing hides the window, and the app and its agent carry on in the tray. Once quitting has
       // begun the close goes through. Either way where it was, and whether it filled the screen, is remembered.
       created.on("close", (event) => {
@@ -133,6 +167,16 @@ function run(): void {
       });
       return created;
     });
+    // A window that was already showing the page: the same URL with another hash is a navigation
+    // inside the document, so nothing reloads, the feed stays connected and the page hears `hashchange`.
+    if (existed && alias !== undefined && !quitting && win !== null && !win.isDestroyed()) void win.loadURL(target);
+  }
+
+  /** What clicking the tray icon or launching the app a second time does: the widgets come forward in widget view, and the full window opens otherwise, or when no widget is open, so the click always does something. */
+  function revealApp(): void {
+    if (quitting) return;
+    if (view() === "widgets" && widgets.showAll() > 0) return;
+    showWindow();
   }
 
   const version = app.getVersion();
@@ -174,11 +218,26 @@ function run(): void {
     refreshMenu();
   }
 
-  /** The menu is rebuilt whenever the login checkbox could have changed. */
+  /** The view, from the settings window: remembered, applied at once, and answered with whether it could be remembered. */
+  function applyView(next: View): boolean {
+    store.update({ view: next });
+    widgets.setView(next);
+    followFeed();
+    refreshMenu();
+    // Widgets off: the scene goes back where it was. Widgets on leaves the full window as it is.
+    if (next === "window") showWindow();
+    return store.usable();
+  }
+
+  /** The menu is rebuilt whenever the login checkbox or the view could have changed. */
   function refreshMenu(): void {
     tray?.setContextMenu(
       Menu.buildFromTemplate(
-        trayMenuTemplate(openAtLogin(), { open: showWindow, settings: showSettings, setOpenAtLogin: (on: boolean) => { applyOpenAtLogin(on); pushState(); }, quit: () => app.quit() }),
+        trayMenuTemplate(
+          openAtLogin(),
+          { open: () => showWindow(), showWidgets: () => void widgets.showAll(), settings: showSettings, setOpenAtLogin: (on: boolean) => { applyOpenAtLogin(on); pushState(); }, quit: () => app.quit() },
+          view(),
+        ),
       ),
     );
   }
@@ -228,11 +287,7 @@ function run(): void {
     uninstallHooks: () => uninstallHooks({ home, settingsPath, now: Date.now }),
     saveDetail: (level) => saveDetail({ home, level }),
     applyOpenAtLogin,
-    // Remembered here; Task 14 hands it to the widgets' controller too.
-    applyView: (next) => {
-      store.update({ view: next });
-      return store.usable();
-    },
+    applyView,
     openLogs: () => shell.openPath(agentPaths(home).logs).then(() => {}),
     log,
   });
@@ -268,15 +323,25 @@ function run(): void {
     // Quitting began while desktop.json was loading: build nothing more.
     if (quitting) return;
 
+    // desktop.json is read: the remembered view takes effect, and with it the question of whom to ask for snapshots.
+    widgets.setView(view());
+    followFeed();
+
     // The tray has to stay referenced for as long as the app runs; `tray` in this closure is that reference.
     trayFile = trayIconFile(0);
     tray = new Tray(trayImage(trayFile));
-    tray.on("click", () => showWindow());
+    tray.on("click", () => revealApp());
 
     const fallback = await currentState();
     for (const [channel, handler] of Object.entries(createHandlers(settingsActions, fallback))) {
       ipcMain.handle(channel, (_event, arg: unknown) => handler(arg));
     }
+
+    // Every widget window sends on the same channels. The sender's id is the only thing that tells
+    // them apart, and the only identity main trusts. `handle` answers; `on` does not.
+    const widgetHandlers = createWidgetHandlers(widgets);
+    for (const [channel, handler] of Object.entries(widgetHandlers.invoke)) ipcMain.handle(channel, (event, arg: unknown) => handler(event.sender.id, arg));
+    for (const [channel, handler] of Object.entries(widgetHandlers.on)) ipcMain.on(channel, (event, arg: unknown) => handler(event.sender.id, arg));
 
     refreshTray(host.state());
     refreshMenu();
@@ -318,7 +383,8 @@ function run(): void {
     }
     if (action === "reapply") log("desktop.loginItemReapplied");
 
-    if (!args.hidden) showWindow();
+    // In widget view the widgets are the app's face, and they appear with the sessions; --hidden holds back only the full window.
+    if (!args.hidden && view() === "window") showWindow();
   });
 
   // A second launch. One started at login while the app already runs passes --hidden and changes
@@ -326,7 +392,7 @@ function run(): void {
   app.on("second-instance", (_event, argv) => {
     if (parseArgs(argv).hidden) return;
     // A startup that failed was already reported once, through `started`, so it is not reported again here.
-    void started.then(showWindow, () => {});
+    void started.then(revealApp, () => {});
   });
 
   // The tray keeps the app running with no window open. Without a listener here, Electron would quit
@@ -340,6 +406,9 @@ function run(): void {
     // A rebuild waiting on the coalescer would only build state for a window that is going away.
     pushStateSoon.cancel();
     win?.hide();
+    // The flag is set, so followFeed asks nobody; the widgets go with the window.
+    feed.stop();
+    widgets.closeAll();
   });
 
   // `will-quit` comes after every window has closed. The handler holds it until the agent has stopped
