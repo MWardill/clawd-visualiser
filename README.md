@@ -35,7 +35,7 @@ A pnpm workspace. Packages export TypeScript source directly; the web app compil
 | --- | --- |
 | `apps/web` | Next.js app (App Router, Tailwind, shadcn/ui). The panes scene on one canvas, fed by the agent's SSE stream when one answers and by the simulated source otherwise; a detail sheet with the redacted ticker in xterm.js. See `docs/superpowers/specs/2026-09-12-web-app-design.md`. |
 | `apps/agent` | The local agent: hook and status line receivers, redaction at ingest, presence polling, snapshot and ticker streams, the settings installer and Windows window focus. See its README. |
-| `apps/desktop` | The Electron app: the agent and the visualiser in one window and the tray, with a settings window that installs the hooks under the app's own binary, packaged as a zipped folder. See its README. |
+| `apps/desktop` | The Electron app: the agent and the visualiser in one window and the tray, with a settings window that installs the hooks under the app's own binary, packaged as a zipped folder. Its settings can also show each folder's box as its own small window, to drag anywhere and pin on top. See its README. |
 | `packages/core` | Contracts, redaction, state machine, aliases, simulated and replay sources, fixtures. Pure TypeScript, tested with Vitest. See its README. |
 | `packages/scene` | The canvas renderer: the Clawd pixel engine and the panes scene. Framework-free; takes a snapshot, draws a frame. See its README. |
 | `docs/PRD.md` | Requirements, contracts, state machine, milestones, decision log. |

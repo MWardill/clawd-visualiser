@@ -328,6 +328,34 @@ run's taskbar icon. Stage 10: a popup over a maximised window and over the taskb
 another app carries on uninterrupted while a box rises; a popup that fired while the machine was
 locked, still there at unlock; a pinned widget turning green.
 
+### 10.1 Stage 9's manual checks
+
+Walked by the maintainer on the packaged build, against scratch folders (`CLAWD_HOME`,
+`CLAUDE_CONFIG_DIR`), with at least two Claude sessions in two watched folders. Not yet done.
+
+- [ ] Settings shows View after This app; choosing widgets closes nothing and makes a box per folder at the top right of the primary display, one under the other.
+- [ ] Each box is transparent outside its border, its interior dark, its text in JetBrains Mono; no box is in the taskbar or Alt+Tab.
+- [ ] A new session in a folder walks in from behind the bottom border and is never drawn outside the box; sessions already there when the box opened were seated at once.
+- [ ] A third session in one folder grows its box downward, the top-left corner fixed; when it leaves, the box shrinks back.
+- [ ] The last session in a folder ending makes its Clawd walk out, and then the box closes.
+- [ ] Dragging: the box follows the cursor with no lag that matters, keeps its size at 100, 125 and 150% scaling, and crosses between two displays with different scaling without changing size in CSS terms or blurring.
+- [ ] A box dropped mostly off the screen can still be grabbed; one flung wholly off comes back inside.
+- [ ] A click on a Clawd opens the full window on that session's detail sheet; doing it again after closing the sheet opens it again, and the scene in the full window does not reload (its Clawds do not walk in again).
+- [ ] The pin appears on hover, sits on the title row clear of the collision mark, lights amber when pressed, and the box then stays above a maximised window. At 125% it is no more than two pixels off the row.
+- [ ] Narrator reads the pin as a toggle button, "Pin on top", pressed or not; Tab reaches it.
+- [ ] Right-click: Pin on top (ticked when pinned), Open full window, Settings, each doing what it says.
+- [ ] Quit and relaunch: each box is where it was left, pinned if it was. With a display unplugged, a box remembered there takes a default slot.
+- [ ] Tray: clicking the icon brings the boxes above other windows without taking the keyboard from the app in use; with no session running it opens the full window. The menu has Show widgets above Open in widget view only.
+- [ ] `--hidden` in widget view: no full window, and boxes appear when sessions do.
+- [ ] Choosing window again closes every box at once and shows the full window.
+- [ ] Attached: with the CLI's agent holding the port, boxes still appear and follow the sessions within a second or so; stopping that agent, the app takes over and the boxes stay, their Clawds re-seated rather than walking in.
+- [ ] Settings changed while widgets are shown (a folder added): the agent restarts and the boxes stay.
+- [ ] A development run shows the Clawd, not Electron's icon, in the taskbar, the title bar and Alt+Tab, for the full window and the settings window.
+- [ ] The log holds `desktop.viewChanged` with `widgets` and `remembered`, and no folder name anywhere.
+- [ ] A Clawd clicked in a widget while the full window is hidden or minimised brings that window up on the sheet.
+- [ ] With `dist/widget/index.html` renamed in a development run, choosing widgets shows nothing and logs nothing: a broken widget build fails silently (known; no code for it this stage).
+- [ ] The first reveal of a widget (a transparent, `show: false` window) and its first resize after the page reports a size show no white flash or lost transparency.
+
 ## 11. Tests
 
 - `packages/scene`, over the fake context: with `background: "none"` no night is drawn and the pane's
