@@ -3,7 +3,7 @@ import type { Bounds } from "./desktop-state";
 import { sameOrigin } from "./navigation";
 import { SETTINGS_URL, WIDGET_URL } from "./scheme";
 import { WIDGET_CHANNELS } from "./widget/channels";
-import type { WidgetLevel, WidgetWindow } from "./widgets/controller";
+import type { WidgetWindow } from "./widgets/controller";
 
 export const WINDOW_SIZE = { width: 1280, height: 800 } as const;
 /** The scene's night background, so the window never flashes white before the page paints. */
@@ -126,7 +126,7 @@ export function asWidgetWindow(win: BrowserWindow): WidgetWindow {
     // top (`moveTop`) is refused by Windows for a process that is not in the foreground: only a
     // topmost window may sit above the active one. So an unpinned widget is made topmost and at once
     // not, which Windows answers by placing it above every non-topmost window, the active one
-    // included, without activating it. A pinned one is topmost already and only moves up its band.
+    // included, without activating it. A pinned or raised one is topmost already and only moves up its band.
     reveal: () => {
       if (win.isDestroyed()) return;
       win.showInactive();

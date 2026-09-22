@@ -114,7 +114,9 @@ Turning the popup off lowers every raised box.
   has left the snapshot. `asleep` does not lower it.
 - **Afterwards** a pinned widget stays on top at the pinned level, an unpinned one becomes an
   ordinary window where it stands, and a temporary one closes: at once when a press lowered it,
-  after its Clawds walk out when the session being prompted again or leaving did.
+  after its Clawds walk out when the session being prompted again or leaving did. The popup going
+  off, a change of view and a new agent lower everything too: a temporary widget then walks out and
+  closes, or closes at once on a change of view.
 
 ## 4. The scene (`packages/scene`)
 
@@ -214,7 +216,7 @@ Electron-free modules with tests over doubles, in the manner of `agent-host.ts` 
 
 ```
 src/widgets/
-  finished.ts     the finish tracker: (previous snapshot, next snapshot, generation) → the labels of panes where a turn just finished
+  finished.ts     `finishedTurns(previous, next)` → the panes and sessions where a turn just finished; `stillRaising(aliases, next)` → those still holding a raise; the generation is the controller's, which forgets `previous` on a rise
   plan.ts         which windows should exist: (snapshot, view, raised) → [{ label, pane, temporary }]; the popup setting and the focus are the controller's, at trigger time
   placement.ts    where a window goes: the remembered place if restoredBounds accepts it, else the next free default slot; clamping after a drop
   controller.ts   the stateful part: label → window over an injected window factory; reconciles with the plan; owns the raised set, the drag in progress and the retry counts
@@ -400,7 +402,7 @@ watched folders. Not yet done.
 - [ ] A finish while the full window is focused shows nothing, then and later.
 - [ ] A finish, then a prompt sent in that session: the box's Clawd walks out and the box closes, without a click.
 - [ ] A finish, then the session left idle past ten minutes (asleep): the box stays up.
-- [ ] Widget view, popup on: a finish turns that folder's widget green and brings it above a maximised window; a pinned widget turns green too; the raised widget sits above a pinned one.
+- [ ] Widget view, popup on: a finish turns that folder's widget green and brings it above a maximised window; a pinned widget turns green too.
 - [ ] A click on the raised widget lowers it: a pinned one stays pinned, an unpinned one becomes ordinary and stays where it is.
 - [ ] The next prompt in that session lowers it without a click.
 - [ ] Popup off in Settings: every raised box lowers; a temporary one walks out and closes.
@@ -418,12 +420,13 @@ watched folders. Not yet done.
   for one and two rows of seats and for no panes; `layoutPanes` with a margin; `reconcile` with
   `seated`; `setFinished` and the amber-over-green rule.
 - `apps/desktop`, with vitest: `widgets/finished` (the baseline, working to idle, waiting to idle not
-  counted, a generation change, a session that vanishes); `widgets/plan` (each view, the popup on and
-  off, the focused full window, a temporary widget); `widgets/placement` (default slots, a remembered
-  place off every display, clamping); `widgets/controller` over a fake window factory (create, close
-  after empty or the cap, the filtered snapshot sent only when changed, an unknown sender ignored,
-  `select` refused for an alias not sent, the drag, pin and lower sequences, the three tries);
-  `attached-feed` with a fake fetch and clock; `widget/ipc` validation; `widget/page` under happy-dom
+  counted, a generation change, a session that vanishes); `widgets/plan` (each view, a raised pane in
+  each, a temporary widget); `widgets/placement` (default slots, a remembered place off every
+  display, clamping); `widgets/controller` over a fake window factory (create, close after empty or
+  the cap, the filtered snapshot sent only when changed, an unknown sender ignored, `select` refused
+  for an alias not sent, the drag, pin and lower sequences, the three tries, the popup: raise, lower
+  by press and by state, the focused full window, temporary widgets, the popup off, a generation
+  rise); `attached-feed` with a fake fetch and clock; `widget/ipc` validation; `widget/page` under happy-dom
   (click against drag at the four-pixel threshold, the pin button and its `aria-pressed`, the size
   report, `seated` on the first snapshot only, a generation change clearing the scene);
   `desktop-state` parsing the new fields; `tray` with and without the widgets entry; `scheme` serving

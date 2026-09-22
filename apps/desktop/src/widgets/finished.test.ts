@@ -31,6 +31,12 @@ describe("finishedTurns", () => {
     expect(finishedTurns(before, after)).toEqual([]);
   });
 
+  it("does not count a session that went from waiting to idle, only one that was working", () => {
+    const before = snap(session("agent-1", "pane-1", "waiting"), session("agent-2", "pane-2", "working"));
+    const after = snap(session("agent-1", "pane-1", "idle"), session("agent-2", "pane-2", "idle"));
+    expect(finishedTurns(before, after)).toEqual([{ label: "docs", alias: "agent-2" }]);
+  });
+
   it("names every pane whose session finished, two in one snapshot too", () => {
     const before = snap(session("agent-1", "pane-1", "working"), session("agent-2", "pane-2", "working"));
     const after = snap(session("agent-1", "pane-1", "idle"), session("agent-2", "pane-2", "idle"));

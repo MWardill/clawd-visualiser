@@ -1,6 +1,7 @@
 // Where a widget's window goes. A folder's widget goes back where it was left, if that place is
 // still on a display; otherwise it takes the next free slot, down from the top right of the primary
-// work area and then leftwards in columns. Pure: the displays are passed in.
+// work area and then leftwards in columns; a popup's default slots run up from the bottom right
+// instead. Pure: the displays are passed in.
 import { restoredBounds } from "../bounds";
 import type { Bounds, Placement } from "../desktop-state";
 import type { WidgetSize } from "../widget/state";

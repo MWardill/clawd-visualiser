@@ -488,3 +488,4 @@ working nor waiting again and still there: `asleep` keeps it up.
 
 **`isFocused()`.** Main asks the full window whether it has the keyboard at the moment a turn
 finishes; if it does, the finish is not recorded, and nothing pops up later when the focus moves.
+In widget view the check is skipped: the folder's widget is raised regardless, by decision.

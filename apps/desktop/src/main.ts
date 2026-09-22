@@ -117,8 +117,9 @@ function run(): void {
   let feeding: number | null = null;
   const followFeed = (): void => {
     const port = quitting ? null : feedPort(host.state(), view(), popup());
-    // Leaving widget view, or turning the popup off, while attached stops the feed, and what the controller holds goes stale
-    // from then on: forgotten now, so the next widget view opens from a fresh answer, not from minutes ago.
+    // While attached, the feed stops once the view is window and the popup is off (either alone keeps it), and what the
+    // controller holds goes stale from then on: forgotten now, so the next widget view or popup opens from a fresh answer,
+    // not from minutes ago.
     if (port === null && feeding !== null && host.state().mode === "attached") widgets.noSource();
     feeding = port;
     feed.watch(port);
@@ -372,7 +373,7 @@ function run(): void {
     for (const [channel, handler] of Object.entries(widgetHandlers.invoke)) ipcMain.handle(channel, (event, arg: unknown) => handler(event.sender.id, arg));
     for (const [channel, handler] of Object.entries(widgetHandlers.on)) ipcMain.on(channel, (event, arg: unknown) => handler(event.sender.id, arg));
 
-    // desktop.json is read: the remembered view takes effect, and with it the question of whom to ask for snapshots.
+    // desktop.json is read: the remembered view and popup choice take effect, and with them the question of whom to ask for snapshots.
     widgets.setPopup(popup());
     widgets.setView(view());
     followFeed();
