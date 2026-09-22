@@ -10,6 +10,7 @@ declare const window: { clawd: SettingsApi } & Window;
 type Detail = SettingsState["detail"];
 type Login = "on" | "off";
 type Mode = SettingsState["view"];
+type Popup = "off" | "on";
 
 const AGENT_WORDS: Record<SettingsState["agent"]["mode"], string> = {
   starting: "starting",
@@ -36,6 +37,10 @@ const LOGIN_CHOICES: readonly { value: Login; label: string }[] = [
 const MODE_CHOICES: readonly { value: Mode; label: string }[] = [
   { value: "window", label: "window: the whole scene in one window" },
   { value: "widgets", label: "widgets: each folder's box on its own, to drag and to pin on top" },
+];
+const POPUP_CHOICES: readonly { value: Popup; label: string }[] = [
+  { value: "off", label: "off" },
+  { value: "on", label: "on: a finished turn pops its box up over everything until it is clicked or prompted again" },
 ];
 
 /** The state last drawn, which a failed request draws again, so a radio the browser already moved goes back. */
@@ -139,6 +144,7 @@ const SECTION_OF: Readonly<Record<string, string>> = {
   detail: "detail",
   login: "login",
   view: "view",
+  popup: "view",
 };
 
 function sectionOf(key: string | undefined): string | null {
@@ -187,6 +193,7 @@ type View = {
   detail: Choices<Detail>;
   login: Choices<Login>;
   mode: Choices<Mode>;
+  popup: Choices<Popup>;
   /** One live region per section that owns a control, by the name `sectionOf` returns. */
   notices: ReadonlyMap<string, HTMLElement>;
 };
@@ -212,17 +219,18 @@ function build(app: HTMLElement): View {
   const detail = choices<Detail>("detail", "What the local view shows", DETAIL_CHOICES, (level) => window.clawd.setDetail(level));
   const login = choices<Login>("login", "Start the app when you sign in", LOGIN_CHOICES, (value) => window.clawd.setOpenAtLogin(value === "on"));
   const mode = choices<Mode>("view", "How sessions are shown", MODE_CHOICES, (value) => window.clawd.setView(value));
+  const popup = choices<Popup>("popup", "Pop a box up when a turn finishes", POPUP_CHOICES, (value) => window.clawd.setFinishedPopup(value === "on"));
   const notices = new Map(["agent", "view", "folders", "hooks", "detail", "login"].map((name) => [name, noticeRegion(name)]));
   app.replaceChildren(
     section("Agent", [row("state", agent), reasonRow, row("sessions", sessions), row("logs", logs), row("", button("open-logs", "Open logs folder", () => window.clawd.openLogs())), retryRow], notices.get("agent")),
     section("This app", [row("version", version), row("runs from", exe)]),
-    section("View", [mode.group], notices.get("view")),
+    section("View", [mode.group, popup.group], notices.get("view")),
     section("Watched folders", [folders, row("", addFolder)], notices.get("folders")),
     section("Hooks", [row("status", hooks), installRow, removeRow], notices.get("hooks")),
     section("Detail level", [detail.group], notices.get("detail")),
     section("Start on login", [login.group], notices.get("login")),
   );
-  return { agent, reasonRow, reason, sessions, logs, retryRow, version, exe, folders, addFolder, hooks, installRow, install, removeRow, detail, login, mode, notices };
+  return { agent, reasonRow, reason, sessions, logs, retryRow, version, exe, folders, addFolder, hooks, installRow, install, removeRow, detail, login, mode, popup, notices };
 }
 
 /** The folder list is the one thing rebuilt, and only when it differs. Focus inside it goes to the same folder's button, or to Add folder when that folder has gone. */
@@ -299,6 +307,7 @@ function render(state: SettingsState, answered?: string, announceAgain = false):
   check(v.detail, "detail", state.detail, answered);
   check(v.login, "login", state.openAtLogin ? "on" : "off", answered);
   check(v.mode, "view", state.view, answered);
+  check(v.popup, "popup", state.finishedPopup ? "on" : "off", answered);
 
   // A row that has just been hidden may hold the focus, which would strand a keyboard or screen
   // reader user: hand it to the first button still showing in the same section.

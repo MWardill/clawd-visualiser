@@ -17,4 +17,14 @@ describe("widgetMenuTemplate", () => {
     click(menu[3]);
     expect(calls).toEqual(["pin", "window", "settings"]);
   });
+
+  it("has no pin for a temporary widget: Open full window, then Settings", () => {
+    const calls: string[] = [];
+    const actions = { togglePin: () => void calls.push("pin"), openWindow: () => void calls.push("window"), settings: () => void calls.push("settings") };
+    const menu = widgetMenuTemplate(false, actions, true);
+    expect(menu.map((item) => item.label ?? item.type)).toEqual(["Open full window", "Settings"]);
+    click(menu[0]);
+    click(menu[1]);
+    expect(calls).toEqual(["window", "settings"]);
+  });
 });

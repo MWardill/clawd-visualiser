@@ -25,8 +25,9 @@ widgets, a deep link in the web app, the window icon, tests, staging.
 
 Out of scope: hiding a single folder's widget; resizing or scaling widgets; sounds and Windows toast
 notifications; popups for a session that waits or ends (waiting already turns the box amber and
-badges the tray); focusing the session's terminal from a widget (the agent's `focus` command exists,
-so it is a small later addition); macOS and Linux, as before.
+badges the tray); macOS and Linux, as before. Focusing the session's terminal from a widget was out
+of scope at first and came in on 22 September 2026, after stage 10's walk began: a Clawd click now
+sends the agent's `focus` command rather than opening the full window (§3.2).
 
 ## 2. Decisions
 
@@ -40,7 +41,7 @@ so it is a small later addition); macOS and Linux, as before.
 | The look | The box's interior in the night colour; everything outside it transparent; Clawds clipped to the box | Text stays legible on any wallpaper. A Clawd rises into view from behind the bottom border and leaves the same way, so nothing is ever drawn on the desktop and the window is exactly the box. |
 | What "finished" means | A session shown `working` in one snapshot and `idle` in the next | Claude Code's Stop hook. Core keeps a session working while its subagents or background tasks run, so the popup waits for them. A session that ends or waits does not pop up. |
 | How a raised box goes down | A press on it, or the session working or waiting again, or the session leaving the snapshot | Nothing timed: a popup that fired while the maintainer was away is still there on return. Going `asleep` does not lower it, for the same reason. |
-| The full window in widget view | Still there on demand | The ticker and the detail sheet live there. The tray menu opens it, and clicking a Clawd in a widget opens it on that session. |
+| The full window in widget view | Still there on demand | The ticker and the detail sheet live there. The tray menu and a widget's menu open it. A Clawd click does not: it focuses that session's terminal instead, which is what the maintainer reached for when a box came up (changed 22 September 2026). |
 | Pinning | Per widget: a pin in the title row on hover, and a native context menu | One folder can stay on top while the rest sit behind the editor, and a lit pin shows which at a glance. |
 | Defaults | View: window. Popup: off | A teammate who unzips a new version sees what they saw before. |
 
@@ -51,7 +52,9 @@ so it is a small later addition); macOS and Linux, as before.
 A new section in the settings window, **View**, between "this app" and "watched folders":
 
 - A radio group, **Window** or **Widgets**.
-- A checkbox, **Pop a box up when a turn finishes**.
+- A second radio pair, off or on, **Pop a box up when a turn finishes**: the page has radio groups
+  and no checkbox control, and one kind of control reads better than two (decided in stage 10's
+  plan).
 
 Both apply at once, with no restart. Turning widgets on creates a widget for every pane now shown and
 leaves the full window as it is; turning them off closes the widgets and shows the full window.
@@ -75,8 +78,12 @@ Turning the popup off lowers every raised box.
   display's work area, then starts a new column to the left. A remembered place that is no longer on
   any display falls back to that.
 - Press and move to drag; where it is dropped is remembered for that folder. A press that moves less
-  than four pixels is a click: on a Clawd or its nameplate it opens the full window on that session's
-  detail sheet (§7); anywhere else it does nothing.
+  than four pixels is a click: on a Clawd or its nameplate it sends the agent's `focus` command for
+  that session, which raises its terminal window, as the detail sheet's focus button does; anywhere
+  else it does nothing. Main posts the command to the agent in use, own or attached, without an
+  `Origin`, which the command route allows, with the alias that agent itself sent; a refusal or no
+  answer is logged as `desktop.focusFailed`. (Until 22 September 2026 a click opened the full window
+  on the session's sheet through §7's link; the maintainer changed it in stage 10's walk.)
 - The pin appears at the right of the title row while the pointer is over the widget, and stays, lit
   amber, while the widget is pinned. Pinned means always on top, and is remembered for that folder.
 - The right button opens a native menu: **Pin on top** (a checkbox), **Open full window**,
@@ -98,17 +105,23 @@ Turning the popup off lowers every raised box.
   top and shown without activating it.
 - **In window view** a temporary widget is made for the pane, raised the same way, at the folder's
   remembered place, or else stacked upward from the bottom-right corner of the primary work area.
-  None is made while the full window is focused, since the maintainer is already looking at it. A
-  temporary widget can be dragged, which remembers the place, but has no pin, and its menu has only
-  **Open full window** and **Settings**.
+  None is made while the full window is focused, since the maintainer is already looking at it. The
+  check is made when the turn finishes: a finish seen then is a finish seen, and nothing pops up
+  later when the focus moves. A temporary widget can be dragged, which remembers the place, but has
+  no pin, and its menu has only **Open full window** and **Settings**.
 - **The cue.** A raised box draws its border and its title green, `PALETTE.state.green`, so a widget
   that was pinned, and so already on top, still says so. Amber for a waiting session wins over green.
 - **What lowers it.** A press on the widget, when it is released: a click, or the end of a drag, so a
-  temporary widget can be moved before it goes and the place is remembered. Or every session that
+  temporary widget can be moved before it goes and the place is remembered. A click on a Clawd in a
+  temporary widget focuses that session's terminal first, and the release then closes the popup:
+  the page sends the selection before the release. Or every session that
   raised it has since gone to `working` or `waiting`, which means it was answered in its terminal, or
   has left the snapshot. `asleep` does not lower it.
 - **Afterwards** a pinned widget stays on top at the pinned level, an unpinned one becomes an
-  ordinary window where it stands, and a temporary one closes.
+  ordinary window where it stands, and a temporary one closes: at once when a press lowered it,
+  after its Clawds walk out when the session being prompted again or leaving did. The popup going
+  off, a change of view and a new agent lower everything too: a temporary widget then walks out and
+  closes, or closes at once on a change of view.
 
 ## 4. The scene (`packages/scene`)
 
@@ -208,8 +221,8 @@ Electron-free modules with tests over doubles, in the manner of `agent-host.ts` 
 
 ```
 src/widgets/
-  finished.ts     the finish tracker: (previous snapshot, next snapshot, generation) → the labels of panes where a turn just finished
-  plan.ts         which windows should exist: (snapshot, view, popup, raised, full window focused) → [{ label, pane, pinned, raised, temporary }]
+  finished.ts     `finishedTurns(previous, next)` → the panes and sessions where a turn just finished; `stillRaising(aliases, next)` → those still holding a raise; the generation is the controller's, which forgets `previous` on a rise
+  plan.ts         which windows should exist: (snapshot, view, raised) → [{ label, pane, temporary }]; the popup setting and the focus are the controller's, at trigger time
   placement.ts    where a window goes: the remembered place if restoredBounds accepts it, else the next free default slot; clamping after a drop
   controller.ts   the stateful part: label → window over an injected window factory; reconciles with the plan; owns the raised set, the drag in progress and the retry counts
 src/attached-feed.ts   snapshots while attached: polls the agent on the port; tested with an injected fetch and clock
@@ -231,6 +244,12 @@ src/attached-feed.ts   snapshots while attached: polls the agent on the port; te
   the title row stays grabbable on some display, using `bounds.ts`, saves it if the window moved, and
   lowers a raised box. Every press ends in a `dragEnd`, moved or not, so that is the one place a
   press lowers anything. A drag ends by itself when its window closes.
+- **The raised set.** The controller keeps, per label, the sessions holding a raise. A finish adds
+  one (unless in window view with the full window focused); every snapshot prunes each label with
+  `stillRaising` and drops it when empty; a press on the box, the release of any press, takes its
+  label out; a generation rise, a change of view, `noSource` and the popup going off empty the set.
+  An entry's level follows the set through one `setLevel(normal | pinned | raised)`, which replaced
+  `setPinned`; a temporary entry is never pinned.
 - **Windows.** `window.ts` gains `createWidgetWindow(preload, bounds)`, made through
   `createHardenedWindow`, whose spec gains a `chrome` field for the options that differ: `frame:
   false`, `transparent: true`, `resizable: false`, `maximizable: false`, `minimizable: false`,
@@ -287,7 +306,8 @@ src/attached-feed.ts   snapshots while attached: polls the agent on the port; te
   `desktop.widgetFailed` logged. The next snapshot makes it again, at most three times for a label in
   one run of the app.
 - New log codes, carrying numbers and booleans only, never a label: `desktop.viewChanged` (`widgets`),
-  `desktop.popupChanged` (`on`), `desktop.popupRaised` (`temporary`), `desktop.widgetFailed` (`tries`).
+  `desktop.popupChanged` (`on`), `desktop.popupRaised` (`temporary`), `desktop.widgetFailed` (`tries`),
+  `desktop.focusFailed` (no fields: the agent refused a clicked session's focus command or did not answer).
 
 ## 7. The web app (`apps/web`)
 
@@ -301,10 +321,10 @@ hand; a link belongs to the live feed running when it was read, or, read at load
 simulated feed, to the first live feed that starts afterwards, and never moves to another. The
 parsing and the rule are pure functions in `lib/`, tested; it works in a browser tab as well.
 
-Main uses it for a Clawd clicked in a widget: `showWindow()`, then the window is loaded at its own
-URL with the hash. For a window already showing the page that is a same-document navigation, so the
-page is not reloaded, the feed stays connected and `hashchange` fires. The alias is one main itself
-sent, and is URL-encoded.
+Stage 9 built it for a Clawd clicked in a widget, which loaded the full window at its own URL with
+the hash: a same-document navigation for a window already showing the page, so nothing reloaded and
+`hashchange` fired. Since 22 September 2026 a Clawd click focuses the terminal instead (§3.2) and
+the desktop no longer builds the link; it stays in the web app for the browser.
 
 ## 8. Privacy
 
@@ -375,6 +395,30 @@ shown, by core's visibility rule.
 - [x] Ctrl+W, Ctrl+R and Ctrl+plus on a focused box do nothing; Alt+F4 closes it and the next snapshot brings it back.
 - [x] With boxes showing, Quit from the tray: every box goes and no `electron.exe` remains.
 
+### 10.2 Stage 10's manual checks
+
+Walked by the maintainer on the packaged build, against scratch folders, with Claude sessions in two
+watched folders. Not yet done.
+
+- [ ] Settings: under View, the popup pair sits below the view pair; choosing on changes nothing on screen by itself.
+- [ ] Window view, popup on, an editor focused: a prompt's answer finishing raises a box for that folder at the bottom right, over the editor and over a maximised window, border and title green, and typing still goes to the editor.
+- [ ] The box has no pin on hover; its right-click menu is Open full window and Settings only.
+- [ ] A click on the box closes it at once; a drag first moves it, and the next popup for that folder appears where it was dropped.
+- [ ] Two folders finishing: two boxes, the second above the first.
+- [ ] A finish while the full window is focused shows nothing, then and later.
+- [ ] A finish, then a prompt sent in that session: the box's Clawd walks out and the box closes, without a click.
+- [ ] A finish, then the session left idle past ten minutes (asleep): the box stays up.
+- [ ] Widget view, popup on: a finish turns that folder's widget green and brings it above a maximised window; a pinned widget turns green too.
+- [ ] A click on the raised widget lowers it: a pinned one stays pinned, an unpinned one becomes ordinary and stays where it is.
+- [ ] The next prompt in that session lowers it without a click.
+- [ ] Popup off in Settings: every raised box lowers; a temporary one walks out and closes.
+- [ ] Quit and relaunch with a session still idle: nothing is raised (the first snapshot is the baseline).
+- [ ] Attached (the CLI agent holding the port), window view, popup on: the box still pops up within a second or so of the finish.
+- [ ] The log holds `desktop.popupChanged` with `on` and `remembered`, and `desktop.popupRaised` with `temporary`, and no folder name.
+- [ ] With boxes raised, Quit from the tray: every box goes and no `electron.exe` remains.
+- [ ] A click on a Clawd in a popup brings that session's terminal to the front (the log gains no `desktop.focusFailed`), the full window stays hidden, and the popup closes. In widget view a click on a Clawd does the same and the box stays.
+- [ ] Widget view, popup on: a raised widget sits above a pinned one and above the taskbar, or the two levels turn out to be one band on this Windows and the raise still shows (record which).
+
 ## 11. Tests
 
 - `packages/scene`, over the fake context: with `background: "none"` no night is drawn and the pane's
@@ -382,12 +426,13 @@ shown, by core's visibility rule.
   for one and two rows of seats and for no panes; `layoutPanes` with a margin; `reconcile` with
   `seated`; `setFinished` and the amber-over-green rule.
 - `apps/desktop`, with vitest: `widgets/finished` (the baseline, working to idle, waiting to idle not
-  counted, a generation change, a session that vanishes); `widgets/plan` (each view, the popup on and
-  off, the focused full window, a temporary widget); `widgets/placement` (default slots, a remembered
-  place off every display, clamping); `widgets/controller` over a fake window factory (create, close
-  after empty or the cap, the filtered snapshot sent only when changed, an unknown sender ignored,
-  `select` refused for an alias not sent, the drag, pin and lower sequences, the three tries);
-  `attached-feed` with a fake fetch and clock; `widget/ipc` validation; `widget/page` under happy-dom
+  counted, a generation change, a session that vanishes); `widgets/plan` (each view, a raised pane in
+  each, a temporary widget); `widgets/placement` (default slots, a remembered place off every
+  display, clamping); `widgets/controller` over a fake window factory (create, close after empty or
+  the cap, the filtered snapshot sent only when changed, an unknown sender ignored, `select` refused
+  for an alias not sent, the drag, pin and lower sequences, the three tries, the popup: raise, lower
+  by press and by state, the focused full window, temporary widgets, the popup off, a generation
+  rise); `attached-feed` with a fake fetch and clock; `widget/ipc` validation; `widget/page` under happy-dom
   (click against drag at the four-pixel threshold, the pin button and its `aria-pressed`, the size
   report, `seated` on the first snapshot only, a generation change clearing the scene);
   `desktop-state` parsing the new fields; `tray` with and without the widgets entry; `scheme` serving

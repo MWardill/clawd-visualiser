@@ -33,6 +33,8 @@ function start(canvas: HTMLCanvasElement, pin: HTMLElement): void {
 
   const draw = (state: WidgetState): void => {
     pin.setAttribute("aria-pressed", String(state.pinned));
+    // A temporary widget goes when it is pressed; a pin on it would promise something it cannot keep.
+    pin.hidden = state.temporary;
     if (scene === null) return;
     if (generation !== null && state.generation !== generation) {
       // Snapshots now come from another agent: nothing on screen is known to it.
@@ -43,6 +45,8 @@ function start(canvas: HTMLCanvasElement, pin: HTMLElement): void {
     if (state.snapshot === null) return;
     scene.setSnapshot(state.snapshot, { seated: fresh });
     fresh = false;
+    // The snapshot holds this window's one pane, so that is the pane the cue names.
+    scene.setFinished(state.raised ? state.snapshot.panes.map((p) => p.pane) : []);
   };
 
   const mount = (): void => {
@@ -105,11 +109,14 @@ function start(canvas: HTMLCanvasElement, pin: HTMLElement): void {
       cancelAnimationFrame(moveFrame);
       moveFrame = null;
     }
-    api.dragEnd();
-    if (!click || moved) return;
-    const box = canvas.getBoundingClientRect();
-    const alias = scene?.hitTest(e.clientX - box.left, e.clientY - box.top) ?? null;
+    let alias: string | null = null;
+    if (click && !moved) {
+      const box = canvas.getBoundingClientRect();
+      alias = scene?.hitTest(e.clientX - box.left, e.clientY - box.top) ?? null;
+    }
+    // The select goes first because a press on a temporary popup closes it, and a select after that finds no window.
     if (alias !== null) api.select(alias);
+    api.dragEnd();
   };
   canvas.addEventListener("pointerup", (e) => release(e, true));
   canvas.addEventListener("pointercancel", (e) => release(e, false));

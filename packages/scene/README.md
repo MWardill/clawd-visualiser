@@ -22,6 +22,7 @@ scene.setSnapshot(snapshot);   // as often as snapshots arrive
 // One pane as a widget on the desktop: a transparent canvas, the box filled, its Clawds clipped to it.
 mountPanesScene(canvas, { background: "none", clipActors: true, emptyState: false, margin: 1, onContentSize: (size) => fitWindow(size) });
 scene.setSnapshot(snapshot, { seated: true });   // the sessions were already there: no walk in
+scene.setFinished(["pane-1"]);   // a turn there finished: border and title green until told []
 scene.destroy();
 ```
 

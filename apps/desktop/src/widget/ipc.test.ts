@@ -4,7 +4,7 @@ import { WIDGET_CHANNELS as C } from "./channels";
 import { createWidgetHandlers, type WidgetCalls } from "./ipc";
 import type { WidgetState } from "./state";
 
-const STATE: WidgetState = { snapshot: null, generation: 1, pinned: false };
+const STATE: WidgetState = { snapshot: null, generation: 1, pinned: false, raised: false, temporary: false };
 
 function harness(over: Partial<WidgetCalls> = {}) {
   const calls: string[] = [];

@@ -14,7 +14,7 @@ const BODY = (/<body>([\s\S]*)<\/body>/.exec(html)?.[1] ?? "").replace(/<script[
 const t = new Date(0).toISOString();
 const session = (alias: string) => ({ alias, label: alias, pane: "pane-1", state: "working" as const, activity: null, subagents: 0, contextPct: null, since: t, updatedAt: t });
 const snapshotOf = (...aliases: string[]): NonNullable<WidgetState["snapshot"]> => ({ version: 1, generatedAt: t, panes: [{ pane: "pane-1", label: "repo" }], sessions: aliases.map(session) });
-const STATE: WidgetState = { snapshot: snapshotOf("agent-1"), generation: 1, pinned: false };
+const STATE: WidgetState = { snapshot: snapshotOf("agent-1"), generation: 1, pinned: false, raised: false, temporary: false };
 
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
@@ -29,6 +29,7 @@ async function load(initial: WidgetState | null = STATE, hit: string | null = nu
   const scene: PanesScene = {
     setSnapshot: (s, o) => void drawn.push(`snapshot ${s.sessions.length} seated=${o?.seated === true}`),
     clear: () => void drawn.push("clear"),
+    setFinished: (panes) => void drawn.push(`finished ${panes.join(",") || "-"}`),
     resize: () => {},
     setPaused: () => {},
     hitTest: (x, y) => {
@@ -104,24 +105,46 @@ describe("the widget page", () => {
     const page = await load();
     expect(page.mounted.options).toMatchObject({ background: "none", clipActors: true, emptyState: false, margin: 1 });
     expect(page.mounted.options?.onSelect).toBeUndefined();
-    expect(page.drawn).toEqual(["snapshot 1 seated=true"]);
+    expect(page.drawn).toEqual(["snapshot 1 seated=true", "finished -"]);
   });
 
   it("subscribes before it asks, so a state pushed while the answer is on its way is drawn", async () => {
     const page = await load({ ...STATE, snapshot: null }, null, STATE);
-    expect(page.drawn).toEqual(["snapshot 1 seated=true"]);
+    expect(page.drawn).toEqual(["snapshot 1 seated=true", "finished -"]);
   });
 
   it("seats the sessions of its first snapshot at once, and walks later arrivals in", async () => {
     const page = await load();
     page.push({ ...STATE, snapshot: snapshotOf("agent-1", "agent-2") });
-    expect(page.drawn).toEqual(["snapshot 1 seated=true", "snapshot 2 seated=false"]);
+    expect(page.drawn).toEqual(["snapshot 1 seated=true", "finished -", "snapshot 2 seated=false", "finished -"]);
   });
 
   it("clears the scene when the generation changes, and seats that snapshot's sessions at once too", async () => {
     const page = await load();
     page.push({ ...STATE, generation: 2 });
-    expect(page.drawn).toEqual(["snapshot 1 seated=true", "clear", "snapshot 1 seated=true"]);
+    expect(page.drawn).toEqual(["snapshot 1 seated=true", "finished -", "clear", "snapshot 1 seated=true", "finished -"]);
+  });
+
+  it("tells the scene its pane has finished while raised, and that it has not once lowered", async () => {
+    const page = await load();
+    expect(page.drawn).toEqual(["snapshot 1 seated=true", "finished -"]);
+    page.push({ ...STATE, raised: true });
+    expect(page.drawn.at(-1)).toBe("finished pane-1");
+    page.push({ ...STATE, raised: false });
+    expect(page.drawn.at(-1)).toBe("finished -");
+  });
+
+  it("clears the cue with the scene when the generation changes, before the next snapshot is drawn", async () => {
+    const page = await load({ ...STATE, raised: true });
+    page.push({ ...STATE, generation: 2, raised: false });
+    expect(page.drawn).toEqual(["snapshot 1 seated=true", "finished pane-1", "clear", "snapshot 1 seated=true", "finished -"]);
+  });
+
+  it("hides the pin for a temporary widget and shows it again for an ordinary one", async () => {
+    const page = await load({ ...STATE, temporary: true });
+    expect(page.pin.hidden).toBe(true);
+    page.push({ ...STATE, temporary: false });
+    expect(page.pin.hidden).toBe(false);
   });
 
   it("draws nothing for a window main does not know, and waits for a snapshot when the first state has none", async () => {
@@ -129,7 +152,7 @@ describe("the widget page", () => {
     const page = await load({ ...STATE, snapshot: null });
     expect(page.drawn).toEqual([]);
     page.push(STATE);
-    expect(page.drawn).toEqual(["snapshot 1 seated=true"]);
+    expect(page.drawn).toEqual(["snapshot 1 seated=true", "finished -"]);
   });
 
   it("tells main the size the scene needs, and when nothing is left to draw", async () => {
@@ -145,7 +168,7 @@ describe("the widget page", () => {
     page.canvas.dispatchEvent(pointer("pointermove", { screenX: 502, screenY: 302 }));
     page.frame();
     page.canvas.dispatchEvent(pointer("pointerup", { screenX: 502, screenY: 302, clientX: 62, clientY: 72 }));
-    expect(page.calls).toEqual(["dragStart", "dragEnd", "select agent-1"]);
+    expect(page.calls).toEqual(["dragStart", "select agent-1", "dragEnd"]);
     expect(page.hits).toEqual([[52, 62]]);
   });
 

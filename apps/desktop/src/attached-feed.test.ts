@@ -31,11 +31,12 @@ function harness(answer: (port: number) => Promise<Snapshot | null>) {
 }
 
 describe("feedPort", () => {
-  it("is the attached agent's port while widgets are shown, and nothing otherwise", () => {
-    expect(feedPort({ mode: "attached", port: 4750 }, "widgets")).toBe(4750);
-    expect(feedPort({ mode: "attached", port: 4750 }, "window")).toBeNull();
-    expect(feedPort({ mode: "own", port: 4750 }, "widgets")).toBeNull();
-    expect(feedPort({ mode: "attached", port: null }, "widgets")).toBeNull();
+  it("is the attached agent's port while widgets are shown or the popup is on, and nothing otherwise", () => {
+    expect(feedPort({ mode: "attached", port: 4750 }, "widgets", false)).toBe(4750);
+    expect(feedPort({ mode: "attached", port: 4750 }, "window", true)).toBe(4750);
+    expect(feedPort({ mode: "attached", port: 4750 }, "window", false)).toBeNull();
+    expect(feedPort({ mode: "own", port: 4750 }, "widgets", true)).toBeNull();
+    expect(feedPort({ mode: "attached", port: null }, "widgets", true)).toBeNull();
   });
 });
 

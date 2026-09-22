@@ -43,6 +43,8 @@ export type PanesScene = {
   setSnapshot(s: Snapshot, opts?: { seated?: boolean }): void;
   /** Drop every pane and actor at once, for a source switch. */
   clear(): void;
+  /** The panes drawn green, border and title: a turn there has finished and nobody has looked yet. Amber for a waiting session wins. */
+  setFinished(panes: readonly string[]): void;
   /** CSS size of the canvas; the backing store is scaled by the pixel ratio. */
   resize(cssWidth: number, cssHeight: number): void;
   setPaused(paused: boolean): void;
@@ -58,7 +60,7 @@ const SLIDE = 0.25;
 /** Monospace glyph width as a share of the font size, for the title's backing rectangle. */
 const GLYPH_W = 0.65;
 
-const NOOP_SCENE: PanesScene = { setSnapshot() {}, clear() {}, resize() {}, setPaused() {}, hitTest: () => null, destroy() {} };
+const NOOP_SCENE: PanesScene = { setSnapshot() {}, clear() {}, setFinished() {}, resize() {}, setPaused() {}, hitTest: () => null, destroy() {} };
 
 export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptions = {}): PanesScene {
   const maybeCtx = canvas.getContext("2d") as PixelContext | null;
@@ -119,6 +121,7 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
   let paused = false;
   let hidden = doc?.hidden ?? false;
   let hover: string | null = null;
+  let finished = new Set<string>();
 
   /** Tells the host what the layout needs, from where the panes are going, not from where they have eased to so far. */
   function reportSize(extent: { w: number; h: number } | null): void {
@@ -156,7 +159,9 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
 
   function drawPane(p: ScenePane, r: PaneRect): void {
     const waiting = world.actors.some((a) => a.pane === p.alias && a.state === "waiting" && (a.phase === "entering" || a.phase === "seated"));
-    const line = waiting ? PALETTE.state.amber : PALETTE.night.line;
+    const done = !waiting && finished.has(p.alias);
+    const line = waiting ? PALETTE.state.amber : done ? PALETTE.state.green : PALETTE.night.line;
+    const text = waiting ? PALETTE.state.amber : done ? PALETTE.state.green : PALETTE.night.text;
     const x = Math.round(r.x);
     const y = Math.round(r.y);
     if (!night) {
@@ -168,7 +173,7 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
     const title = paneTitle(p.label);
     ctx.fillStyle = PALETTE.night.bg;
     ctx.fillRect((x + 2) * PX, (y - 1) * PX, Math.ceil((title.length + 1) * textPx * GLYPH_W), 3 * PX);
-    drawText(ctx, PX, title, x + 3, y + 0.5, waiting ? PALETTE.state.amber : PALETTE.night.text, { size: textPx, font, baseline: "middle" });
+    drawText(ctx, PX, title, x + 3, y + 0.5, text, { size: textPx, font, baseline: "middle" });
     if (p.collision) {
       ctx.fillStyle = PALETTE.night.bg;
       ctx.fillRect((x + r.w - 5) * PX, (y - 1) * PX, 3 * PX, 3 * PX);
@@ -350,6 +355,9 @@ export function mountPanesScene(canvas: HTMLCanvasElement, opts: PanesSceneOptio
       origins.clear();
       engine.clearParticles();
       render();
+    },
+    setFinished(panes) {
+      finished = new Set(panes);
     },
     resize,
     setPaused(p) {

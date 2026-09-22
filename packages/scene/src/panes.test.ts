@@ -238,4 +238,33 @@ describe("mountPanesScene as a widget", () => {
     // 8 device px per cell at 1.25: 54 cells are 345.6 CSS px, 30 cells are 192
     expect(sizes).toEqual([{ width: 346, height: 192 }]);
   });
+
+  it("draws a finished pane's border and title green, until told otherwise, and amber for a waiting session wins", () => {
+    const h = harness(1, WIDGET);
+    const idle = { ...SNAPSHOT.sessions[0]!, state: "idle" as const };
+    h.scene.setSnapshot({ ...SNAPSHOT, sessions: [idle] }, { seated: true });
+    h.scene.setFinished(["pane-1"]);
+    h.reset();
+    h.frame(0);
+    h.frame(100);
+    expect(h.cellsOf(CELL).some((c) => c.col === PALETTE.state.green && c.x === 1 && c.y === 1)).toBe(true);
+    expect(h.texts.find((t) => t.text === "─ oak")?.col).toBe(PALETTE.state.green);
+
+    // the session waits: amber, whatever setFinished said
+    h.scene.setSnapshot(SNAPSHOT);
+    h.reset();
+    h.frame(200);
+    h.frame(300);
+    expect(h.cellsOf(CELL).some((c) => c.col === PALETTE.state.amber && c.x === 1 && c.y === 1)).toBe(true);
+    expect(h.cellsOf(CELL).some((c) => c.col === PALETTE.state.green && c.x === 1 && c.y === 1)).toBe(false);
+
+    // lowered: back to the night line
+    h.scene.setSnapshot({ ...SNAPSHOT, sessions: [idle] });
+    h.scene.setFinished([]);
+    h.reset();
+    h.frame(400);
+    h.frame(500);
+    expect(h.cellsOf(CELL).some((c) => c.col === PALETTE.night.line && c.x === 1 && c.y === 1)).toBe(true);
+    expect(h.texts.find((t) => t.text === "─ oak")?.col).toBe(PALETTE.night.text);
+  });
 });

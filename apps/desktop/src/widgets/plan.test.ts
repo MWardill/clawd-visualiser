@@ -14,21 +14,31 @@ const SNAPSHOT: Snapshot = {
   sessions: [session("agent-1", "pane-1"), session("agent-2", "pane-2"), session("agent-3", "pane-1")],
 };
 
+const NONE: ReadonlySet<string> = new Set();
+
 describe("planWidgets", () => {
-  it("wants one widget per pane in widget view, by label, in the snapshot's order", () => {
-    expect(planWidgets({ snapshot: SNAPSHOT, view: "widgets" })).toEqual([
-      { label: "repo", pane: "pane-1" },
-      { label: "docs", pane: "pane-2" },
+  it("wants one widget per pane in widget view, by label, in the snapshot's order, none of them temporary", () => {
+    expect(planWidgets({ snapshot: SNAPSHOT, view: "widgets", raised: NONE })).toEqual([
+      { label: "repo", pane: "pane-1", temporary: false },
+      { label: "docs", pane: "pane-2", temporary: false },
     ]);
   });
 
-  it("wants none in window view", () => {
-    expect(planWidgets({ snapshot: SNAPSHOT, view: "window" })).toEqual([]);
+  it("wants none in window view unless a pane is raised, and then a temporary one for it", () => {
+    expect(planWidgets({ snapshot: SNAPSHOT, view: "window", raised: NONE })).toEqual([]);
+    expect(planWidgets({ snapshot: SNAPSHOT, view: "window", raised: new Set(["docs", "gone"]) })).toEqual([{ label: "docs", pane: "pane-2", temporary: true }]);
+  });
+
+  it("wants a raised pane's widget in widget view as the ordinary one, not a second temporary one", () => {
+    expect(planWidgets({ snapshot: SNAPSHOT, view: "widgets", raised: new Set(["docs"]) }).map((w) => [w.label, w.temporary])).toEqual([
+      ["repo", false],
+      ["docs", false],
+    ]);
   });
 
   it("keeps the first of two panes that share a label, which core does not send", () => {
     const doubled = { ...SNAPSHOT, panes: [...SNAPSHOT.panes, { pane: "pane-3", label: "repo" }] };
-    expect(planWidgets({ snapshot: doubled, view: "widgets" }).map((w) => w.pane)).toEqual(["pane-1", "pane-2"]);
+    expect(planWidgets({ snapshot: doubled, view: "widgets", raised: NONE }).map((w) => w.pane)).toEqual(["pane-1", "pane-2"]);
   });
 });
 

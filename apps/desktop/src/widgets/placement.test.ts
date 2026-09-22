@@ -40,6 +40,17 @@ describe("placeWidget", () => {
   it("gives up looking for a free slot rather than loop for ever", () => {
     expect(place({ taken: [{ x: -5000, y: -5000, width: 10_000, height: 10_000 }] })).toEqual(FIRST);
   });
+
+  it("can stack upward from the bottom right, for a popup, and starts a new column to the left there too", () => {
+    const bottom = { x: FIRST.x, y: PRIMARY.height - SIZE.height - SLOT_GAP, ...SIZE };
+    expect(place({ stack: "up" })).toEqual(bottom);
+    const above = place({ stack: "up", taken: [bottom] });
+    expect(above).toEqual({ ...bottom, y: bottom.y - SIZE.height - SLOT_GAP });
+    const column = Array.from({ length: 5 }, (_, i) => ({ ...bottom, y: bottom.y - i * (SIZE.height + SLOT_GAP) }));
+    expect(place({ stack: "up", taken: column })).toEqual({ ...bottom, x: bottom.x - SIZE.width - SLOT_GAP });
+    // a remembered place wins whichever way the slots stack
+    expect(place({ stack: "up", remembered: { x: 40, y: 60, pinned: false } })).toEqual({ x: 40, y: 60, ...SIZE });
+  });
 });
 
 describe("clampDrop", () => {

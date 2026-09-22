@@ -17,7 +17,7 @@ import {
 import { Menu, Tray, app, dialog, ipcMain, nativeImage, protocol, screen, shell, type BrowserWindow, type NativeImage, type OpenDialogOptions } from "electron";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
-import { checkToken, fetchCounts, fetchSnapshot, probeHealth } from "./agent-client";
+import { checkToken, fetchCounts, fetchSnapshot, probeHealth, sendFocus } from "./agent-client";
 import { createAgentHost, statusText, type HostState } from "./agent-host";
 import { ownArgs, parseArgs, resolveRendererUrl } from "./args";
 import { restoredBounds } from "./bounds";
@@ -27,7 +27,6 @@ import { currentHookStatus, installedExe, launchRepair, readConfigState, runtime
 import { isQuitShortcut } from "./keys";
 import { createFileSink, readRetentionDays } from "./log";
 import { appUserModelId, loginItemTarget, loginOnLaunch, shownAtLogin } from "./login";
-import { sessionUrl } from "./navigation";
 import { distPaths } from "./paths";
 import { showOrCreate } from "./reveal";
 import { createQuitHandler, settleWithin } from "./quit";
@@ -90,6 +89,9 @@ function run(): void {
   /** One window, or a widget per pane. Read fresh: the settings window changes it while the app runs. */
   const view = (): View => store.get().view ?? "window";
 
+  /** Whether a finished turn pops its box up. Read fresh, as `view` is. */
+  const popup = (): boolean => store.get().finishedPopup ?? false;
+
   // The widgets: one frameless window per pane. Every rule is in the controller; this hands it Electron.
   const widgets = createWidgetController({
     createWindow: (bounds) => asWidgetWindow(createWidgetWindow(join(dist.widget, "preload.js"), bounds, dist.appIcon)),
@@ -97,9 +99,18 @@ function run(): void {
     cursor: () => screen.getCursorScreenPoint(),
     workAreas: () => screen.getAllDisplays().map((display) => display.workArea),
     primaryWorkArea: () => screen.getPrimaryDisplay().workArea,
+    // The maintainer is already looking at the full window: no popup is made over it.
+    windowFocused: () => win !== null && !win.isDestroyed() && win.isFocused(),
     placement: (label) => placementOf(store.get(), label),
     savePlacement: (label, placement) => store.update({ widgets: withPlacement(store.get().widgets, label, placement) }),
-    openSession: (alias) => showWindow(alias),
+    // A Clawd clicked: the agent in use, own or attached, raises that session's terminal; the alias is one it sent.
+    focusSession: (alias) => {
+      const port = host.state().port;
+      if (port === null) return;
+      void sendFocus(port, alias).then((sent) => {
+        if (!sent) log("desktop.focusFailed");
+      });
+    },
     openWindow: () => showWindow(),
     openSettings: () => showSettings(),
     log,
@@ -111,9 +122,10 @@ function run(): void {
   /** The port the feed is asking, or null; what it was last told, so a stop can be told from a repeat. */
   let feeding: number | null = null;
   const followFeed = (): void => {
-    const port = quitting ? null : feedPort(host.state(), view());
-    // Leaving widget view while attached stops the feed, and what the controller holds goes stale
-    // from then on: forgotten now, so the next widget view opens from a fresh answer, not from minutes ago.
+    const port = quitting ? null : feedPort(host.state(), view(), popup());
+    // While attached, the feed stops once the view is window and the popup is off (either alone keeps it), and what the
+    // controller holds goes stale from then on: forgotten now, so the next widget view or popup opens from a fresh answer,
+    // not from minutes ago.
     if (port === null && feeding !== null && host.state().mode === "attached") widgets.noSource();
     feeding = port;
     feed.watch(port);
@@ -157,13 +169,11 @@ function run(): void {
   process.on("uncaughtException", () => host.fault());
   process.on("unhandledRejection", () => host.fault());
 
-  /** Shows the window, making it the first time; from the tray, a second launch, startup, or a Clawd clicked in a widget, which names the session to open it on. */
-  function showWindow(alias?: string): void {
-    const target = alias === undefined ? url : sessionUrl(url, alias);
-    const existed = win !== null && !win.isDestroyed();
+  /** Shows the window, making it the first time; from the tray, a second launch, startup, or a widget's menu. */
+  function showWindow(): void {
     win = showOrCreate(win, quitting, () => {
       const workAreas = screen.getAllDisplays().map((display) => display.workArea);
-      const created = createMainWindow(target, statusText(host.state()), restoredBounds(store.get().bounds, workAreas), store.get().maximized === true, dist.appIcon);
+      const created = createMainWindow(url, statusText(host.state()), restoredBounds(store.get().bounds, workAreas), store.get().maximized === true, dist.appIcon);
       // Closing hides the window, and the app and its agent carry on in the tray. Once quitting has
       // begun the close goes through. Either way where it was, and whether it filled the screen, is remembered.
       created.on("close", (event) => {
@@ -182,10 +192,6 @@ function run(): void {
       });
       return created;
     });
-    // A window that was already showing the page: the same URL with another hash is a navigation
-    // inside the document, so nothing reloads, the feed stays connected and the page hears `hashchange`.
-    // A load that is superseded or fails rejects; an unhandled rejection here would fault the host.
-    if (existed && alias !== undefined && !quitting && win !== null && !win.isDestroyed()) win.loadURL(target).catch(() => {});
   }
 
   /** What clicking the tray icon or launching the app a second time does: the widgets come forward in widget view, and the full window opens otherwise, or when no widget is open, so the click always does something. */
@@ -245,6 +251,14 @@ function run(): void {
     return store.usable();
   }
 
+  /** The popup choice, from the settings window: remembered, applied at once, and answered with whether it could be remembered. Off lowers every raised box. */
+  function applyPopup(on: boolean): boolean {
+    store.update({ finishedPopup: on });
+    widgets.setPopup(on);
+    followFeed();
+    return store.usable();
+  }
+
   /** The menu is rebuilt whenever the login checkbox or the view could have changed. */
   function refreshMenu(): void {
     tray?.setContextMenu(
@@ -284,6 +298,7 @@ function run(): void {
       detail: detailLevel(config ?? {}),
       openAtLogin: openAtLogin(),
       view: store.get().view ?? "window",
+      finishedPopup: store.get().finishedPopup ?? false,
       logDir: agentPaths(home).logs,
       notice: null,
     });
@@ -316,6 +331,7 @@ function run(): void {
     saveDetail: (level) => saveDetail({ home, level }),
     applyOpenAtLogin,
     applyView,
+    applyPopup,
     openLogs: () => shell.openPath(agentPaths(home).logs).then(() => {}),
     log,
   });
@@ -357,7 +373,8 @@ function run(): void {
     for (const [channel, handler] of Object.entries(widgetHandlers.invoke)) ipcMain.handle(channel, (event, arg: unknown) => handler(event.sender.id, arg));
     for (const [channel, handler] of Object.entries(widgetHandlers.on)) ipcMain.on(channel, (event, arg: unknown) => handler(event.sender.id, arg));
 
-    // desktop.json is read: the remembered view takes effect, and with it the question of whom to ask for snapshots.
+    // desktop.json is read: the remembered view and popup choice take effect, and with them the question of whom to ask for snapshots.
+    widgets.setPopup(popup());
     widgets.setView(view());
     followFeed();
 

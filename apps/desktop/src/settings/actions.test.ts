@@ -13,6 +13,7 @@ const STATE: SettingsState = {
   detail: "none",
   openAtLogin: false,
   view: "window",
+  finishedPopup: false,
   logDir: "C:\\logs",
   notice: null,
 };
@@ -47,6 +48,10 @@ function harness(over: Partial<ActionDeps> & { mode?: HostMode; config?: boolean
     applyOpenAtLogin: (on) => void calls.push(`login ${on}`),
     applyView: (view) => {
       calls.push(`view ${view}`);
+      return true;
+    },
+    applyPopup: (on) => {
+      calls.push(`popup ${on}`);
       return true;
     },
     openLogs: async () => void calls.push("logs"),
@@ -353,5 +358,26 @@ describe("createSettingsActions", () => {
     });
     expect((await actions.setView("widgets")).notice).toContain("see the log");
     expect(fields).toEqual([{ widgets: true, failed: true }]);
+  });
+
+  it("applies the popup choice, logs it, and restarts nothing", async () => {
+    const { calls, codes, fields, actions } = harness();
+    expect(await actions.setFinishedPopup(true)).toEqual(STATE);
+    expect(calls).toEqual(["popup true"]);
+    expect(codes).toEqual(["desktop.popupChanged"]);
+    expect(fields).toEqual([{ on: true, remembered: true }]);
+  });
+
+  it("says so when the popup choice holds for this run only, and where to look when it could not be applied", async () => {
+    const held = harness({ applyPopup: () => false });
+    expect((await held.actions.setFinishedPopup(false)).notice).toBe(VIEW_NOT_REMEMBERED);
+    expect(held.fields).toEqual([{ on: false, remembered: false }]);
+    const broken = harness({
+      applyPopup: () => {
+        throw new Error("no store");
+      },
+    });
+    expect((await broken.actions.setFinishedPopup(true)).notice).toContain("see the log");
+    expect(broken.fields).toEqual([{ on: true, failed: true }]);
   });
 });

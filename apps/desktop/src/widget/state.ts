@@ -11,6 +11,10 @@ export type WidgetState = {
   /** Rises when snapshots start coming from another agent; the page clears its scene, as the visualiser's does. */
   generation: number;
   pinned: boolean;
+  /** A turn in this pane has finished and nobody has looked yet: the box is on top and drawn green. */
+  raised: boolean;
+  /** A popup in window view: made for the raise and gone once lowered. It has no pin. */
+  temporary: boolean;
 };
 
 /**

@@ -18,6 +18,8 @@ export type SettingsState = {
   openAtLogin: boolean;
   /** One window holding the whole scene, or a frameless window per pane. */
   view: "window" | "widgets";
+  /** Whether a finished turn pops its pane's box up over everything until it is looked at. */
+  finishedPopup: boolean;
   logDir: string;
   /** One sentence about the last action, when it was refused, failed, or was saved but not applied; null otherwise. */
   notice: string | null;
@@ -38,6 +40,7 @@ export type SettingsApi = {
   setDetail(level: SettingsState["detail"]): Promise<SettingsState>;
   setOpenAtLogin(on: boolean): Promise<SettingsState>;
   setView(view: SettingsState["view"]): Promise<SettingsState>;
+  setFinishedPopup(on: boolean): Promise<SettingsState>;
   retryAgent(): Promise<SettingsState>;
   openLogs(): Promise<void>;
   /** Subscribes to the states main pushes on its own; returns the unsubscribe. */

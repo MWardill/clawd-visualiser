@@ -25,6 +25,7 @@ export type SettingsInput = {
   detail: DetailLevel;
   openAtLogin: boolean;
   view: View;
+  finishedPopup: boolean;
   logDir: string;
   notice: string | null;
 };
@@ -38,6 +39,7 @@ export function settingsState(input: SettingsInput): SettingsState {
     detail: input.detail,
     openAtLogin: input.openAtLogin,
     view: input.view,
+    finishedPopup: input.finishedPopup,
     logDir: input.logDir,
     notice: input.notice,
   };

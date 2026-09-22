@@ -1,6 +1,7 @@
 // Where a widget's window goes. A folder's widget goes back where it was left, if that place is
 // still on a display; otherwise it takes the next free slot, down from the top right of the primary
-// work area and then leftwards in columns. Pure: the displays are passed in.
+// work area and then leftwards in columns; a popup's default slots run up from the bottom right
+// instead. Pure: the displays are passed in.
 import { restoredBounds } from "../bounds";
 import type { Bounds, Placement } from "../desktop-state";
 import type { WidgetSize } from "../widget/state";
@@ -22,21 +23,27 @@ export type PlaceInput = {
   primary: Bounds;
   /** The widgets already open, which a default slot must not cover. */
   taken: readonly Bounds[];
+  /** Which way the default slots run: down from the top right (widgets), or up from the bottom right (popups). Default down. */
+  stack?: "down" | "up";
 };
 
-export function placeWidget({ remembered, size, workAreas, primary, taken }: PlaceInput): Bounds {
+export function placeWidget({ remembered, size, workAreas, primary, taken, stack = "down" }: PlaceInput): Bounds {
   if (remembered !== undefined) {
     // The same rule as the full window's: enough of the top strip must show to grab it.
     const kept = restoredBounds({ x: remembered.x, y: remembered.y, ...size }, workAreas);
     if (kept !== null) return { x: kept.x, y: kept.y, ...size };
   }
-  const first: Bounds = { x: primary.x + primary.width - size.width - SLOT_GAP, y: primary.y + SLOT_GAP, ...size };
+  const up = stack === "up";
+  const x0 = primary.x + primary.width - size.width - SLOT_GAP;
+  const first: Bounds = { x: x0, y: up ? primary.y + primary.height - size.height - SLOT_GAP : primary.y + SLOT_GAP, ...size };
   let slot = first;
   for (let i = 0; i < MAX_SLOTS; i++) {
     const candidate = slot;
     if (!taken.some((other) => overlaps(candidate, other))) return candidate;
-    const below = { ...candidate, y: candidate.y + size.height + SLOT_GAP };
-    slot = below.y + size.height <= primary.y + primary.height ? below : { ...candidate, x: candidate.x - size.width - SLOT_GAP, y: first.y };
+    const step = size.height + SLOT_GAP;
+    const next = { ...candidate, y: up ? candidate.y - step : candidate.y + step };
+    const fits = up ? next.y >= primary.y : next.y + size.height <= primary.y + primary.height;
+    slot = fits ? next : { ...candidate, x: candidate.x - size.width - SLOT_GAP, y: first.y };
   }
   return first;
 }

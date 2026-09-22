@@ -13,6 +13,7 @@ const INPUT = {
   detail: "none" as const,
   openAtLogin: false,
   view: "widgets" as const,
+  finishedPopup: true,
   logDir: "C:\\Users\\me\\.clawd\\logs",
   notice: null,
 };
@@ -27,6 +28,7 @@ describe("settingsState", () => {
       detail: "none",
       openAtLogin: false,
       view: "widgets",
+      finishedPopup: true,
       logDir: INPUT.logDir,
       notice: null,
     });

@@ -114,15 +114,19 @@ export function asWidgetWindow(win: BrowserWindow): WidgetWindow {
     setBounds: (bounds) => {
       if (!win.isDestroyed()) win.setBounds(bounds);
     },
-    // A window level, not a z-order nudge: a pinned widget stays above ordinary windows whatever has the focus.
-    setPinned: (on) => {
-      if (!win.isDestroyed()) win.setAlwaysOnTop(on, "floating");
+    // Levels are bands, not nudges. "raised" is `screen-saver`, the highest, above a pinned widget,
+    // a maximised window and the taskbar; "pinned" is `floating`, above ordinary windows; "normal" is
+    // one of them. A raised widget is topmost, so it needs no toggle to come forward from the background.
+    setLevel: (level) => {
+      if (win.isDestroyed()) return;
+      if (level === "normal") win.setAlwaysOnTop(false);
+      else win.setAlwaysOnTop(true, level === "raised" ? "screen-saver" : "floating");
     },
     // On screen and above its neighbours, and the keyboard stays where it was. A plain move to the
     // top (`moveTop`) is refused by Windows for a process that is not in the foreground: only a
     // topmost window may sit above the active one. So an unpinned widget is made topmost and at once
     // not, which Windows answers by placing it above every non-topmost window, the active one
-    // included, without activating it. A pinned one is topmost already and only moves up its band.
+    // included, without activating it. A pinned or raised one is topmost already and only moves up its band.
     reveal: () => {
       if (win.isDestroyed()) return;
       win.showInactive();
