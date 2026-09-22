@@ -51,7 +51,9 @@ so it is a small later addition); macOS and Linux, as before.
 A new section in the settings window, **View**, between "this app" and "watched folders":
 
 - A radio group, **Window** or **Widgets**.
-- A checkbox, **Pop a box up when a turn finishes**.
+- A second radio pair, off or on, **Pop a box up when a turn finishes**: the page has radio groups
+  and no checkbox control, and one kind of control reads better than two (decided in stage 10's
+  plan).
 
 Both apply at once, with no restart. Turning widgets on creates a widget for every pane now shown and
 leaves the full window as it is; turning them off closes the widgets and shows the full window.
@@ -98,9 +100,10 @@ Turning the popup off lowers every raised box.
   top and shown without activating it.
 - **In window view** a temporary widget is made for the pane, raised the same way, at the folder's
   remembered place, or else stacked upward from the bottom-right corner of the primary work area.
-  None is made while the full window is focused, since the maintainer is already looking at it. A
-  temporary widget can be dragged, which remembers the place, but has no pin, and its menu has only
-  **Open full window** and **Settings**.
+  None is made while the full window is focused, since the maintainer is already looking at it. The
+  check is made when the turn finishes: a finish seen then is a finish seen, and nothing pops up
+  later when the focus moves. A temporary widget can be dragged, which remembers the place, but has
+  no pin, and its menu has only **Open full window** and **Settings**.
 - **The cue.** A raised box draws its border and its title green, `PALETTE.state.green`, so a widget
   that was pinned, and so already on top, still says so. Amber for a waiting session wins over green.
 - **What lowers it.** A press on the widget, when it is released: a click, or the end of a drag, so a
@@ -108,7 +111,8 @@ Turning the popup off lowers every raised box.
   raised it has since gone to `working` or `waiting`, which means it was answered in its terminal, or
   has left the snapshot. `asleep` does not lower it.
 - **Afterwards** a pinned widget stays on top at the pinned level, an unpinned one becomes an
-  ordinary window where it stands, and a temporary one closes.
+  ordinary window where it stands, and a temporary one closes: at once when a press lowered it,
+  after its Clawds walk out when the session being prompted again or leaving did.
 
 ## 4. The scene (`packages/scene`)
 
@@ -209,7 +213,7 @@ Electron-free modules with tests over doubles, in the manner of `agent-host.ts` 
 ```
 src/widgets/
   finished.ts     the finish tracker: (previous snapshot, next snapshot, generation) → the labels of panes where a turn just finished
-  plan.ts         which windows should exist: (snapshot, view, popup, raised, full window focused) → [{ label, pane, pinned, raised, temporary }]
+  plan.ts         which windows should exist: (snapshot, view, raised) → [{ label, pane, temporary }]; the popup setting and the focus are the controller's, at trigger time
   placement.ts    where a window goes: the remembered place if restoredBounds accepts it, else the next free default slot; clamping after a drop
   controller.ts   the stateful part: label → window over an injected window factory; reconciles with the plan; owns the raised set, the drag in progress and the retry counts
 src/attached-feed.ts   snapshots while attached: polls the agent on the port; tested with an injected fetch and clock
@@ -231,6 +235,12 @@ src/attached-feed.ts   snapshots while attached: polls the agent on the port; te
   the title row stays grabbable on some display, using `bounds.ts`, saves it if the window moved, and
   lowers a raised box. Every press ends in a `dragEnd`, moved or not, so that is the one place a
   press lowers anything. A drag ends by itself when its window closes.
+- **The raised set.** The controller keeps, per label, the sessions holding a raise. A finish adds
+  one (unless in window view with the full window focused); every snapshot prunes each label with
+  `stillRaising` and drops it when empty; a press on the box, the release of any press, takes its
+  label out; a generation rise, a change of view, `noSource` and the popup going off empty the set.
+  An entry's level follows the set through one `setLevel(normal | pinned | raised)`, which replaced
+  `setPinned`; a temporary entry is never pinned.
 - **Windows.** `window.ts` gains `createWidgetWindow(preload, bounds)`, made through
   `createHardenedWindow`, whose spec gains a `chrome` field for the options that differ: `frame:
   false`, `transparent: true`, `resizable: false`, `maximizable: false`, `minimizable: false`,
@@ -374,6 +384,29 @@ shown, by core's visibility rule.
 - [x] The first reveal of a widget (a transparent, `show: false` window) and its first resize after the page reports a size show no white flash or lost transparency.
 - [x] Ctrl+W, Ctrl+R and Ctrl+plus on a focused box do nothing; Alt+F4 closes it and the next snapshot brings it back.
 - [x] With boxes showing, Quit from the tray: every box goes and no `electron.exe` remains.
+
+### 10.2 Stage 10's manual checks
+
+Walked by the maintainer on the packaged build, against scratch folders, with Claude sessions in two
+watched folders. Not yet done.
+
+- [ ] Settings: under View, the popup pair sits below the view pair; choosing on changes nothing on screen by itself.
+- [ ] Window view, popup on, an editor focused: a prompt's answer finishing raises a box for that folder at the bottom right, over the editor and over a maximised window, border and title green, and typing still goes to the editor.
+- [ ] The box has no pin on hover; its right-click menu is Open full window and Settings only.
+- [ ] A click on the box closes it at once; a drag first moves it, and the next popup for that folder appears where it was dropped.
+- [ ] Two folders finishing: two boxes, the second above the first.
+- [ ] A finish while the full window is focused shows nothing, then and later.
+- [ ] A finish, then a prompt sent in that session: the box's Clawd walks out and the box closes, without a click.
+- [ ] A finish, then the session left idle past ten minutes (asleep): the box stays up.
+- [ ] Widget view, popup on: a finish turns that folder's widget green and brings it above a maximised window; a pinned widget turns green too; the raised widget sits above a pinned one.
+- [ ] A click on the raised widget lowers it: a pinned one stays pinned, an unpinned one becomes ordinary and stays where it is.
+- [ ] The next prompt in that session lowers it without a click.
+- [ ] Popup off in Settings: every raised box lowers; a temporary one walks out and closes.
+- [ ] Quit and relaunch with a session still idle: nothing is raised (the first snapshot is the baseline).
+- [ ] Attached (the CLI agent holding the port), window view, popup on: the box still pops up within a second or so of the finish.
+- [ ] The log holds `desktop.popupChanged` with `on` and `remembered`, and `desktop.popupRaised` with `temporary`, and no folder name.
+- [ ] With boxes raised, Quit from the tray: every box goes and no `electron.exe` remains.
+- [ ] Widget view, popup on: a raised widget sits above a pinned one and above the taskbar, or the two levels turn out to be one band on this Windows and the raise still shows (record which).
 
 ## 11. Tests
 

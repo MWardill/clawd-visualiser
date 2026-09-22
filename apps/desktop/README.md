@@ -45,6 +45,14 @@ on that session's detail sheet, and the tray's **Open** opens it in either view.
 plain launch shows no window: the boxes appear with the sessions. Clicking the tray icon brings the
 boxes forward, or opens the full window when there are none.
 
+**The finished popup.** Under View, *Pop a box up when a turn finishes* raises a folder's box over
+every other window, drawn green, the moment a session there stops working, without taking the
+keyboard: in widget view the folder's own widget, in window view a temporary box at the bottom right
+that has no pin and goes when it is clicked. Nothing pops up while the full window has the focus,
+since you are already looking. A raised box goes down when you click it, or when that session is
+prompted again; it stays up while the session sleeps, so a turn that finished while you were away is
+still there when you come back. Off by default.
+
 For work on the page, the dev loop loads the Next dev server instead, with hot reload:
 
 ```
@@ -450,3 +458,33 @@ after.
 **The icon.** The packaged exe always carried the Clawd, stamped by electron-builder. A development
 run is `electron.exe`, which carries Electron's, and no window was given an `icon`. Every window is
 now, from `app.ico` beside the tray's icons.
+
+### Stage 10: the finished popup
+
+`docs/superpowers/specs/2026-09-21-desktop-widgets-design.md`, §3.3. A turn finishing raises its box.
+
+**Window levels.** `setAlwaysOnTop(true, level)` puts a window in a band. A pinned widget sits in
+`floating`, above ordinary windows; a raised one in `screen-saver`, the highest, above a pinned
+widget, a maximised window and the taskbar. Lowering is a change of band, `setAlwaysOnTop(false)`
+or back to `floating`, and the window stays where it is. The controller's window has one call for
+this, `setLevel`, so pinned and raised cannot disagree. Whether Windows keeps the two topmost levels
+apart is settled by the stage's own walk; the code is right either way.
+
+**Raising from the background.** A finish arrives while another app has the focus, and stage 9's
+walk found that a background process cannot move a window above the active one. A raised widget is
+topmost, so it needs no trick: the band does the work, and `showInactive()` keeps the keyboard where
+it was.
+
+**A temporary window.** In window view the popup is a widget made for the raise and closed once it
+is lowered: the same controller, the same page, one flag. It comes up from the bottom right, away
+from where the widgets stack, has no pin, and is closed by the press that lowers it, or walks its
+Clawds out when the session is prompted again.
+
+**What "finished" is.** The agent's snapshot carries each session's displayed state, held for a
+moment so a short turn still shows as working. A session shown `working` in one snapshot and `idle`
+in the next has finished a turn; the first snapshot from an agent is only the baseline, so nothing
+fires at launch or after a restart. The raise holds while any session that raised it is neither
+working nor waiting again and still there: `asleep` keeps it up.
+
+**`isFocused()`.** Main asks the full window whether it has the keyboard at the moment a turn
+finishes; if it does, the finish is not recorded, and nothing pops up later when the focus moves.
