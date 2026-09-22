@@ -8,9 +8,9 @@ import type { View } from "./desktop-state";
 
 export const ATTACHED_FEED_MS = 1_000;
 
-/** The port to ask: only while attached, and only while something draws from snapshots main would otherwise lack. */
-export function feedPort(host: Pick<HostState, "mode" | "port">, view: View): number | null {
-  return host.mode === "attached" && view === "widgets" ? host.port : null;
+/** The port to ask: only while attached, and only while something draws from snapshots main would otherwise lack: widgets on screen, or a popup waiting to be raised. */
+export function feedPort(host: Pick<HostState, "mode" | "port">, view: View, popup: boolean): number | null {
+  return host.mode === "attached" && (view === "widgets" || popup) ? host.port : null;
 }
 
 export type AttachedFeedDeps = {

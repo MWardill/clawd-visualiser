@@ -83,6 +83,11 @@ describe("parseDesktopState", () => {
     expect(parsed.map((entry) => entry.label)).toEqual(["docs", "repo"]);
     expect(parsed.find((entry) => entry.label === "repo")).toEqual({ label: "repo", x: 9, y: 9, pinned: true });
   });
+
+  it("keeps the popup choice, a boolean judged on its own", () => {
+    expect(parseDesktopState({ version: 2, finishedPopup: true })).toEqual({ finishedPopup: true });
+    expect(parseDesktopState({ version: 2, finishedPopup: "yes", view: "widgets" })).toEqual({ view: "widgets" });
+  });
 });
 
 describe("createDesktopStore", () => {

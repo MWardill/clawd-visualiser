@@ -1,10 +1,11 @@
 // ~/.clawd/desktop.json: what the app remembers between runs that is not the agent's config. The
 // window's bounds, and whether the user wants the app at login, absent until a first packaged run or
-// a toggle, the view (one window or a widget per pane) and where each folder's widget was left,
-// absent until a widget is placed. A missing or damaged file reads as nothing remembered. A file that is there but cannot
-// be read (locked, say) is different: what it holds is unknown, so nothing is written over it for
-// the rest of the run. A failed write is logged and dropped, since the next change writes the whole
-// file again. A development run keeps its own file, so what it remembers never steers the packaged app.
+// a toggle, the view (one window or a widget per pane), whether a finished turn pops its box up,
+// and where each folder's widget was left, absent until a widget is placed. A missing or damaged file
+// reads as nothing remembered. A file that is there but cannot be read (locked, say) is different:
+// what it holds is unknown, so nothing is written over it for the rest of the run. A failed write is
+// logged and dropped, since the next change writes the whole file again. A development run keeps its
+// own file, so what it remembers never steers the packaged app.
 import { readJsonFile, silentLogger, writeJsonAtomic, type Logger } from "@clawd/agent";
 import { join } from "node:path";
 
@@ -19,7 +20,7 @@ export type Placement = { x: number; y: number; pinned: boolean };
  * were written in, and a folder may be called `2024`.
  */
 export type StoredPlacement = Placement & { label: string };
-export type DesktopState = { bounds?: Bounds; maximized?: boolean; openAtLogin?: boolean; view?: View; widgets?: StoredPlacement[] };
+export type DesktopState = { bounds?: Bounds; maximized?: boolean; openAtLogin?: boolean; view?: View; finishedPopup?: boolean; widgets?: StoredPlacement[] };
 
 /** Folders come and go; the file does not grow for ever. */
 export const MAX_PLACEMENTS = 200;
@@ -73,7 +74,7 @@ export function withPlacement(all: readonly StoredPlacement[] | undefined, label
 /** The valid fields of a version 2 file, each judged on its own; anything else is dropped. */
 export function parseDesktopState(value: unknown): DesktopState {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
-  const file = value as { version?: unknown; bounds?: unknown; maximized?: unknown; openAtLogin?: unknown; view?: unknown; widgets?: unknown };
+  const file = value as { version?: unknown; bounds?: unknown; maximized?: unknown; openAtLogin?: unknown; view?: unknown; finishedPopup?: unknown; widgets?: unknown };
   if (file.version !== VERSION) return {};
   const state: DesktopState = {};
   const b = file.bounds;
@@ -84,6 +85,7 @@ export function parseDesktopState(value: unknown): DesktopState {
   if (typeof file.maximized === "boolean") state.maximized = file.maximized;
   if (typeof file.openAtLogin === "boolean") state.openAtLogin = file.openAtLogin;
   if (file.view === "window" || file.view === "widgets") state.view = file.view;
+  if (typeof file.finishedPopup === "boolean") state.finishedPopup = file.finishedPopup;
   const widgets = parsePlacements(file.widgets);
   if (widgets !== undefined) state.widgets = widgets;
   return state;

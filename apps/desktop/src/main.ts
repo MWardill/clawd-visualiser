@@ -111,7 +111,7 @@ function run(): void {
   /** The port the feed is asking, or null; what it was last told, so a stop can be told from a repeat. */
   let feeding: number | null = null;
   const followFeed = (): void => {
-    const port = quitting ? null : feedPort(host.state(), view());
+    const port = quitting ? null : feedPort(host.state(), view(), false); // Task 9 passes the popup setting.
     // Leaving widget view while attached stops the feed, and what the controller holds goes stale
     // from then on: forgotten now, so the next widget view opens from a fresh answer, not from minutes ago.
     if (port === null && feeding !== null && host.state().mode === "attached") widgets.noSource();
