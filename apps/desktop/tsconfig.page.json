@@ -4,6 +4,6 @@
     "lib": ["ES2022", "DOM"],
     "types": []
   },
-  "include": ["src/settings/page.ts"],
+  "include": ["src/settings/page.ts", "src/widget/page.ts"],
   "exclude": []
 }

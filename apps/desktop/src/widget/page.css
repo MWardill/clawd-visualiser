@@ -1,0 +1,18 @@
+/* A widget: one canvas filling a frameless, transparent window. What the canvas does not paint is
+   the desktop. The two font files are copied beside this page by build/bundle.mjs: this origin may
+   load only its own files. No text in the page uses the face, so page.ts loads it by hand before
+   the canvas draws with it. */
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 400; font-display: block; src: url("jetbrains-mono-400.woff2") format("woff2"); }
+@font-face { font-family: "JetBrains Mono"; font-style: normal; font-weight: 700; font-display: block; src: url("jetbrains-mono-700.woff2") format("woff2"); }
+:root { --bg: #0a0b10; --dim: #5d6274; --amber: #f2c35b; }
+html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: transparent; user-select: none; }
+body { font: 11px "JetBrains Mono", Consolas, monospace; }
+#scene { position: absolute; inset: 0; display: block; width: 100%; height: 100%; image-rendering: pixelated; touch-action: none; }
+/* The pin sits on the title row, which is the box's top border, left of where the collision mark
+   goes. Its background is the night colour so the border does not run through it. Positions are in
+   CSS pixels for a 6 px cell; at 125% a cell is 6.4 px and the pin sits a pixel or two off. */
+#pin { position: absolute; top: 3px; right: 44px; width: 12px; height: 12px; padding: 0; border: 2px solid var(--dim); border-radius: 0; background: var(--bg); cursor: pointer; opacity: 0; }
+body:hover #pin, #pin:focus-visible, #pin[aria-pressed="true"] { opacity: 1; }
+#pin:hover { border-color: var(--amber); }
+#pin[aria-pressed="true"] { border-color: var(--amber); background: var(--amber); }
+#pin:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }

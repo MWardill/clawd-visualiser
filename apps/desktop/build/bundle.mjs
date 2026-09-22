@@ -51,13 +51,43 @@ await cp(font("files/jetbrains-mono-latin-400-normal.woff2"), here("../dist/sett
 await cp(font("files/jetbrains-mono-latin-700-normal.woff2"), here("../dist/settings/jetbrains-mono-700.woff2"));
 await cp(font("LICENSE"), here("../dist/settings/jetbrains-mono-LICENSE.txt"));
 
-// The preload is parsed before every settings page. It needs the channel names and Electron's
-// bridge, nothing more; if it grows past this, something has pulled a library into it again.
+// The widget page and its preload, built like the settings page's. The page bundles the scene.
+await build({
+  entryPoints: [here("../src/widget/preload.ts")],
+  outfile: here("../dist/widget/preload.js"),
+  bundle: true,
+  platform: "node",
+  format: "cjs",
+  target: "node22",
+  external: ["electron"],
+  sourcemap: true,
+  logLevel: "info",
+});
+await build({
+  entryPoints: [here("../src/widget/page.ts")],
+  outfile: here("../dist/widget/page.js"),
+  bundle: true,
+  platform: "browser",
+  format: "iife",
+  target: "chrome130",
+  sourcemap: true,
+  logLevel: "info",
+});
+await cp(here("../src/widget/page.html"), here("../dist/widget/index.html"));
+await cp(here("../src/widget/page.css"), here("../dist/widget/page.css"));
+await cp(font("files/jetbrains-mono-latin-400-normal.woff2"), here("../dist/widget/jetbrains-mono-400.woff2"));
+await cp(font("files/jetbrains-mono-latin-700-normal.woff2"), here("../dist/widget/jetbrains-mono-700.woff2"));
+await cp(font("LICENSE"), here("../dist/widget/jetbrains-mono-LICENSE.txt"));
+
+// A preload is parsed before every page it serves. It needs the channel names and Electron's bridge,
+// nothing more; if one grows past this, something has pulled a library into it again.
 const PRELOAD_LIMIT = 20_000;
-const preloadSize = (await stat(here("../dist/settings/preload.js"))).size;
-if (preloadSize > PRELOAD_LIMIT) {
-  console.error(`bundle: dist/settings/preload.js is ${preloadSize} bytes, over the ${PRELOAD_LIMIT} it is allowed; check what src/settings/preload.ts imports`);
-  process.exit(1);
+for (const page of ["settings", "widget"]) {
+  const preloadSize = (await stat(here(`../dist/${page}/preload.js`))).size;
+  if (preloadSize > PRELOAD_LIMIT) {
+    console.error(`bundle: dist/${page}/preload.js is ${preloadSize} bytes, over the ${PRELOAD_LIMIT} it is allowed; check what src/${page}/preload.ts imports`);
+    process.exit(1);
+  }
 }
 
 // The tray loads its icons from beside main.cjs, as the window loads the export.
