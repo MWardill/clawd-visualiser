@@ -73,8 +73,10 @@ export function createSettingsWindow(preload: string, icon: string): BrowserWind
  * colour has to be fully transparent too, or the window is filled before the page draws. Made
  * hidden: the controller shows it once its page has said what size it needs. `type: "toolbar"` is
  * Windows' tool-window style, which keeps the widget out of Alt+Tab as `skipTaskbar` keeps it off
- * the taskbar; this app builds for Windows only. `closable: false` removes the system close command,
- * so Alt+F4 on a focused box does nothing; `win.close()` from main still closes it.
+ * the taskbar; this app builds for Windows only. Alt+F4 on a focused box closes it, which the
+ * controller treats like any window the user closed, and the next snapshot brings it back;
+ * `closable: false` was tried and dropped, since it also stops `win.close()` and with it every close
+ * the controller makes and the quit itself.
  */
 const WIDGET_CHROME: BrowserWindowConstructorOptions = {
   frame: false,
@@ -88,7 +90,6 @@ const WIDGET_CHROME: BrowserWindowConstructorOptions = {
   skipTaskbar: true,
   show: false,
   type: "toolbar",
-  closable: false,
 };
 
 export function createWidgetWindow(preload: string, bounds: Bounds, icon: string): BrowserWindow {

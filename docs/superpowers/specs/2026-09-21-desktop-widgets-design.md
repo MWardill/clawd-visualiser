@@ -235,11 +235,13 @@ src/attached-feed.ts   snapshots while attached: polls the agent on the port; te
   `createHardenedWindow`, whose spec gains a `chrome` field for the options that differ: `frame:
   false`, `transparent: true`, `resizable: false`, `maximizable: false`, `minimizable: false`,
   `fullscreenable: false`, `skipTaskbar: true`, `hasShadow: false`, `show: false`, a fully
-  transparent `backgroundColor`, `type: "toolbar"` (Windows' tool-window style, which keeps a widget
-  out of Alt+Tab), and `closable: false` (Alt+F4 on a focused box then does nothing). A widget's
-  window menu is removed too, so the default menu's shortcuts (Ctrl+W, Ctrl+R, zoom) cannot reach a
-  focused box. A widget is shown with `showInactive()` once its page has reported the size it needs,
-  so it never appears empty or at the wrong size, and never takes the keyboard.
+  transparent `backgroundColor`, and `type: "toolbar"` (Windows' tool-window style, which keeps a
+  widget out of Alt+Tab). A widget's window menu is removed too, so the default menu's shortcuts
+  (Ctrl+W, Ctrl+R, zoom) cannot reach a focused box. Alt+F4 still closes a focused box; the controller
+  treats that like any window the user closed, and the next snapshot brings it back. `closable:
+  false` is not used, since it also disables `win.close()`, and with it every close the controller
+  makes and the quit itself. A widget is shown with `showInactive()` once its page has reported the
+  size it needs, so it never appears empty or at the wrong size, and never takes the keyboard.
 - **Levels.** Pinned: `setAlwaysOnTop(true, "floating")`. Raised: `setAlwaysOnTop(true,
   "screen-saver")`, `moveTop()`, `showInactive()`. Lowered and unpinned: `setAlwaysOnTop(false)`.
   Stage 10's checklist settles whether `screen-saver` is the level that clears the taskbar and a
@@ -358,7 +360,8 @@ Walked by the maintainer on the packaged build, against scratch folders (`CLAWD_
 - [ ] A Clawd clicked in a widget while the full window is hidden or minimised brings that window up on the sheet.
 - [ ] With `dist/widget/index.html` renamed in a development run, choosing widgets shows nothing and logs nothing: a broken widget build fails silently (known; no code for it this stage).
 - [ ] The first reveal of a widget (a transparent, `show: false` window) and its first resize after the page reports a size show no white flash or lost transparency.
-- [ ] Alt+F4, Ctrl+W, Ctrl+R and Ctrl+plus on a focused box do nothing: the box stays, unreloaded, at the same size.
+- [ ] Ctrl+W, Ctrl+R and Ctrl+plus on a focused box do nothing; Alt+F4 closes it and the next snapshot brings it back.
+- [ ] With boxes showing, Quit from the tray: every box goes and no `electron.exe` remains.
 
 ## 11. Tests
 
