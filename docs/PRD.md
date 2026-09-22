@@ -287,7 +287,7 @@ The contract comes first and is the fork point. After it, the web app and the ag
 
 | # | Milestone | Outcome |
 |---|---|---|
-| M8 | Desktop | The Electron app in six stages, one Electron idea each: the window, the agent inside, the packaged UI over `app://`, the tray, the settings window, the package; then the review fixes (6.1) and two hardening stages (7 and 8) that closed the design's §12.1. Done when a teammate unzips the folder, runs the exe and sets up the hooks from the settings window, and moving the folder and relaunching repairs the hooks and the login item. |
+| M8 | Desktop | The Electron app in six stages, one Electron idea each: the window, the agent inside, the packaged UI over `app://`, the tray, the settings window, the package; then the review fixes (6.1) and two hardening stages (7 and 8) that closed the design's §12.1. Done when a teammate unzips the folder, runs the exe and sets up the hooks from the settings window, and moving the folder and relaunching repairs the hooks and the login item. Stage 9 adds a widget view, each pane its own frameless window that can be dragged and pinned on top; stage 10 adds a popup when a turn finishes (`docs/superpowers/specs/2026-09-21-desktop-widgets-design.md`). |
 
 ## 13. Open questions
 
@@ -331,3 +331,4 @@ The contract comes first and is the fork point. After it, the web app and the ag
 | 21 Sep 2026 | The packaged desktop app's agent does not accept the dev server's origins (`http://localhost:3000`, `http://127.0.0.1:3000`); the CLI and a development run still do. An option on `startAgent`, not a config field. |
 | 21 Sep 2026 | A session that has waited 36 hours for an answer leaves the view, whatever its prompt count, and returns the moment it is answered; it stays `waiting` in the fleet. |
 | 21 Sep 2026 | The settings window ships JetBrains Mono from a dev dependency, copied at bundle time; no font binary is checked in. |
+| 21 Sep 2026 | Desktop widgets: a widget is a pane, drawn by a page of the desktop package that main feeds over IPC and that may open no connection; the Next app gains only a `#session=` link. Windows are dragged by hand, since a CSS drag region swallows clicks. A finished turn means working to idle, and its popup goes down on a press or the next prompt, never on a timer. |

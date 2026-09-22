@@ -234,13 +234,23 @@ src/attached-feed.ts   snapshots while attached: polls the agent on the port; te
 - **Windows.** `window.ts` gains `createWidgetWindow(preload, bounds)`, made through
   `createHardenedWindow`, whose spec gains a `chrome` field for the options that differ: `frame:
   false`, `transparent: true`, `resizable: false`, `maximizable: false`, `minimizable: false`,
-  `fullscreenable: false`, `skipTaskbar: true`, `hasShadow: false`, `show: false`, and a fully
-  transparent `backgroundColor`. A widget is shown with `showInactive()` once its page has reported
-  the size it needs, so it never appears empty or at the wrong size, and never takes the keyboard.
+  `fullscreenable: false`, `skipTaskbar: true`, `hasShadow: false`, `show: false`, a fully
+  transparent `backgroundColor`, and `type: "toolbar"` (Windows' tool-window style, which keeps a
+  widget out of Alt+Tab). A widget's window menu is removed too, so the default menu's shortcuts
+  (Ctrl+W, Ctrl+R, zoom) cannot reach a focused box. Alt+F4 still closes a focused box; the controller
+  treats that like any window the user closed, and the next snapshot brings it back. `closable:
+  false` is not used, since it also disables `win.close()`, and with it every close the controller
+  makes and the quit itself. A widget is shown with `showInactive()` once its page has reported the
+  size it needs, so it never appears empty or at the wrong size, and never takes the keyboard.
 - **Levels.** Pinned: `setAlwaysOnTop(true, "floating")`. Raised: `setAlwaysOnTop(true,
   "screen-saver")`, `moveTop()`, `showInactive()`. Lowered and unpinned: `setAlwaysOnTop(false)`.
   Stage 10's checklist settles whether `screen-saver` is the level that clears the taskbar and a
-  maximised window on Windows 11; the level is one constant.
+  maximised window on Windows 11; the level is one constant. Bringing an unpinned widget forward
+  (its first showing, or the tray) is not a `moveTop()`: Windows refuses that from a process not in
+  the foreground, found in stage 9's walk. It is made topmost and at once not, which places it
+  above every non-topmost window without activating it; a pinned widget, topmost already, gets
+  `moveTop()` within its band. From the tray menu the raise waits a quarter second, since the
+  menu's closing gives the focus back to the window that had it, which comes to the top again.
 - **Snapshots.** `AgentHostDeps` gains an optional `onSnapshot(s, run)`, called inside the guard the
   host already applies to its own agent's snapshots, so one from an agent already replaced never
   arrives; `run` is the host's count of starts. While the host is `attached` and either setting is
@@ -260,9 +270,11 @@ src/attached-feed.ts   snapshots while attached: polls the agent on the port; te
 
 - `desktop.json` gains three fields, each judged on its own as the others are, and needs no new
   version since an older build simply drops them: `view: "window" | "widgets"`, `finishedPopup:
-  boolean`, and `widgets: Record<label, { x, y, pinned }>`, with whole-number coordinates and at most
-  200 entries, the oldest-written dropped first. Folder names are written to this file and nowhere
-  else; `config.json` beside it already holds the watched folders' full paths.
+  boolean`, and `widgets`, a list of `{ label, x, y, pinned }` in the order written, newest last,
+  with whole-number coordinates and at most 200 entries, the oldest-written dropped first; a list,
+  because an object lists number-like keys first whatever order they were written in, and a folder
+  may be called `2024`. Folder names are written to this file and nowhere else; `config.json`
+  beside it already holds the watched folders' full paths.
 - `SettingsState` gains `view` and `finishedPopup`; `SettingsApi` gains `setView(view)` and
   `setFinishedPopup(on)`, through the channels, the zod handlers and `settings/actions.ts` like the
   rest. Neither restarts the agent. A `desktop.json` that could not be read keeps its rule: the
@@ -283,9 +295,11 @@ One change, and not a desktop one: a deep link. `#session=<alias>` in the URL op
 detail sheet. The hash is read at load and on `hashchange`, and consumed at once: it is removed with
 `history.replaceState` and the alias kept in state, so the same link can be followed twice and a
 reload does not reopen the sheet. The sheet opens once a snapshot from the live agent holds the
-alias, never from the simulated feed, whose aliases are its own. Closing the sheet, or choosing
-another Clawd, forgets the link. The parsing and the rule are pure functions in `lib/`, tested; it
-works in a browser tab as well.
+alias, never from the simulated feed, whose aliases are its own. Closing the sheet, choosing another
+Clawd, or a change of feed forgets the link, as a change of feed already closes a sheet chosen by
+hand; a link belongs to the live feed running when it was read, or, read at load or under the
+simulated feed, to the first live feed that starts afterwards, and never moves to another. The
+parsing and the rule are pure functions in `lib/`, tested; it works in a browser tab as well.
 
 Main uses it for a Clawd clicked in a widget: `showWindow()`, then the window is loaded at its own
 URL with the hash. For a window already showing the page that is a same-document navigation, so the
@@ -323,6 +337,43 @@ a widget remembered on a display that is then unplugged; the pin read by Narrato
 run's taskbar icon. Stage 10: a popup over a maximised window and over the taskbar; that typing in
 another app carries on uninterrupted while a box rises; a popup that fired while the machine was
 locked, still there at unlock; a pinned widget turning green.
+
+### 10.1 Stage 9's manual checks
+
+Walked by the maintainer on 22 September 2026 on the packaged build, against scratch folders
+(`CLAWD_HOME`, `CLAUDE_CONFIG_DIR`), with Claude sessions in two watched folders: every item passing,
+with two defects found and fixed on the branch before the last rounds. A box could not be brought
+forward from a background process, since Windows refuses `moveTop()` unless the process is in the
+foreground (now topmost and at once not, `1b0d8fc`); and Show widgets from the tray menu was undone
+the next instant by the focus going back to the window that had it (now a quarter-second wait,
+`c9f3508`). One false alarm: a third session that never arrived was started from a terminal without
+`CLAUDE_CONFIG_DIR`, so its hooks were never installed; a session nobody has prompted is also never
+shown, by core's visibility rule.
+
+- [x] Settings shows View after This app; choosing widgets closes nothing and makes a box per folder at the top right of the primary display, one under the other.
+- [x] Each box is transparent outside its border, its interior dark, its text in JetBrains Mono; no box is in the taskbar or Alt+Tab.
+- [x] A new session in a folder walks in from behind the bottom border and is never drawn outside the box; sessions already there when the box opened were seated at once.
+- [x] A third session in one folder grows its box downward, the top-left corner fixed; when it leaves, the box shrinks back.
+- [x] The last session in a folder ending makes its Clawd walk out, and then the box closes.
+- [x] Dragging: the box follows the cursor with no lag that matters, keeps its size at 100, 125 and 150% scaling, and crosses between two displays with different scaling without changing size in CSS terms or blurring.
+- [x] A box dropped mostly off the screen can still be grabbed; one flung wholly off comes back inside.
+- [x] A click on a Clawd opens the full window on that session's detail sheet; doing it again after closing the sheet opens it again, and the scene in the full window does not reload (its Clawds do not walk in again).
+- [x] The pin appears on hover, sits on the title row clear of the collision mark, lights amber when pressed, and the box then stays above a maximised window. At 125% it is no more than two pixels off the row.
+- [x] Narrator reads the pin as a toggle button, "Pin on top", pressed or not; Tab reaches it.
+- [x] Right-click: Pin on top (ticked when pinned), Open full window, Settings, each doing what it says.
+- [x] Quit and relaunch: each box is where it was left, pinned if it was. With a display unplugged, a box remembered there takes a default slot.
+- [x] Tray: clicking the icon brings the boxes above other windows and no box takes the keyboard (the taskbar does, as for any tray icon); Show widgets in the menu does the same and the boxes stay up once the menu has closed; with no session running either opens the full window. The menu has Show widgets above Open in widget view only.
+- [x] `--hidden` in widget view: no full window, and boxes appear when sessions do.
+- [x] Choosing window again closes every box at once and shows the full window.
+- [x] Attached: with the CLI's agent holding the port, boxes still appear and follow the sessions within a second or so; stopping that agent, the app takes over and the boxes stay, their Clawds re-seated rather than walking in.
+- [x] Settings changed while widgets are shown (a folder added): the agent restarts and the boxes stay.
+- [x] A development run shows the Clawd, not Electron's icon, in the taskbar, the title bar and Alt+Tab, for the full window and the settings window.
+- [x] The log holds `desktop.viewChanged` with `widgets` and `remembered`, and no folder name anywhere.
+- [x] A Clawd clicked in a widget while the full window is hidden or minimised brings that window up on the sheet.
+- [x] With `dist/widget/index.html` renamed in a development run, choosing widgets shows nothing and logs nothing: a broken widget build fails silently (known; no code for it this stage).
+- [x] The first reveal of a widget (a transparent, `show: false` window) and its first resize after the page reports a size show no white flash or lost transparency.
+- [x] Ctrl+W, Ctrl+R and Ctrl+plus on a focused box do nothing; Alt+F4 closes it and the next snapshot brings it back.
+- [x] With boxes showing, Quit from the tray: every box goes and no `electron.exe` remains.
 
 ## 11. Tests
 

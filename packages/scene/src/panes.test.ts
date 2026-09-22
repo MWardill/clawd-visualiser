@@ -1,8 +1,8 @@
 import type { Snapshot } from "@clawd/core";
 import { describe, expect, it } from "vitest";
 import { PALETTE } from "./engine";
-import { CELL, MARGIN, SEAT_H, SEAT_W, TITLE_ROWS, seatOrigin } from "./layout";
-import { mountPanesScene } from "./panes";
+import { CELL, MARGIN, PANE_W, SEAT_H, SEAT_W, TITLE_ROWS, paneHeight, seatOrigin } from "./layout";
+import { mountPanesScene, type PanesSceneOptions } from "./panes";
 import { SCENE_COLOURS } from "./sprites";
 import { fakeContext } from "./testing/fake-context";
 
@@ -16,8 +16,8 @@ const SNAPSHOT: Snapshot = {
   sessions: [{ alias: "agent-1", label: "Otter", pane: "pane-1", state: "waiting", activity: null, subagents: 1, contextPct: 50, since: iso(T0), updatedAt: iso(T0) }],
 };
 
-function harness(dpr = 1) {
-  const { ctx, cellsOf, texts, reset } = fakeContext();
+function harness(dpr = 1, extra: Partial<PanesSceneOptions> = {}) {
+  const { ctx, rects, cellsOf, texts, cleared, clips, saved, reset } = fakeContext();
   const frames: ((ts: number) => void)[] = [];
   const events = new Map<string, (e: unknown) => void>();
   const canvas = {
@@ -32,6 +32,7 @@ function harness(dpr = 1) {
   let now = T0;
   const selected: string[] = [];
   const scene = mountPanesScene(canvas, {
+    ...extra,
     now: () => now,
     devicePixelRatio: dpr,
     document: null,
@@ -48,7 +49,7 @@ function harness(dpr = 1) {
     frames.length = 0;
     fn?.(ms);
   };
-  return { scene, canvas, cellsOf, texts, reset, frames, events, selected, setNow: (t: number) => (now = t), frame };
+  return { scene, canvas, rects, cellsOf, texts, cleared, clips, saved, reset, frames, events, selected, setNow: (t: number) => (now = t), frame };
 }
 
 describe("mountPanesScene", () => {
@@ -154,5 +155,87 @@ describe("mountPanesScene", () => {
     h.frame(100);
     const cap = h.texts.find((t) => t.text === "example.com");
     expect(cap?.col).toBe(SCENE_COLOURS.web);
+  });
+});
+
+/** What the desktop app's widget page passes. */
+const WIDGET: Partial<PanesSceneOptions> = { background: "none", clipActors: true, emptyState: false, margin: 1 };
+
+describe("mountPanesScene as a widget", () => {
+  it("draws no night and no empty state: the canvas is cleared and only the pane's interior is filled", () => {
+    const h = harness(1, WIDGET);
+    expect(h.texts.some((t) => t.text === "no sessions")).toBe(false);
+    h.scene.setSnapshot(SNAPSHOT, { seated: true });
+    h.reset();
+    h.frame(0);
+    h.frame(100);
+    expect(h.cleared).toContainEqual({ x: 0, y: 0, w: 960, h: 600 });
+    // the night is one fill of the whole grid; nothing of that size is drawn
+    expect(h.rects.some((r) => r.x === 0 && r.y === 0 && r.w === 960)).toBe(false);
+    expect(h.rects.some((r) => r.x === CELL && r.y === CELL && r.w === PANE_W * CELL && r.h === paneHeight(1) * CELL && r.col === PALETTE.night.bg)).toBe(true);
+    // the pane sits one cell in from the corner, amber because its session waits
+    expect(h.cellsOf(CELL).some((c) => c.col === PALETTE.state.amber && c.x === 1 && c.y === 1)).toBe(true);
+  });
+
+  it("seats the sessions of a snapshot at once when asked, nameplate and all", () => {
+    const h = harness(1, WIDGET);
+    h.scene.setSnapshot(SNAPSHOT, { seated: true });
+    h.frame(0);
+    h.frame(100);
+    // a Clawd that is walking in carries no nameplate, and the clock has not moved
+    expect(h.texts.some((t) => t.text === "otter")).toBe(true);
+  });
+
+  it("clips a pane's Clawds, and the particles, to the inside of its border, and balances every save", () => {
+    const h = harness(1, WIDGET);
+    h.scene.setSnapshot(SNAPSHOT);
+    h.reset();
+    h.frame(0);
+    h.frame(100);
+    const inside = { x: 2 * CELL, y: 2 * CELL, w: (PANE_W - 2) * CELL, h: (paneHeight(1) - 2) * CELL };
+    expect(h.clips).toEqual([[inside], [inside]]);
+    expect(h.saved()).toBe(0);
+  });
+
+  it("neither clears nor clips when no option asks for it", () => {
+    const h = harness();
+    h.scene.setSnapshot(SNAPSHOT);
+    h.frame(0);
+    h.frame(100);
+    expect(h.cleared).toEqual([]);
+    expect(h.clips).toEqual([]);
+  });
+
+  it("reports the size its contents need when that changes, never null first, and null once the pane has gone", () => {
+    const sizes: ({ width: number; height: number } | null)[] = [];
+    const h = harness(1, { ...WIDGET, onContentSize: (size) => sizes.push(size) });
+    expect(sizes).toEqual([]);
+    h.scene.setSnapshot(SNAPSHOT, { seated: true });
+    h.frame(0);
+    h.frame(100);
+    h.frame(200);
+    expect(sizes).toEqual([{ width: (PANE_W + 2) * CELL, height: (paneHeight(1) + 2) * CELL }]);
+
+    const three = [1, 2, 3].map((n) => ({ ...SNAPSHOT.sessions[0]!, alias: `agent-${n}` }));
+    h.scene.setSnapshot({ ...SNAPSHOT, sessions: three });
+    h.frame(300);
+    expect(sizes.at(-1)).toEqual({ width: (PANE_W + 2) * CELL, height: (paneHeight(3) + 2) * CELL });
+
+    h.scene.setSnapshot({ ...SNAPSHOT, panes: [], sessions: [] });
+    h.setNow(T0 + 10_000); // long past the walk out
+    h.frame(400);
+    h.frame(500);
+    expect(sizes.at(-1)).toBeNull();
+    expect(sizes).toHaveLength(3);
+  });
+
+  it("reports CSS pixels, rounded up, when a cell is not a whole number of them", () => {
+    const sizes: ({ width: number; height: number } | null)[] = [];
+    const h = harness(1.25, { ...WIDGET, onContentSize: (size) => sizes.push(size) });
+    h.scene.setSnapshot(SNAPSHOT, { seated: true });
+    h.frame(0);
+    h.frame(100);
+    // 8 device px per cell at 1.25: 54 cells are 345.6 CSS px, 30 cells are 192
+    expect(sizes).toEqual([{ width: 346, height: 192 }]);
   });
 });

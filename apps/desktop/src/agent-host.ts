@@ -26,6 +26,8 @@ export type AgentHostDeps = {
   probe(port: number): Promise<Probe>;
   /** The session counts of the agent on the port, or null. Never rejects. */
   counts(port: number): Promise<Counts | null>;
+  /** Every snapshot of the agent this app owns, with the number of the start it came from: a new number means a new agent, whose aliases and states owe nothing to the last one's. */
+  onSnapshot?(s: Snapshot, run: number): void;
   log: Logger;
   onChange?(state: HostState): void;
   now?(): number;
@@ -106,7 +108,9 @@ export function createAgentHost(deps: AgentHostDeps): AgentHost {
     const mine = ++run;
     try {
       const running = await deps.start((s) => {
-        if (mine === run && !stopped()) set(countsOf(s));
+        if (mine !== run || stopped()) return;
+        set(countsOf(s));
+        deps.onSnapshot?.(s, mine);
       });
       if (stopped()) {
         await settleWithin(running.stop(), AGENT_STOP_CAP_MS);

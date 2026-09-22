@@ -18,6 +18,10 @@ The canvas renderer. Framework-free: give it a canvas and snapshots, it draws fr
 const scene = mountPanesScene(canvas, { font: "JetBrains Mono", onSelect: (alias) => open(alias) });
 scene.resize(width, height);   // CSS pixels; call again from a ResizeObserver
 scene.setSnapshot(snapshot);   // as often as snapshots arrive
+
+// One pane as a widget on the desktop: a transparent canvas, the box filled, its Clawds clipped to it.
+mountPanesScene(canvas, { background: "none", clipActors: true, emptyState: false, margin: 1, onContentSize: (size) => fitWindow(size) });
+scene.setSnapshot(snapshot, { seated: true });   // the sessions were already there: no walk in
 scene.destroy();
 ```
 

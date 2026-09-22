@@ -5,5 +5,5 @@
     "types": ["node"]
   },
   "include": ["src"],
-  "exclude": ["src/settings/page.ts", "src/settings/page.test.ts"]
+  "exclude": ["src/settings/page.ts", "src/settings/page.test.ts", "src/widget/page.ts", "src/widget/page.test.ts"]
 }

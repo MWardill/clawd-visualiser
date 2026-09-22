@@ -134,4 +134,18 @@ describe("reconcile", () => {
     reconcile(w, snap([session({ alias: "agent-1" })]), T0 + 1);
     expect(w.actors[0]).toMatchObject({ name: null, subject: null });
   });
+
+  it("seats a session it has not met at once when asked, and still walks later arrivals in", () => {
+    const w = reconcile(emptyWorld(), snap([session({ alias: "agent-1" })]), T0, { seated: true });
+    const first = w.actors[0]!;
+    expect(first.phase).toBe("seated");
+    expect(first.pos).toEqual(seatOrigin(0));
+    expect(first.move).toBeNull();
+    reconcile(w, snap([session({ alias: "agent-1" }), session({ alias: "agent-2" })]), T0 + 1000);
+    const second = w.actors[1]!;
+    expect(second.phase).toBe("entering");
+    expect(second.pos).toEqual(doorOrigin(1, 2));
+    // the flag never moves a session already in the world
+    expect(w.actors[0]!.pos).toEqual(seatOrigin(0));
+  });
 });

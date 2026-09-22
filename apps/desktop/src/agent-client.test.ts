@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { checkToken, countsOf, fetchCounts, probeHealth } from "./agent-client";
+import { checkToken, countsOf, fetchCounts, fetchSnapshot, probeHealth } from "./agent-client";
 import { snapshot } from "./testing/snapshot";
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void;
@@ -105,5 +105,25 @@ describe("fetchCounts", () => {
   it("is null when the reply is not a snapshot or nothing answers", async () => {
     expect(await fetchCounts(await serve(reply({ version: 2 })))).toBeNull();
     expect(await fetchCounts(await closedPort())).toBeNull();
+  });
+});
+
+describe("fetchSnapshot", () => {
+  it("is the agent's snapshot, and null for a body that is not one, an error status or nothing listening", async () => {
+    const s = snapshot(["working", "idle"]);
+    expect(await fetchSnapshot(await serve(reply(s)))).toEqual(s);
+    expect(await fetchSnapshot(await serve(reply({ sessions: "many" })))).toBeNull();
+    expect(await fetchSnapshot(await serve(reply(s, 500)))).toBeNull();
+    expect(await fetchSnapshot(await closedPort())).toBeNull();
+  });
+
+  it("sends no Origin, so an agent that refuses the app's page still answers main", async () => {
+    let origin: string | undefined = "unset";
+    const port = await serve((req, res) => {
+      origin = req.headers.origin;
+      reply(snapshot([]))(req, res);
+    });
+    await fetchSnapshot(port);
+    expect(origin).toBeUndefined();
   });
 });

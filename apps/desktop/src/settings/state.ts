@@ -16,6 +16,8 @@ export type SettingsState = {
   hooks: "missing" | "current" | "stale" | "unreadable";
   detail: "none" | "hints" | "paths";
   openAtLogin: boolean;
+  /** One window holding the whole scene, or a frameless window per pane. */
+  view: "window" | "widgets";
   logDir: string;
   /** One sentence about the last action, when it was refused, failed, or was saved but not applied; null otherwise. */
   notice: string | null;
@@ -35,6 +37,7 @@ export type SettingsApi = {
   uninstallHooks(): Promise<SettingsState>;
   setDetail(level: SettingsState["detail"]): Promise<SettingsState>;
   setOpenAtLogin(on: boolean): Promise<SettingsState>;
+  setView(view: SettingsState["view"]): Promise<SettingsState>;
   retryAgent(): Promise<SettingsState>;
   openLogs(): Promise<void>;
   /** Subscribes to the states main pushes on its own; returns the unsubscribe. */

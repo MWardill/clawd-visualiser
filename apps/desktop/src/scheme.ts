@@ -1,7 +1,7 @@
 // The app:// scheme: how the window's pages and their files are served with no web server. Chromium
-// hands main each request for app://<host>/<path>, and main answers from one of two directories — the
-// visualiser's and the settings page's — each host with its own Content Security Policy. Electron-free,
-// so it is tested.
+// hands main each request for app://<host>/<path>, and main answers from one of three directories (the
+// visualiser's, the settings page's and the widget page's), each host with its own Content Security
+// Policy. Electron-free, so it is tested.
 import { DESKTOP_ORIGIN } from "@clawd/core";
 import { readFile } from "node:fs/promises";
 import { extname, isAbsolute, join, relative, resolve } from "node:path";
@@ -13,6 +13,9 @@ export const APP_URL = `${DESKTOP_ORIGIN}/`;
 /** The settings window's host; its page is served from dist/settings (design §7). */
 export const SETTINGS_HOST = "settings";
 export const SETTINGS_URL = `${APP_SCHEME}://${SETTINGS_HOST}/`;
+/** The widget windows' host; their page is served from dist/widget. Every widget loads this one URL. */
+export const WIDGET_HOST = "widget";
+export const WIDGET_URL = `${APP_SCHEME}://${WIDGET_HOST}/`;
 
 type AppUrl = { host: string; pathname: string };
 
@@ -33,7 +36,7 @@ export function hostOf(url: string): string | null {
   return parseAppUrl(url)?.host ?? null;
 }
 
-export type SchemeDirs = { clawd: string; settings: string };
+export type SchemeDirs = { clawd: string; settings: string; widget: string };
 
 const HTML_TYPE = "text/html; charset=utf-8";
 
@@ -85,12 +88,14 @@ export const SETTINGS_POLICY = [
   "frame-ancestors 'none'",
 ].join("; ");
 
-/** Everything that differs between our two hosts, looked up once per request. */
+/** Everything that differs between our three hosts, looked up once per request. */
 type HostEntry = { dir(dirs: SchemeDirs): string; policy(port: number): string; notFound: string | null };
 
 const HOSTS: ReadonlyMap<string, HostEntry> = new Map<string, HostEntry>([
   [APP_HOST, { dir: (dirs) => dirs.clawd, policy: contentSecurityPolicy, notFound: "404.html" }],
   [SETTINGS_HOST, { dir: (dirs) => dirs.settings, policy: () => SETTINGS_POLICY, notFound: null }],
+  // A widget is sent its snapshot over its bridge and fetches nothing, so it gets the policy that lets a page reach nothing.
+  [WIDGET_HOST, { dir: (dirs) => dirs.widget, policy: () => SETTINGS_POLICY, notFound: null }],
 ]);
 
 /**

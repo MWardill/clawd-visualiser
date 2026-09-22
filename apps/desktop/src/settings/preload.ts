@@ -15,6 +15,7 @@ contextBridge.exposeInMainWorld("clawd", {
   uninstallHooks: () => invoke<SettingsState>(CHANNELS.uninstallHooks),
   setDetail: (level: SettingsState["detail"]) => invoke<SettingsState>(CHANNELS.setDetail, level),
   setOpenAtLogin: (on: boolean) => invoke<SettingsState>(CHANNELS.setOpenAtLogin, on),
+  setView: (view: SettingsState["view"]) => invoke<SettingsState>(CHANNELS.setView, view),
   retryAgent: () => invoke<SettingsState>(CHANNELS.retryAgent),
   openLogs: () => invoke<void>(CHANNELS.openLogs),
   onState: (cb: (s: SettingsState) => void) => {

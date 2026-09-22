@@ -20,3 +20,8 @@ export function sameOrigin(current: string, target: string): boolean {
   const b = site(target);
   return a !== null && b !== null && a === b;
 }
+
+/** The page's URL with one session named in the hash, which the web app reads as a link to that session's detail sheet. */
+export function sessionUrl(base: string, alias: string): string {
+  return `${base.split("#")[0] ?? base}#session=${encodeURIComponent(alias)}`;
+}

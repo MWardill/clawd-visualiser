@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { MARGIN, MINI_HOME, PANE_GAP, PANE_W, SEAT_H, SEAT_W, SPRITE_DX, SPRITE_DY, TITLE_ROWS, doorOrigin, layoutPanes, miniSlot, paneHeight, paneRows, seatOrigin } from "./layout";
+import { MARGIN, MINI_HOME, PANE_GAP, PANE_W, SEAT_H, SEAT_W, SPRITE_DX, SPRITE_DY, TITLE_ROWS, contentExtent, doorOrigin, layoutPanes, miniSlot, paneHeight, paneRows, seatOrigin } from "./layout";
 
 describe("layout", () => {
   it("sizes a pane by rows of two seats, never less than one row", () => {
@@ -48,5 +48,20 @@ describe("layout", () => {
     const tiny = layoutPanes([{ alias: "a", seatsUsed: 1 }], 10);
     expect(tiny[0]).toMatchObject({ x: MARGIN, y: MARGIN, w: PANE_W });
     expect(layoutPanes([], 160)).toEqual([]);
+  });
+
+  it("lays panes out inside a margin of the caller's choosing", () => {
+    const tight = layoutPanes([{ alias: "a", seatsUsed: 1 }, { alias: "b", seatsUsed: 1 }], 200, 1);
+    expect(tight.map((r) => [r.x, r.y])).toEqual([[1, 1], [1 + PANE_W + PANE_GAP, 1]]);
+    // the wrap is measured against the same margin
+    const wrapped = layoutPanes([{ alias: "a", seatsUsed: 1 }, { alias: "b", seatsUsed: 1 }], 1 + PANE_W + PANE_GAP + PANE_W, 1);
+    expect(wrapped[1]).toMatchObject({ x: 1, y: 1 + paneHeight(1) + PANE_GAP });
+  });
+
+  it("measures what is laid out: the panes' far edges plus the margin, and nothing for no panes", () => {
+    expect(contentExtent([], 1)).toBeNull();
+    expect(contentExtent(layoutPanes([{ alias: "a", seatsUsed: 1 }], 200, 1), 1)).toEqual({ w: PANE_W + 2, h: paneHeight(1) + 2 });
+    expect(contentExtent(layoutPanes([{ alias: "a", seatsUsed: 3 }], 200, 1), 1)).toEqual({ w: PANE_W + 2, h: paneHeight(3) + 2 });
+    expect(contentExtent(layoutPanes([{ alias: "a", seatsUsed: 1 }], 200), MARGIN)).toEqual({ w: PANE_W + 2 * MARGIN, h: paneHeight(1) + 2 * MARGIN });
   });
 });

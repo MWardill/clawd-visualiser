@@ -11,6 +11,7 @@ function recorder() {
     calls,
     actions: {
       open: () => void calls.push("open"),
+      showWidgets: () => void calls.push("widgets"),
       settings: () => void calls.push("settings"),
       setOpenAtLogin: (on: boolean) => void calls.push(`login ${on}`),
       quit: () => void calls.push("quit"),
@@ -50,6 +51,16 @@ describe("trayMenuTemplate", () => {
     const off = recorder();
     click(trayMenuTemplate(false, off.actions)[2]);
     expect(off.calls).toEqual(["login true"]);
+  });
+
+  it("puts Show widgets above Open in widget view only; Open is the full window in either", () => {
+    const { calls, actions } = recorder();
+    const menu = trayMenuTemplate(false, actions, "widgets");
+    expect(menu.map((item) => item.label ?? item.type)).toEqual(["Show widgets", "Open", "Settings", "Start on login", "separator", "Quit"]);
+    click(menu[0]);
+    click(menu[1]);
+    expect(calls).toEqual(["widgets", "open"]);
+    expect(trayMenuTemplate(false, actions, "window").map((item) => item.label ?? item.type)).toEqual(["Open", "Settings", "Start on login", "separator", "Quit"]);
   });
 });
 

@@ -53,6 +53,7 @@ export function createHandlers(actions: BridgeActions, fallback: SettingsState):
     [CHANNELS.uninstallHooks]: () => answer(() => actions.uninstallHooks()),
     [CHANNELS.setDetail]: checked(DetailLevelSchema, (level) => actions.setDetail(level)),
     [CHANNELS.setOpenAtLogin]: checked(z.boolean(), (on) => actions.setOpenAtLogin(on)),
+    [CHANNELS.setView]: checked(z.enum(["window", "widgets"]), (view) => actions.setView(view)),
     [CHANNELS.retryAgent]: () => answer(() => actions.retryAgent()),
     [CHANNELS.openLogs]: async () => {
       try {

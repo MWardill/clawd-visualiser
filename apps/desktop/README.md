@@ -37,6 +37,14 @@ Settings opens from the tray. It watches folders, installs Claude Code's hooks u
 binary, sets the detail level and toggles start on login, so a machine can be set up from the app
 alone. `CLAWD_HOME` and `CLAUDE_CONFIG_DIR` point it at scratch folders while testing.
 
+**Widget view.** Settings has a View choice: *window*, the whole scene in one window, or *widgets*,
+where each folder's box is its own frameless, transparent window. Drag a box anywhere; it is found
+again where it was left, by folder name, in `desktop.json`. The pin in its title row, or **Pin on
+top** in its right-click menu, keeps it above other windows. Clicking a Clawd opens the full window
+on that session's detail sheet, and the tray's **Open** opens it in either view. In widget view a
+plain launch shows no window: the boxes appear with the sessions. Clicking the tray icon brings the
+boxes forward, or opens the full window when there are none.
+
 For work on the page, the dev loop loads the Next dev server instead, with hot reload:
 
 ```
@@ -389,3 +397,56 @@ refused, the export's `404.html` for a missing page, and `connect-src 'self'`.
 poller survives a stop followed at once by a start, and its command runner ends the whole process
 tree on overflow as well as on a timeout or an abort, with `taskkill` called by its full path. A
 session that has waited 36 hours for an answer leaves the view until it is answered.
+
+### Stage 9: widgets
+
+`docs/superpowers/specs/2026-09-21-desktop-widgets-design.md`. Every pane can be its own window.
+
+**Frameless and transparent.** `frame: false` takes the title bar and the border away, and
+`transparent: true` with a fully transparent `backgroundColor` takes the background: what the page
+does not paint is the desktop. Such a window cannot be resized by hand on Windows, which suits a
+widget; main resizes it, to the size its page reports.
+
+**Moving a window from main.** With no title bar there is nothing for Windows to drag. CSS
+`-webkit-app-region: drag` would hand a region to Windows, which then swallows every click, hover and
+right button in it, so the Clawds, the pin and the menu could not live there. The page reports a
+press instead, and main moves the window: it reads `screen.getCursorScreenPoint()` itself, because a
+page's `screenX` is not in the units `setBounds` takes on a machine with two scale factors, and it
+passes the width and height with every move, because a position alone lets the window's size drift
+on a scaled display.
+
+**Always on top is a level.** `setAlwaysOnTop(true, "floating")` does not nudge the window up the
+z-order once; it puts it in a band above ordinary windows, whatever has the focus. `showInactive()`
+shows a window without giving it the keyboard. Raising one is harder than it looks: Windows refuses
+a plain move to the top (`moveTop()`) from a process that is not in the foreground, since only a
+topmost window may sit above the active one, so clicking the tray while an editor had the focus
+brought nothing up. The cure, found in the stage's own walk, is to make the window topmost and at
+once not: Windows answers the second call by placing it above every non-topmost window, the active
+one included, and still without activating it. From the tray menu that has to wait a quarter
+second: closing the menu gives the focus back to the window that had it, which comes to the top
+again and would cover a raise made at once.
+
+**Many windows, one page.** Every widget loads `app://widget/` and sends on the same channels.
+`event.sender` is the only thing that tells them apart, and the only identity main trusts: a message
+from a sender the controller did not create is ignored, and a clicked alias is accepted only if main
+sent it to that window.
+
+**`invoke` and `send`.** The settings bridge is all `invoke`, a question with an answer. Most of a
+widget's calls have no answer, and a drag sends one per frame, so they are `send`, with `ipcMain.on`
+on the other side. No handler may throw: an exception nothing catches in main restarts the agent.
+
+**`Menu.popup`.** The page cancels `contextmenu` and asks; main builds the native menu and pops it
+on that window.
+
+**Same-document navigation.** A Clawd clicked in a widget opens the full window at
+`app://clawd/#session=<alias>`. Loading the URL a window already shows, with only the hash changed,
+does not reload the page: it fires `hashchange`, which the web app reads as a link.
+
+**Shutting the widgets down.** Quitting closes every widget, but the app's own agent goes on emitting
+snapshots until `will-quit` stops it, and a snapshot arriving then would open a fresh window during
+the quit. The controller has a `shutdown()` for that: it closes everything and ignores what comes
+after.
+
+**The icon.** The packaged exe always carried the Clawd, stamped by electron-builder. A development
+run is `electron.exe`, which carries Electron's, and no window was given an `icon`. Every window is
+now, from `app.ico` beside the tray's icons.
