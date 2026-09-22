@@ -12,6 +12,7 @@ export const CHANNELS = {
   setDetail: "clawd:settings/setDetail",
   setOpenAtLogin: "clawd:settings/setOpenAtLogin",
   setView: "clawd:settings/setView",
+  setFinishedPopup: "clawd:settings/setFinishedPopup",
   retryAgent: "clawd:settings/retryAgent",
   openLogs: "clawd:settings/openLogs",
   /** Main to the page: the state changed. */

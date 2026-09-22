@@ -284,6 +284,7 @@ function run(): void {
       detail: detailLevel(config ?? {}),
       openAtLogin: openAtLogin(),
       view: store.get().view ?? "window",
+      finishedPopup: store.get().finishedPopup ?? false,
       logDir: agentPaths(home).logs,
       notice: null,
     });
@@ -316,6 +317,11 @@ function run(): void {
     saveDetail: (level) => saveDetail({ home, level }),
     applyOpenAtLogin,
     applyView,
+    // Remembered here; Task 9 hands it to the widgets' controller too.
+    applyPopup: (on) => {
+      store.update({ finishedPopup: on });
+      return store.usable();
+    },
     openLogs: () => shell.openPath(agentPaths(home).logs).then(() => {}),
     log,
   });

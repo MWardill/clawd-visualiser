@@ -13,6 +13,7 @@ const STATE: SettingsState = {
   detail: "none",
   openAtLogin: false,
   view: "window",
+  finishedPopup: false,
   logDir: "C:\\logs",
   notice: null,
 };
@@ -47,6 +48,7 @@ async function load(over: Partial<SettingsApi> = {}, initial: SettingsState = ST
     setDetail: async () => initial,
     setOpenAtLogin: async () => initial,
     setView: async () => initial,
+    setFinishedPopup: async () => initial,
     retryAgent: async () => initial,
     openLogs: async () => {},
     onState: (cb) => {
@@ -314,5 +316,22 @@ describe("the settings page", () => {
     expect(radio("view:widgets").checked).toBe(true);
     expect(sectionRegion("view").textContent).toBe(held);
     expect(region().children).toHaveLength(0);
+  });
+
+  it("offers the popup as an off/on pair in the View section, asks main for the one chosen, and keeps the view radios where they were", async () => {
+    const asked: boolean[] = [];
+    await load({
+      setFinishedPopup: async (on) => {
+        asked.push(on);
+        return { ...STATE, finishedPopup: on };
+      },
+    });
+    expect(radio("popup:off").checked).toBe(true);
+    expect(radio("popup:off").closest("section")?.querySelector("h2")?.textContent).toBe("View");
+    choose("popup:on");
+    await flush();
+    expect(asked).toEqual([true]);
+    expect(radio("popup:on").checked).toBe(true);
+    expect(radio("view:window").checked).toBe(true);
   });
 });

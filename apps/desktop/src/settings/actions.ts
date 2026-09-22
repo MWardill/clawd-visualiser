@@ -30,6 +30,8 @@ export type ActionDeps = {
   applyOpenAtLogin(on: boolean): void;
   /** Applies the view now and remembers it. False when desktop.json could not be read at launch: the choice then holds for this run only. */
   applyView(view: View): boolean;
+  /** Applies the popup choice now and remembers it. False when desktop.json could not be read at launch: the choice then holds for this run only. */
+  applyPopup(on: boolean): boolean;
   openLogs(): Promise<void>;
   log: Logger;
 };
@@ -39,6 +41,7 @@ export const NO_CONFIG_NOTICE = "this app is attached to another agent and has n
 export const CONFIG_GONE_NOTICE = "the agent's config file was missing, so the agent has been started again to write a new one; choose Install hooks again";
 export const OTHER_HOME_NOTICE = "the agent this app is attached to was started from another home and would refuse these hooks; stop it and this app will start its own";
 export const NO_CONFIG_TO_CHANGE = "there is no config to change yet";
+/** For either View choice: the view, and the popup. */
 export const VIEW_NOT_REMEMBERED = "applied for this run; desktop.json could not be read when the app started, so the choice will not be remembered";
 export const SEE_LOG = "see the log";
 
@@ -184,6 +187,17 @@ export function createSettingsActions(deps: ActionDeps): BridgeActions {
         return answer(`the view could not be changed; ${SEE_LOG}`);
       }
       deps.log("desktop.viewChanged", { widgets: view === "widgets", remembered });
+      return answer(remembered ? null : VIEW_NOT_REMEMBERED);
+    },
+    async setFinishedPopup(on) {
+      let remembered: boolean;
+      try {
+        remembered = deps.applyPopup(on);
+      } catch {
+        deps.log("desktop.popupChanged", { on, failed: true });
+        return answer(`the popup setting could not be changed; ${SEE_LOG}`);
+      }
+      deps.log("desktop.popupChanged", { on, remembered });
       return answer(remembered ? null : VIEW_NOT_REMEMBERED);
     },
     async retryAgent() {

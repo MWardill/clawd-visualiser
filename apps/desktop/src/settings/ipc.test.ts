@@ -11,6 +11,7 @@ const STATE: SettingsState = {
   detail: "none",
   openAtLogin: false,
   view: "window",
+  finishedPopup: false,
   logDir: "C:\\logs",
   notice: null,
 };
@@ -50,6 +51,10 @@ function actions(over: Partial<BridgeActions> = {}, fallback: SettingsState = ST
     },
     setView: async (view) => {
       calls.push(`setView ${view}`);
+      return STATE;
+    },
+    setFinishedPopup: async (on) => {
+      calls.push(`setFinishedPopup ${on}`);
       return STATE;
     },
     retryAgent: async () => {
@@ -180,5 +185,13 @@ describe("createHandlers", () => {
     expect(await handlers[CHANNELS.setView]!("floating")).toEqual(STATE);
     expect(await handlers[CHANNELS.setView]!(undefined)).toEqual(STATE);
     expect(calls).toEqual(["setView widgets", "setView window"]);
+  });
+
+  it("passes the popup choice on, and answers anything that is not a boolean with the state as it is", async () => {
+    const { calls, handlers } = actions();
+    await handlers[CHANNELS.setFinishedPopup]!(true);
+    await handlers[CHANNELS.setFinishedPopup]!(false);
+    expect(await handlers[CHANNELS.setFinishedPopup]!("yes")).toEqual(STATE);
+    expect(calls).toEqual(["setFinishedPopup true", "setFinishedPopup false"]);
   });
 });
