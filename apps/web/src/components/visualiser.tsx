@@ -16,9 +16,9 @@ export function Visualiser() {
   // names the generation it was made in -- a feed switch implicitly closes the sheet.
   const [selection, setSelection] = useState<{ alias: string; generation: number } | null>(null);
   // A session named by a #session=<alias> link, forgotten when the sheet is closed, another Clawd
-  // is chosen, or the feed changes. A link read while no live feed was running (load, probing, or
-  // the simulated feed) starts with generation null and waits for the first live feed to pin it --
-  // that first feed need not be a live one, so the link cannot yet belong to a generation.
+  // is chosen, or the feed changes. A link read while no live feed is running (load, probing, or
+  // the simulated feed) waits for the first live feed, since the first feed to start may be the
+  // simulated one.
   const [link, setLink] = useState<SessionLink | null>(null);
   // Adjusting state while rendering (React's documented pattern): pins a waiting link the moment a
   // live feed is running. It cannot loop -- once pinned, pinLink returns the same reference back.

@@ -78,7 +78,7 @@ async function load(initial: WidgetState | null = STATE, hit: string | null = nu
   await flush();
   const canvas = document.getElementById("scene") as HTMLElement;
   // Non-zero, so a test relying on the page's `clientX/Y - box.left/top` subtraction exercises it.
-  canvas.getBoundingClientRect = () => ({ left: 10, top: 20 }) as DOMRect;
+  canvas.getBoundingClientRect = () => ({ left: 10, top: 10 }) as DOMRect;
   const pin = document.getElementById("pin") as HTMLElement;
   return {
     calls,
@@ -146,7 +146,7 @@ describe("the widget page", () => {
     page.frame();
     page.canvas.dispatchEvent(pointer("pointerup", { screenX: 502, screenY: 302, clientX: 62, clientY: 72 }));
     expect(page.calls).toEqual(["dragStart", "dragEnd", "select agent-1"]);
-    expect(page.hits).toEqual([[52, 52]]);
+    expect(page.hits).toEqual([[52, 62]]);
   });
 
   it("selects nothing when the click was not on a Clawd", async () => {

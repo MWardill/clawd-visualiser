@@ -108,7 +108,16 @@ function run(): void {
   // The app's own agent hands main every snapshot. An agent it is only attached to does not, so
   // while widgets are shown it is asked once a second.
   const feed = createAttachedFeed({ fetch: (port) => fetchSnapshot(port), onSnapshot: (s, port) => widgets.setSnapshot(s, `attached:${port}`) });
-  const followFeed = (): void => feed.watch(quitting ? null : feedPort(host.state(), view()));
+  /** The port the feed is asking, or null; what it was last told, so a stop can be told from a repeat. */
+  let feeding: number | null = null;
+  const followFeed = (): void => {
+    const port = quitting ? null : feedPort(host.state(), view());
+    // Leaving widget view while attached stops the feed, and what the controller holds goes stale
+    // from then on: forgotten now, so the next widget view opens from a fresh answer, not from minutes ago.
+    if (port === null && feeding !== null && host.state().mode === "attached") widgets.noSource();
+    feeding = port;
+    feed.watch(port);
+  };
 
   // The host's change callback fires on every snapshot the agent produces, and building the state
   // reads two files and asks Electron for the login item synchronously, on the same event loop the
@@ -236,7 +245,7 @@ function run(): void {
       Menu.buildFromTemplate(
         trayMenuTemplate(
           openAtLogin(),
-          { open: () => showWindow(), showWidgets: () => void widgets.showAll(), settings: showSettings, setOpenAtLogin: (on: boolean) => { applyOpenAtLogin(on); pushState(); }, quit: () => app.quit() },
+          { open: () => showWindow(), showWidgets: () => { if (widgets.showAll() === 0) showWindow(); }, settings: showSettings, setOpenAtLogin: (on: boolean) => { applyOpenAtLogin(on); pushState(); }, quit: () => app.quit() },
           view(),
         ),
       ),

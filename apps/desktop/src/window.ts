@@ -71,7 +71,10 @@ export function createSettingsWindow(preload: string, icon: string): BrowserWind
  * A widget: no frame, no background, no shadow, no taskbar entry, and no way to resize, maximise or
  * minimise it by hand. `transparent` makes what the page does not paint the desktop; the background
  * colour has to be fully transparent too, or the window is filled before the page draws. Made
- * hidden: the controller shows it once its page has said what size it needs.
+ * hidden: the controller shows it once its page has said what size it needs. `type: "toolbar"` is
+ * Windows' tool-window style, which keeps the widget out of Alt+Tab as `skipTaskbar` keeps it off
+ * the taskbar; this app builds for Windows only. `closable: false` removes the system close command,
+ * so Alt+F4 on a focused box does nothing; `win.close()` from main still closes it.
  */
 const WIDGET_CHROME: BrowserWindowConstructorOptions = {
   frame: false,
@@ -84,10 +87,16 @@ const WIDGET_CHROME: BrowserWindowConstructorOptions = {
   fullscreenable: false,
   skipTaskbar: true,
   show: false,
+  type: "toolbar",
+  closable: false,
 };
 
 export function createWidgetWindow(preload: string, bounds: Bounds, icon: string): BrowserWindow {
-  return createHardenedWindow({ url: WIDGET_URL, title: "Clawd widget", size: bounds, bounds, preload, icon, chrome: WIDGET_CHROME });
+  const win = createHardenedWindow({ url: WIDGET_URL, title: "Clawd widget", size: bounds, bounds, preload, icon, chrome: WIDGET_CHROME });
+  // The hidden default menu would otherwise still supply Ctrl+W, Ctrl+R and the zoom shortcuts to a
+  // focused box, and zoom changes the size the page reports.
+  win.setMenu(null);
+  return win;
 }
 
 /**
@@ -123,6 +132,9 @@ export function asWidgetWindow(win: BrowserWindow): WidgetWindow {
     close: () => {
       if (!win.isDestroyed()) win.close();
     },
+    // A load aborted because another superseded it (ERR_ABORTED) and a renderer that exited cleanly
+    // both count as failures here, accepted: each costs one of the label's three tries, and only
+    // when the close-ordering race hits.
     onFailed: (cb) => {
       win.webContents.on("did-fail-load", (_event, _code, _description, _url, isMainFrame) => {
         if (isMainFrame) cb();

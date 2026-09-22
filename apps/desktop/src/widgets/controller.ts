@@ -94,9 +94,11 @@ type Entry = {
 
 /**
  * A state as text, less the time the snapshot was made, which changes with every snapshot and draws
- * nothing. Compares JSON text, which is order-sensitive; that holds here because every snapshot the
- * controller sees was normalised by core's SnapshotSchema.parse, and paneSnapshot/emptied spread that
- * same object, so key order never drifts — a snapshot built any other way could send on every poll.
+ * nothing. Compares JSON text, which is order-sensitive: the attached feed's snapshots are normalised
+ * by core's SnapshotSchema.parse (through fetchSnapshot), and the app's own agent's arrive in-process
+ * from core's builder, unparsed, whose key order is stable too; paneSnapshot/emptied spread that same
+ * object either way, so key order never drifts in practice. The worst case of a differently ordered
+ * snapshot is one extra push, not a wrong one.
  */
 const keyOf = (state: WidgetState): string => JSON.stringify({ ...state, snapshot: state.snapshot === null ? null : { ...state.snapshot, generatedAt: "" } });
 

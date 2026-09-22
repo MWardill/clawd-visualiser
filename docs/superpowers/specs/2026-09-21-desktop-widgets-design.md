@@ -234,9 +234,12 @@ src/attached-feed.ts   snapshots while attached: polls the agent on the port; te
 - **Windows.** `window.ts` gains `createWidgetWindow(preload, bounds)`, made through
   `createHardenedWindow`, whose spec gains a `chrome` field for the options that differ: `frame:
   false`, `transparent: true`, `resizable: false`, `maximizable: false`, `minimizable: false`,
-  `fullscreenable: false`, `skipTaskbar: true`, `hasShadow: false`, `show: false`, and a fully
-  transparent `backgroundColor`. A widget is shown with `showInactive()` once its page has reported
-  the size it needs, so it never appears empty or at the wrong size, and never takes the keyboard.
+  `fullscreenable: false`, `skipTaskbar: true`, `hasShadow: false`, `show: false`, a fully
+  transparent `backgroundColor`, `type: "toolbar"` (Windows' tool-window style, which keeps a widget
+  out of Alt+Tab), and `closable: false` (Alt+F4 on a focused box then does nothing). A widget's
+  window menu is removed too, so the default menu's shortcuts (Ctrl+W, Ctrl+R, zoom) cannot reach a
+  focused box. A widget is shown with `showInactive()` once its page has reported the size it needs,
+  so it never appears empty or at the wrong size, and never takes the keyboard.
 - **Levels.** Pinned: `setAlwaysOnTop(true, "floating")`. Raised: `setAlwaysOnTop(true,
   "screen-saver")`, `moveTop()`, `showInactive()`. Lowered and unpinned: `setAlwaysOnTop(false)`.
   Stage 10's checklist settles whether `screen-saver` is the level that clears the taskbar and a
@@ -355,6 +358,7 @@ Walked by the maintainer on the packaged build, against scratch folders (`CLAWD_
 - [ ] A Clawd clicked in a widget while the full window is hidden or minimised brings that window up on the sheet.
 - [ ] With `dist/widget/index.html` renamed in a development run, choosing widgets shows nothing and logs nothing: a broken widget build fails silently (known; no code for it this stage).
 - [ ] The first reveal of a widget (a transparent, `show: false` window) and its first resize after the page reports a size show no white flash or lost transparency.
+- [ ] Alt+F4, Ctrl+W, Ctrl+R and Ctrl+plus on a focused box do nothing: the box stays, unreloaded, at the same size.
 
 ## 11. Tests
 
