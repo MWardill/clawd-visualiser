@@ -118,11 +118,20 @@ export function asWidgetWindow(win: BrowserWindow): WidgetWindow {
     setPinned: (on) => {
       if (!win.isDestroyed()) win.setAlwaysOnTop(on, "floating");
     },
-    // showInactive and moveTop: on screen and above its neighbours, and the keyboard stays where it was.
+    // On screen and above its neighbours, and the keyboard stays where it was. A plain move to the
+    // top (`moveTop`) is refused by Windows for a process that is not in the foreground: only a
+    // topmost window may sit above the active one. So an unpinned widget is made topmost and at once
+    // not, which Windows answers by placing it above every non-topmost window, the active one
+    // included, without activating it. A pinned one is topmost already and only moves up its band.
     reveal: () => {
       if (win.isDestroyed()) return;
       win.showInactive();
-      win.moveTop();
+      if (win.isAlwaysOnTop()) {
+        win.moveTop();
+        return;
+      }
+      win.setAlwaysOnTop(true, "floating");
+      win.setAlwaysOnTop(false);
     },
     send: (state) => {
       if (!win.isDestroyed()) win.webContents.send(WIDGET_CHANNELS.state, state);

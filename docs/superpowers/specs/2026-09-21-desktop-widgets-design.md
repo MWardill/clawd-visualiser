@@ -245,7 +245,11 @@ src/attached-feed.ts   snapshots while attached: polls the agent on the port; te
 - **Levels.** Pinned: `setAlwaysOnTop(true, "floating")`. Raised: `setAlwaysOnTop(true,
   "screen-saver")`, `moveTop()`, `showInactive()`. Lowered and unpinned: `setAlwaysOnTop(false)`.
   Stage 10's checklist settles whether `screen-saver` is the level that clears the taskbar and a
-  maximised window on Windows 11; the level is one constant.
+  maximised window on Windows 11; the level is one constant. Bringing an unpinned widget forward
+  (its first showing, or the tray) is not a `moveTop()`: Windows refuses that from a process not in
+  the foreground, found in stage 9's walk. It is made topmost and at once not, which places it
+  above every non-topmost window without activating it; a pinned widget, topmost already, gets
+  `moveTop()` within its band.
 - **Snapshots.** `AgentHostDeps` gains an optional `onSnapshot(s, run)`, called inside the guard the
   host already applies to its own agent's snapshots, so one from an agent already replaced never
   arrives; `run` is the host's count of starts. While the host is `attached` and either setting is

@@ -417,7 +417,12 @@ on a scaled display.
 
 **Always on top is a level.** `setAlwaysOnTop(true, "floating")` does not nudge the window up the
 z-order once; it puts it in a band above ordinary windows, whatever has the focus. `showInactive()`
-and `moveTop()` show a window and raise it without giving it the keyboard.
+shows a window without giving it the keyboard. Raising one is harder than it looks: Windows refuses
+a plain move to the top (`moveTop()`) from a process that is not in the foreground, since only a
+topmost window may sit above the active one, so clicking the tray while an editor had the focus
+brought nothing up. The cure, found in the stage's own walk, is to make the window topmost and at
+once not: Windows answers the second call by placing it above every non-topmost window, the active
+one included, and still without activating it.
 
 **Many windows, one page.** Every widget loads `app://widget/` and sends on the same channels.
 `event.sender` is the only thing that tells them apart, and the only identity main trusts: a message
