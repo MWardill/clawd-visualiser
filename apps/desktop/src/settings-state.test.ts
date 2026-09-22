@@ -12,6 +12,7 @@ const INPUT = {
   hooks: "current" as const,
   detail: "none" as const,
   openAtLogin: false,
+  view: "widgets" as const,
   logDir: "C:\\Users\\me\\.clawd\\logs",
   notice: null,
 };
@@ -25,6 +26,7 @@ describe("settingsState", () => {
       hooks: "current",
       detail: "none",
       openAtLogin: false,
+      view: "widgets",
       logDir: INPUT.logDir,
       notice: null,
     });

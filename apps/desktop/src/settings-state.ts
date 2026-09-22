@@ -3,6 +3,7 @@
 import { DEFAULT_PORT } from "@clawd/agent";
 import type { DetailLevel } from "@clawd/core";
 import type { HostMode, HostState } from "./agent-host";
+import type { View } from "./desktop-state";
 import type { HookStatus } from "./hooks";
 import type { SettingsState } from "./settings/state";
 export type { SettingsState };
@@ -12,6 +13,7 @@ type Extends<A extends B, B> = true;
 type ModeMatches = Extends<HostMode, SettingsState["agent"]["mode"]>;
 type HooksMatch = Extends<HookStatus, SettingsState["hooks"]>;
 type DetailMatches = Extends<DetailLevel, SettingsState["detail"]>;
+type ViewMatches = Extends<View, SettingsState["view"]>;
 
 export type SettingsInput = {
   host: HostState;
@@ -22,6 +24,7 @@ export type SettingsInput = {
   hooks: HookStatus;
   detail: DetailLevel;
   openAtLogin: boolean;
+  view: View;
   logDir: string;
   notice: string | null;
 };
@@ -34,6 +37,7 @@ export function settingsState(input: SettingsInput): SettingsState {
     hooks: input.hooks,
     detail: input.detail,
     openAtLogin: input.openAtLogin,
+    view: input.view,
     logDir: input.logDir,
     notice: input.notice,
   };

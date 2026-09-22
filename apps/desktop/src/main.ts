@@ -196,6 +196,7 @@ function run(): void {
       hooks: await currentHookStatus({ config: read, settingsPath, runtime, binDir: agentPaths(home).bin, hooksDir: dist.hooks }),
       detail: detailLevel(config ?? {}),
       openAtLogin: openAtLogin(),
+      view: store.get().view ?? "window",
       logDir: agentPaths(home).logs,
       notice: null,
     });
@@ -227,6 +228,11 @@ function run(): void {
     uninstallHooks: () => uninstallHooks({ home, settingsPath, now: Date.now }),
     saveDetail: (level) => saveDetail({ home, level }),
     applyOpenAtLogin,
+    // Remembered here; Task 14 hands it to the widgets' controller too.
+    applyView: (next) => {
+      store.update({ view: next });
+      return store.usable();
+    },
     openLogs: () => shell.openPath(agentPaths(home).logs).then(() => {}),
     log,
   });

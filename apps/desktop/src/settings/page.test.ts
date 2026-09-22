@@ -12,6 +12,7 @@ const STATE: SettingsState = {
   hooks: "current",
   detail: "none",
   openAtLogin: false,
+  view: "window",
   logDir: "C:\\logs",
   notice: null,
 };
@@ -45,6 +46,7 @@ async function load(over: Partial<SettingsApi> = {}, initial: SettingsState = ST
     uninstallHooks: async () => initial,
     setDetail: async () => initial,
     setOpenAtLogin: async () => initial,
+    setView: async () => initial,
     retryAgent: async () => initial,
     openLogs: async () => {},
     onState: (cb) => {
@@ -253,7 +255,7 @@ describe("the settings page", () => {
 
   it("gives every section that owns a control its own live region, there from the first draw", async () => {
     await load();
-    for (const name of ["agent", "folders", "hooks", "detail", "login"]) {
+    for (const name of ["agent", "view", "folders", "hooks", "detail", "login"]) {
       expect(sectionRegion(name).getAttribute("role"), name).toBe("status");
       expect(sectionRegion(name).hidden, name).toBe(false);
       expect(sectionRegion(name).children, name).toHaveLength(0);
@@ -279,7 +281,7 @@ describe("the settings page", () => {
     const page = await load();
     page.push({ ...STATE, notice: "saved; the agent this app is attached to keeps its own settings until it is restarted" });
     expect(region().textContent).toContain("keeps its own settings");
-    for (const name of ["agent", "folders", "hooks", "detail", "login"]) expect(sectionRegion(name).children, name).toHaveLength(0);
+    for (const name of ["agent", "view", "folders", "hooks", "detail", "login"]) expect(sectionRegion(name).children, name).toHaveLength(0);
   });
 
   it("takes a notice out of one section when the next one belongs to another", async () => {
@@ -293,5 +295,24 @@ describe("the settings page", () => {
     await flush();
     expect(sectionRegion("hooks").children).toHaveLength(0);
     expect(sectionRegion("folders").textContent).toBe(root);
+  });
+
+  it("offers the view as two radios after This app, asks main for the one chosen, and puts a notice about it in its own section", async () => {
+    const asked: string[] = [];
+    const held = "applied for this run; desktop.json could not be read when the app started, so the choice will not be remembered";
+    await load({
+      setView: async (view) => {
+        asked.push(view);
+        return { ...STATE, view, notice: held };
+      },
+    });
+    expect(Array.from(document.querySelectorAll("h2")).map((h) => h.textContent)).toEqual(["Agent", "This app", "View", "Watched folders", "Hooks", "Detail level", "Start on login"]);
+    expect(radio("view:window").checked).toBe(true);
+    choose("view:widgets");
+    await flush();
+    expect(asked).toEqual(["widgets"]);
+    expect(radio("view:widgets").checked).toBe(true);
+    expect(sectionRegion("view").textContent).toBe(held);
+    expect(region().children).toHaveLength(0);
   });
 });

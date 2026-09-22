@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { TokenCheck } from "../agent-client";
 import type { HostMode } from "../agent-host";
 import type { SettingsState } from "../settings-state";
-import { ATTACHED_NOTICE, CONFIG_GONE_NOTICE, NO_CONFIG_NOTICE, NO_CONFIG_TO_CHANGE, OTHER_HOME_NOTICE, createSettingsActions, type ActionDeps } from "./actions";
+import { ATTACHED_NOTICE, CONFIG_GONE_NOTICE, NO_CONFIG_NOTICE, NO_CONFIG_TO_CHANGE, OTHER_HOME_NOTICE, VIEW_NOT_REMEMBERED, createSettingsActions, type ActionDeps } from "./actions";
 
 const STATE: SettingsState = {
   agent: { mode: "own", port: 4750, version: "0.1.0", sessions: 0, waiting: 0, error: null },
@@ -12,6 +12,7 @@ const STATE: SettingsState = {
   hooks: "current",
   detail: "none",
   openAtLogin: false,
+  view: "window",
   logDir: "C:\\logs",
   notice: null,
 };
@@ -44,6 +45,10 @@ function harness(over: Partial<ActionDeps> & { mode?: HostMode; config?: boolean
     },
     saveDetail: async (level) => void calls.push(`detail ${level}`),
     applyOpenAtLogin: (on) => void calls.push(`login ${on}`),
+    applyView: (view) => {
+      calls.push(`view ${view}`);
+      return true;
+    },
     openLogs: async () => void calls.push("logs"),
     log: (code, logFields = {}) => {
       codes.push(code);
@@ -324,5 +329,29 @@ describe("createSettingsActions", () => {
     await actions.addFolder();
     mode = "own";
     expect((await actions.pushedState()).notice).toBe("refusing to allow a whole filesystem root: C:\\");
+  });
+
+  it("applies the view, logs which it is, and restarts nothing: the agent is not involved", async () => {
+    const { calls, codes, fields, actions } = harness();
+    expect(await actions.setView("widgets")).toEqual(STATE);
+    expect(calls).toEqual(["view widgets"]);
+    expect(codes).toEqual(["desktop.viewChanged"]);
+    expect(fields).toEqual([{ widgets: true, remembered: true }]);
+  });
+
+  it("says so when the view holds for this run only, because desktop.json could not be read", async () => {
+    const { fields, actions } = harness({ applyView: () => false });
+    expect((await actions.setView("window")).notice).toBe(VIEW_NOT_REMEMBERED);
+    expect(fields).toEqual([{ widgets: false, remembered: false }]);
+  });
+
+  it("says where to look when the view could not be changed", async () => {
+    const { fields, actions } = harness({
+      applyView: () => {
+        throw new Error("no display");
+      },
+    });
+    expect((await actions.setView("widgets")).notice).toContain("see the log");
+    expect(fields).toEqual([{ widgets: true, failed: true }]);
   });
 });

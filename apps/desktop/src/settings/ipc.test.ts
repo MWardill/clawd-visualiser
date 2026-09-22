@@ -10,6 +10,7 @@ const STATE: SettingsState = {
   hooks: "current",
   detail: "none",
   openAtLogin: false,
+  view: "window",
   logDir: "C:\\logs",
   notice: null,
 };
@@ -45,6 +46,10 @@ function actions(over: Partial<BridgeActions> = {}, fallback: SettingsState = ST
     },
     setOpenAtLogin: async (on) => {
       calls.push(`setOpenAtLogin ${on}`);
+      return STATE;
+    },
+    setView: async (view) => {
+      calls.push(`setView ${view}`);
       return STATE;
     },
     retryAgent: async () => {
@@ -166,5 +171,14 @@ describe("createHandlers", () => {
     const { calls, handlers } = actions();
     expect(await handlers[CHANNELS.openLogs]!(undefined)).toBeUndefined();
     expect(calls).toEqual(["openLogs"]);
+  });
+
+  it("passes a view on, and answers anything that is not one with the state as it is", async () => {
+    const { calls, handlers } = actions();
+    await handlers[CHANNELS.setView]!("widgets");
+    await handlers[CHANNELS.setView]!("window");
+    expect(await handlers[CHANNELS.setView]!("floating")).toEqual(STATE);
+    expect(await handlers[CHANNELS.setView]!(undefined)).toEqual(STATE);
+    expect(calls).toEqual(["setView widgets", "setView window"]);
   });
 });

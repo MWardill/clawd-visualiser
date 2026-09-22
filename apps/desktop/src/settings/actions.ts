@@ -6,6 +6,7 @@ import type { AllowlistResult, HooksResult, Logger, UninstallResult } from "@cla
 import type { DetailLevel } from "@clawd/core";
 import type { TokenCheck } from "../agent-client";
 import type { HostMode } from "../agent-host";
+import type { View } from "../desktop-state";
 import type { SettingsState } from "../settings-state";
 import type { BridgeActions } from "./ipc";
 
@@ -27,6 +28,8 @@ export type ActionDeps = {
   saveDetail(level: DetailLevel): Promise<void>;
   /** Registers or removes the login item and remembers the choice. Pushes nothing: the answer carries the state. */
   applyOpenAtLogin(on: boolean): void;
+  /** Applies the view now and remembers it. False when desktop.json could not be read at launch: the choice then holds for this run only. */
+  applyView(view: View): boolean;
   openLogs(): Promise<void>;
   log: Logger;
 };
@@ -36,6 +39,7 @@ export const NO_CONFIG_NOTICE = "this app is attached to another agent and has n
 export const CONFIG_GONE_NOTICE = "the agent's config file was missing, so the agent has been started again to write a new one; choose Install hooks again";
 export const OTHER_HOME_NOTICE = "the agent this app is attached to was started from another home and would refuse these hooks; stop it and this app will start its own";
 export const NO_CONFIG_TO_CHANGE = "there is no config to change yet";
+export const VIEW_NOT_REMEMBERED = "applied for this run; desktop.json could not be read when the app started, so the choice will not be remembered";
 export const SEE_LOG = "see the log";
 
 export function createSettingsActions(deps: ActionDeps): BridgeActions {
@@ -170,6 +174,17 @@ export function createSettingsActions(deps: ActionDeps): BridgeActions {
         return answer(`the login setting could not be applied; ${SEE_LOG}`);
       }
       return answer();
+    },
+    async setView(view) {
+      let remembered: boolean;
+      try {
+        remembered = deps.applyView(view);
+      } catch {
+        deps.log("desktop.viewChanged", { widgets: view === "widgets", failed: true });
+        return answer(`the view could not be changed; ${SEE_LOG}`);
+      }
+      deps.log("desktop.viewChanged", { widgets: view === "widgets", remembered });
+      return answer(remembered ? null : VIEW_NOT_REMEMBERED);
     },
     async retryAgent() {
       try {

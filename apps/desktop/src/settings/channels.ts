@@ -11,6 +11,7 @@ export const CHANNELS = {
   uninstallHooks: "clawd:settings/uninstallHooks",
   setDetail: "clawd:settings/setDetail",
   setOpenAtLogin: "clawd:settings/setOpenAtLogin",
+  setView: "clawd:settings/setView",
   retryAgent: "clawd:settings/retryAgent",
   openLogs: "clawd:settings/openLogs",
   /** Main to the page: the state changed. */
