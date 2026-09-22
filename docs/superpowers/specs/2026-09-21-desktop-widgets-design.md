@@ -101,24 +101,34 @@ Turning the popup off lowers every raised box.
   one. The snapshot carries the displayed state, which core holds for `minDisplayMs`, so a short turn
   still shows as working first. The first snapshot from a source only sets the baseline, so nothing
   fires at launch, at an agent restart or at a takeover.
+- **The corner.** A box raised in either view goes to the bottom-right corner of the primary work
+  area, stacking upward when more than one is raised at a time. Only the boxes already raised are
+  stacked around: an ordinary widget parked in the corner is not, since a raised box sits above it
+  anyway. One corner is the point — the maintainer watches it, not wherever a folder's widget lives.
+  A **pinned** widget is the exception and stays where it is: the pin is a promise about where it sits.
 - **In widget view** the pane's widget is raised: made topmost at the highest level, moved to the
-  top and shown without activating it.
-- **In window view** a temporary widget is made for the pane, raised the same way, at the folder's
-  remembered place, or else stacked upward from the bottom-right corner of the primary work area.
+  corner unless pinned, brought to the top and shown without activating it. Lowered again it stays
+  in the corner, an ordinary window where it stands; only a drag is remembered, so a relaunch puts it
+  back where it was last left by hand.
+- **In window view** a temporary widget is made for the pane, raised the same way, at the corner
+  whatever the folder's widget remembers. Dragging one moves it but remembers nothing: it would be
+  the folder's own widget that moved, and the next popup comes to the corner regardless.
   None is made while the full window is focused, since the maintainer is already looking at it. The
   check is made when the turn finishes: a finish seen then is a finish seen, and nothing pops up
-  later when the focus moves. A temporary widget can be dragged, which remembers the place, but has
-  no pin, and its menu has only **Open full window** and **Settings**.
+  later when the focus moves. A temporary widget has no pin, and its menu has only **Open full
+  window** and **Settings**.
+- **Growing while raised.** A box grows from its top-left corner, except a raised one, which is held
+  at the corner: a session joining its folder cannot push its lower edge off the bottom of the screen.
 - **The cue.** A raised box draws its border and its title green, `PALETTE.state.green`, so a widget
   that was pinned, and so already on top, still says so. Amber for a waiting session wins over green.
 - **What lowers it.** A press on the widget, when it is released: a click, or the end of a drag, so a
-  temporary widget can be moved before it goes and the place is remembered. A click on a Clawd in a
+  temporary widget can be pushed aside before it goes. A click on a Clawd in a
   temporary widget focuses that session's terminal first, and the release then closes the popup:
   the page sends the selection before the release. Or every session that
   raised it has since gone to `working` or `waiting`, which means it was answered in its terminal, or
   has left the snapshot. `asleep` does not lower it.
-- **Afterwards** a pinned widget stays on top at the pinned level, an unpinned one becomes an
-  ordinary window where it stands, and a temporary one closes: at once when a press lowered it,
+- **Afterwards** a pinned widget stays on top at the pinned level where it was pinned, an unpinned
+  one becomes an ordinary window in the corner it was raised to, and a temporary one closes: at once when a press lowered it,
   after its Clawds walk out when the session being prompted again or leaving did. The popup going
   off, a change of view and a new agent lower everything too: a temporary widget then walks out and
   closes, or closes at once on a change of view.
@@ -223,7 +233,7 @@ Electron-free modules with tests over doubles, in the manner of `agent-host.ts` 
 src/widgets/
   finished.ts     `finishedTurns(previous, next)` → the panes and sessions where a turn just finished; `stillRaising(aliases, next)` → those still holding a raise; the generation is the controller's, which forgets `previous` on a rise
   plan.ts         which windows should exist: (snapshot, view, raised) → [{ label, pane, temporary }]; the popup setting and the focus are the controller's, at trigger time
-  placement.ts    where a window goes: the remembered place if restoredBounds accepts it, else the next free default slot; clamping after a drop
+  placement.ts    where a window goes: the remembered place if restoredBounds accepts it, else the next free default slot, running down from the top right or up from the bottom right; clamping after a drop
   controller.ts   the stateful part: label → window over an injected window factory; reconciles with the plan; owns the raised set, the drag in progress and the retry counts
 src/attached-feed.ts   snapshots while attached: polls the agent on the port; tested with an injected fetch and clock
 ```
@@ -241,15 +251,18 @@ src/attached-feed.ts   snapshots while attached: polls the agent on the port; te
 - **Dragging in main.** `dragStart` records the cursor's offset from the window's origin; each
   `dragMove` calls `setBounds` with the new origin and the window's known width and height, since
   `setPosition` alone lets a window's size drift on a scaled display; `dragEnd` clamps the place so
-  the title row stays grabbable on some display, using `bounds.ts`, saves it if the window moved, and
-  lowers a raised box. Every press ends in a `dragEnd`, moved or not, so that is the one place a
+  the title row stays grabbable on some display, using `bounds.ts`, saves it if a folder's own widget
+  moved, and lowers a raised box. A temporary widget saves nothing: the place would be the folder's
+  widget's. Every press ends in a `dragEnd`, moved or not, so that is the one place a
   press lowers anything. A drag ends by itself when its window closes.
 - **The raised set.** The controller keeps, per label, the sessions holding a raise. A finish adds
   one (unless in window view with the full window focused); every snapshot prunes each label with
   `stillRaising` and drops it when empty; a press on the box, the release of any press, takes its
   label out; a generation rise, a change of view, `noSource` and the popup going off empty the set.
   An entry's level follows the set through one `setLevel(normal | pinned | raised)`, which replaced
-  `setPinned`; a temporary entry is never pinned.
+  `setPinned`; a temporary entry is never pinned. The same step moves an unpinned box to the corner,
+  `placeWidget` with no remembered place, the box's own reported size and the raised boxes as the
+  ones to stack around.
 - **Windows.** `window.ts` gains `createWidgetWindow(preload, bounds)`, made through
   `createHardenedWindow`, whose spec gains a `chrome` field for the options that differ: `frame:
   false`, `transparent: true`, `resizable: false`, `maximizable: false`, `minimizable: false`,
@@ -403,17 +416,22 @@ before it ended: a Clawd click focuses the session's terminal instead of opening
 (§3.2). The walk's only false start was a session run from a terminal without `CLAUDE_CONFIG_DIR`,
 whose real-settings hooks carried an older install's token and got 401.
 
+Later the same day the corner rule of §3.3 replaced two of these items: a raised box now goes to the
+bottom-right corner in both views, and a dragged popup remembers nothing. Those two are rewritten
+below and left unticked, to be walked again; the rest stand as walked.
+
 - [x] Settings: under View, the popup pair sits below the view pair; choosing on changes nothing on screen by itself.
 - [x] Window view, popup on, an editor focused: a prompt's answer finishing raises a box for that folder at the bottom right, over the editor and over a maximised window, border and title green, and typing still goes to the editor.
 - [x] The box has no pin on hover; its right-click menu is Open full window and Settings only.
-- [x] A click on the box closes it at once; a drag first moves it, and the next popup for that folder appears where it was dropped.
+- [ ] A click on the box closes it at once; a drag first moves it, and the next popup for that folder still comes to the bottom-right corner, and the folder's own widget has not moved with it.
 - [x] Two folders finishing: two boxes, the second above the first.
 - [x] A finish while the full window is focused shows nothing, then and later.
 - [x] A finish, then a prompt sent in that session: the box's Clawd walks out and the box closes, without a click.
 - [x] A finish, then the session left idle past ten minutes (asleep): the box stays up.
-- [x] Widget view, popup on: a finish turns that folder's widget green and brings it above a maximised window; a pinned widget turns green too.
-- [x] A click on the raised widget lowers it: a pinned one stays pinned, an unpinned one becomes ordinary and stays where it is.
+- [ ] Widget view, popup on: a finish moves that folder's widget to the bottom-right corner of the main display, turns it green and brings it above a maximised window; a pinned widget turns green where it is and does not move; two finishing at once stack, the second above the first.
+- [x] A click on the raised widget lowers it: a pinned one stays pinned, an unpinned one becomes ordinary and stays where it is (now the corner; a relaunch puts it back where it was last dragged).
 - [x] The next prompt in that session lowers it without a click.
+- [ ] A second session started in the folder of a raised box grows it upward, its lower edge staying clear of the taskbar.
 - [x] Popup off in Settings: every raised box lowers; a temporary one walks out and closes.
 - [x] Quit and relaunch with a session still idle: nothing is raised (the first snapshot is the baseline).
 - [x] Attached (the CLI agent holding the port), window view, popup on: the box still pops up within a second or so of the finish.
@@ -434,7 +452,8 @@ whose real-settings hooks carried an older install's token and got 401.
   display, clamping); `widgets/controller` over a fake window factory (create, close after empty or
   the cap, the filtered snapshot sent only when changed, an unknown sender ignored, `select` refused
   for an alias not sent, the drag, pin and lower sequences, the three tries, the popup: raise, lower
-  by press and by state, the focused full window, temporary widgets, the popup off, a generation
+  by press and by state, the corner a raise moves to and holds as the box grows (by the reported
+  size, stacking, pinned left alone, remembering nothing), the focused full window, temporary widgets, the popup off, a generation
   rise); `attached-feed` with a fake fetch and clock; `widget/ipc` validation; `widget/page` under happy-dom
   (click against drag at the four-pixel threshold, the pin button and its `aria-pressed`, the size
   report, `seated` on the first snapshot only, a generation change clearing the scene);

@@ -12,6 +12,7 @@ const FIRST: Bounds = { x: AREA.width - DEFAULT_WIDGET_SIZE.width - SLOT_GAP, y:
 const SECOND: Bounds = { ...FIRST, y: FIRST.y + DEFAULT_WIDGET_SIZE.height + SLOT_GAP };
 
 const at = (ms: number): string => new Date(ms).toISOString();
+const move = (b: Bounds): string => `bounds ${b.x},${b.y} ${b.width}x${b.height}`;
 
 /** A snapshot from folder labels to the aliases of the sessions in each; panes are numbered in order. */
 function snap(folders: Record<string, string[]>, generatedAt = at(0)): Snapshot {
@@ -471,13 +472,17 @@ const BOTTOM: Bounds = { x: FIRST.x, y: AREA.height - DEFAULT_WIDGET_SIZE.height
 /** TWO with repo's session idle: agent-1 finished its turn. */
 const REPO_IDLE: Snapshot = { ...TWO, sessions: TWO.sessions.map((s) => (s.alias === "agent-1" ? { ...s, state: "idle" as const } : s)) };
 const REPO_ASLEEP: Snapshot = { ...TWO, sessions: TWO.sessions.map((s) => (s.alias === "agent-1" ? { ...s, state: "asleep" as const } : s)) };
+/** TWO with both sessions idle: both finished in the same snapshot. */
+const BOTH_IDLE: Snapshot = { ...TWO, sessions: TWO.sessions.map((s) => ({ ...s, state: "idle" as const })) };
+/** The slot above the bottom-right one: where a second box raised at the same time goes. */
+const ABOVE_BOTTOM: Bounds = { ...BOTTOM, y: BOTTOM.y - DEFAULT_WIDGET_SIZE.height - SLOT_GAP };
 
 describe("the finished popup in widget view", () => {
   it("raises the pane's widget when a turn there finishes: the highest level, brought forward, drawn green, and logged", () => {
     const h = shown();
     h.c.setPopup(true);
     h.c.setSnapshot(REPO_IDLE, "own:1");
-    expect(h.w(0).calls).toEqual(["level raised", "reveal"]);
+    expect(h.w(0).calls).toEqual(["level raised", move(BOTTOM), "reveal"]);
     expect(h.w(0).sent.at(-1)).toMatchObject({ raised: true, temporary: false });
     expect(h.w(1).calls).toEqual([]);
     expect(h.w(1).sent).toEqual([]);
@@ -500,9 +505,9 @@ describe("the finished popup in widget view", () => {
     h.c.setPopup(true);
     h.c.setSnapshot(REPO_IDLE, "own:1");
     h.c.setSnapshot(REPO_ASLEEP, "own:1");
-    expect(h.w(0).calls).toEqual(["level raised", "reveal"]);
+    expect(h.w(0).calls).toEqual(["level raised", move(BOTTOM), "reveal"]);
     h.c.setSnapshot(TWO, "own:1");
-    expect(h.w(0).calls).toEqual(["level raised", "reveal", "level normal"]);
+    expect(h.w(0).calls).toEqual(["level raised", move(BOTTOM), "reveal", "level normal"]);
     expect(h.w(0).sent.at(-1)).toMatchObject({ raised: false });
 
     h.c.setSnapshot(REPO_IDLE, "own:1");
@@ -534,7 +539,7 @@ describe("the finished popup in widget view", () => {
     h.setFocused(true);
     h.c.setPopup(true);
     h.c.setSnapshot(REPO_IDLE, "own:1");
-    expect(h.w(0).calls).toEqual(["level raised", "reveal"]);
+    expect(h.w(0).calls).toEqual(["level raised", move(BOTTOM), "reveal"]);
   });
 
   it("lowers everything when the popup is switched off, and when the source changes", () => {
@@ -542,7 +547,7 @@ describe("the finished popup in widget view", () => {
     h.c.setPopup(true);
     h.c.setSnapshot(REPO_IDLE, "own:1");
     h.c.setPopup(false);
-    expect(h.w(0).calls).toEqual(["level raised", "reveal", "level normal"]);
+    expect(h.w(0).calls).toEqual(["level raised", move(BOTTOM), "reveal", "level normal"]);
 
     h.c.setPopup(true);
     h.c.setSnapshot(TWO, "own:1");
@@ -561,7 +566,63 @@ describe("the finished popup in widget view", () => {
     expect(h.w(0).calls).toEqual([]);
     h.c.setSnapshot(TWO, "own:1");
     h.c.setSnapshot(REPO_IDLE, "own:1");
-    expect(h.w(0).calls).toEqual(["level raised", "reveal"]);
+    expect(h.w(0).calls).toEqual(["level raised", move(BOTTOM), "reveal"]);
+  });
+
+  it("leaves a raised widget at the bottom right once it is lowered, and remembers nothing", () => {
+    const h = shown();
+    h.c.setPopup(true);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    h.c.dragStart(h.w(0).win.id);
+    h.c.dragEnd(h.w(0).win.id);
+    expect(h.w(0).win.bounds()).toEqual(BOTTOM);
+    expect(h.saved).toEqual([]);
+  });
+
+  it("leaves a pinned widget where it was pinned", () => {
+    const h = shown();
+    h.c.togglePin(h.w(0).win.id);
+    const pinnedAt = h.w(0).win.bounds();
+    h.c.setPopup(true);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.w(0).calls).toEqual(["level pinned", "level raised", "reveal"]);
+    expect(h.w(0).win.bounds()).toEqual(pinnedAt);
+  });
+
+  it("stacks a second widget raised in the same snapshot above the first", () => {
+    const h = shown();
+    h.c.setPopup(true);
+    h.c.setSnapshot(BOTH_IDLE, "own:1");
+    expect(h.w(0).win.bounds()).toEqual(BOTTOM);
+    expect(h.w(1).win.bounds()).toEqual(ABOVE_BOTTOM);
+  });
+
+  it("keeps a raised widget in the corner when its page reports a taller box", () => {
+    const h = shown();
+    h.c.setPopup(true);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    const size = { width: DEFAULT_WIDGET_SIZE.width, height: 300 };
+    h.c.resize(h.w(0).win.id, size);
+    expect(h.w(0).win.bounds()).toEqual({ x: BOTTOM.x, y: AREA.height - size.height - SLOT_GAP, ...size });
+  });
+
+  it("grows a pinned widget from its top-left corner, raised or not", () => {
+    const h = shown();
+    h.c.togglePin(h.w(0).win.id);
+    h.c.setPopup(true);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    const size = { width: DEFAULT_WIDGET_SIZE.width, height: 300 };
+    h.c.resize(h.w(0).win.id, size);
+    expect(h.w(0).win.bounds()).toEqual({ x: FIRST.x, y: FIRST.y, ...size });
+  });
+
+  it("moves a raised widget by the size its page reported, not the default", () => {
+    const h = shown();
+    const size = { width: 400, height: 240 };
+    h.c.resize(h.w(0).win.id, size);
+    h.c.setPopup(true);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.w(0).win.bounds()).toEqual({ x: AREA.width - size.width - SLOT_GAP, y: AREA.height - size.height - SLOT_GAP, ...size });
   });
 });
 
@@ -594,23 +655,12 @@ describe("the finished popup in window view", () => {
     expect(h.w(0).calls).toHaveLength(3);
   });
 
-  it("puts a temporary widget back where the folder's widget was left, if anywhere", () => {
+  it("makes a temporary widget at the bottom right whatever the folder's widget remembers", () => {
     const h = windowView({ placement: (label) => (label === "repo" ? { x: 40, y: 60, pinned: true } : undefined) });
     h.c.setSnapshot(REPO_IDLE, "own:1");
-    expect(h.w(0).win.bounds()).toEqual({ x: 40, y: 60, ...DEFAULT_WIDGET_SIZE });
-    // the remembered pin is not honoured: a temporary widget has no pin, and its level is raised anyway
+    expect(h.w(0).win.bounds()).toEqual(BOTTOM);
+    // the remembered pin is not honoured either: a temporary widget has no pin, and its level is raised anyway
     expect(h.w(0).calls).toEqual(["level raised"]);
-    const id = h.w(0).win.id;
-    h.c.ready(id);
-    h.c.resize(id, DEFAULT_WIDGET_SIZE);
-    h.setCursor(40, 60);
-    h.c.dragStart(id);
-    h.setCursor(-60, 60);
-    h.c.dragMove(id);
-    h.c.dragEnd(id);
-    // a temporary widget has no pin of its own: dragging it must not wipe the folder's remembered pin
-    expect(h.saved).toEqual([["repo", { x: -60, y: 60, pinned: true }]]);
-    expect(h.w(0).calls.at(-1)).toBe("close");
   });
 
   it("makes none while the full window is focused, and does not pop it up later when the focus moves", () => {
@@ -624,7 +674,7 @@ describe("the finished popup in window view", () => {
     expect(h.logged).toEqual([]);
   });
 
-  it("closes a temporary widget at once when it is pressed, remembering a drag first, and does not remake it", () => {
+  it("closes a temporary widget at once when it is pressed, moved or not, and does not remake it", () => {
     const h = windowView();
     h.c.setSnapshot(REPO_IDLE, "own:1");
     const id = h.w(0).win.id;
@@ -635,7 +685,8 @@ describe("the finished popup in window view", () => {
     h.setCursor(BOTTOM.x - 100, BOTTOM.y - 50);
     h.c.dragMove(id);
     h.c.dragEnd(id);
-    expect(h.saved).toEqual([["repo", { x: BOTTOM.x - 100, y: BOTTOM.y - 50, pinned: false }]]);
+    // a popup is always made at the bottom right, so where one was dragged is nobody's place to keep
+    expect(h.saved).toEqual([]);
     expect(h.w(0).calls.at(-1)).toBe("close");
     h.c.setSnapshot(REPO_ASLEEP, "own:1");
     expect(h.windows).toHaveLength(1);

@@ -164,7 +164,8 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     if ((tries.get(label) ?? 0) >= MAX_TRIES) return undefined;
     const remembered = deps.placement(label);
     const bounds = placeWidget({
-      remembered,
+      // A popup is always at the bottom right, wherever the folder's own widget lives.
+      remembered: temporary ? undefined : remembered,
       size: DEFAULT_WIDGET_SIZE,
       workAreas: deps.workAreas(),
       primary: deps.primaryWorkArea(),
@@ -190,9 +191,26 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
   };
 
   /**
-   * Puts an entry's level where the raised set says. Answers whether a reveal is due: newly raised
-   * and already shown, so the caller can bring it forward once its new state has been pushed, and the
-   * cue (green, raised) and the rise reach the page in the same moment.
+   * The bottom-right corner of the primary work area, stacking up over the boxes already raised: the
+   * one place a finish is looked for. Other widgets are not counted, so a raised box keeps the corner
+   * even where the widgets are parked around it; being raised, it sits above them.
+   */
+  const popupSlot = (e: Entry): Bounds =>
+    placeWidget({
+      remembered: undefined,
+      size: e.size,
+      workAreas: deps.workAreas(),
+      primary: deps.primaryWorkArea(),
+      taken: [...entries.values()].filter((other) => other !== e && other.raised).map((other) => other.win.bounds()),
+      stack: "up",
+    });
+
+  /**
+   * Puts an entry's level where the raised set says, and brings a newly raised box to the corner:
+   * a pinned one stays where it was pinned, since the pin is a promise about where it sits. Answers
+   * whether a reveal is due: newly raised and already shown, so the caller can bring it forward once
+   * its new state has been pushed, and the cue (green, raised) and the rise reach the page in the
+   * same moment. A box lowered afterwards stays in the corner; only a drag is remembered.
    */
   const settleLevel = (e: Entry): boolean => {
     const shouldRaise = raised.has(e.label);
@@ -200,6 +218,11 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     e.raised = shouldRaise;
     e.win.setLevel(levelOf(e));
     if (!shouldRaise) return false;
+    if (!e.pinned) {
+      const slot = popupSlot(e);
+      const now = e.win.bounds();
+      if (slot.x !== now.x || slot.y !== now.y) e.win.setBounds(slot);
+    }
     deps.log("desktop.popupRaised", { temporary: e.temporary });
     // Not yet revealed: the first size report shows it, raised already.
     return e.revealed;
@@ -367,7 +390,9 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
       }
       e.size = size;
       const b = e.win.bounds();
-      e.win.setBounds({ x: b.x, y: b.y, ...size });
+      // A box grows from its top-left corner, except while it is raised: that one is held at the
+      // corner it was raised to, so a session joining its folder cannot grow it off the bottom edge.
+      e.win.setBounds(e.raised && !e.pinned ? popupSlot(e) : { x: b.x, y: b.y, ...size });
       if (e.revealed) return;
       e.revealed = true;
       e.win.reveal();
@@ -400,10 +425,11 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
         const b = e.win.bounds();
         const kept = clampDrop({ x: b.x, y: b.y, ...e.size }, deps.workAreas());
         if (kept.x !== b.x || kept.y !== b.y) e.win.setBounds(kept);
-        // A temporary widget has no pin of its own, so a drag keeps whatever the folder's widget remembered.
-        deps.savePlacement(e.label, { x: kept.x, y: kept.y, pinned: e.temporary ? (deps.placement(e.label)?.pinned ?? false) : e.pinned });
+        // A popup is always made at the corner, so where one was dragged is nobody's place to keep:
+        // saving it would move the folder's own widget instead.
+        if (!e.temporary) deps.savePlacement(e.label, { x: kept.x, y: kept.y, pinned: e.pinned });
       }
-      // Every press ends here, moved or not: the one place a press lowers anything. After the save, so a moved popup is remembered before it goes.
+      // Every press ends here, moved or not: the one place a press lowers anything. After the save, so a dragged widget is remembered before a press can close it.
       lowerByPress(e);
     },
     togglePin(sender) {
