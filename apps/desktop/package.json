@@ -1,6 +1,6 @@
 {
   "name": "@clawd/desktop",
-  "version": "0.1.0",
+  "version": "1.0.1",
   "private": true,
   "description": "The desktop app: the agent and the visualiser in one window and the tray, run from a folder.",
   "main": "dist/main.cjs",
