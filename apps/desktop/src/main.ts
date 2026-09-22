@@ -125,6 +125,12 @@ function run(): void {
   const STATE_COALESCE_MS = 150;
   /** How long the launch repair waits for the host's first start; an agent starts in well under a second. */
   const FIRST_START_CAP_MS = 10_000;
+  /**
+   * How long after a tray menu item is chosen before the widgets are brought forward. The menu's
+   * closing gives the focus back to the window that had it, which puts that window on top again, so
+   * a raise made at once is undone the next instant. Found in stage 9's walk.
+   */
+  const MENU_SETTLE_MS = 250;
   const pushStateSoon = createCoalescer(STATE_COALESCE_MS, pushState);
 
   const host = createAgentHost({
@@ -245,7 +251,19 @@ function run(): void {
       Menu.buildFromTemplate(
         trayMenuTemplate(
           openAtLogin(),
-          { open: () => showWindow(), showWidgets: () => { if (widgets.showAll() === 0) showWindow(); }, settings: showSettings, setOpenAtLogin: (on: boolean) => { applyOpenAtLogin(on); pushState(); }, quit: () => app.quit() },
+          {
+            open: () => showWindow(),
+            showWidgets: () =>
+              setTimeout(() => {
+                if (widgets.showAll() === 0) showWindow();
+              }, MENU_SETTLE_MS),
+            settings: showSettings,
+            setOpenAtLogin: (on: boolean) => {
+              applyOpenAtLogin(on);
+              pushState();
+            },
+            quit: () => app.quit(),
+          },
           view(),
         ),
       ),

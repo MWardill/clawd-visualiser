@@ -422,7 +422,9 @@ a plain move to the top (`moveTop()`) from a process that is not in the foregrou
 topmost window may sit above the active one, so clicking the tray while an editor had the focus
 brought nothing up. The cure, found in the stage's own walk, is to make the window topmost and at
 once not: Windows answers the second call by placing it above every non-topmost window, the active
-one included, and still without activating it.
+one included, and still without activating it. From the tray menu that has to wait a quarter
+second: closing the menu gives the focus back to the window that had it, which comes to the top
+again and would cover a raise made at once.
 
 **Many windows, one page.** Every widget loads `app://widget/` and sends on the same channels.
 `event.sender` is the only thing that tells them apart, and the only identity main trusts: a message

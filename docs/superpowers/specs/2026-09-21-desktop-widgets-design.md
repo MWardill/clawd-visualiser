@@ -249,7 +249,8 @@ src/attached-feed.ts   snapshots while attached: polls the agent on the port; te
   (its first showing, or the tray) is not a `moveTop()`: Windows refuses that from a process not in
   the foreground, found in stage 9's walk. It is made topmost and at once not, which places it
   above every non-topmost window without activating it; a pinned widget, topmost already, gets
-  `moveTop()` within its band.
+  `moveTop()` within its band. From the tray menu the raise waits a quarter second, since the
+  menu's closing gives the focus back to the window that had it, which comes to the top again.
 - **Snapshots.** `AgentHostDeps` gains an optional `onSnapshot(s, run)`, called inside the guard the
   host already applies to its own agent's snapshots, so one from an agent already replaced never
   arrives; `run` is the host's count of starts. While the host is `attached` and either setting is
@@ -354,7 +355,7 @@ Walked by the maintainer on the packaged build, against scratch folders (`CLAWD_
 - [ ] Narrator reads the pin as a toggle button, "Pin on top", pressed or not; Tab reaches it.
 - [ ] Right-click: Pin on top (ticked when pinned), Open full window, Settings, each doing what it says.
 - [ ] Quit and relaunch: each box is where it was left, pinned if it was. With a display unplugged, a box remembered there takes a default slot.
-- [ ] Tray: clicking the icon brings the boxes above other windows without taking the keyboard from the app in use; with no session running it opens the full window. The menu has Show widgets above Open in widget view only.
+- [ ] Tray: clicking the icon brings the boxes above other windows and no box takes the keyboard (the taskbar does, as for any tray icon); Show widgets in the menu does the same and the boxes stay up once the menu has closed; with no session running either opens the full window. The menu has Show widgets above Open in widget view only.
 - [ ] `--hidden` in widget view: no full window, and boxes appear when sessions do.
 - [ ] Choosing window again closes every box at once and shows the full window.
 - [ ] Attached: with the CLI's agent holding the port, boxes still appear and follow the sessions within a second or so; stopping that agent, the app takes over and the boxes stay, their Clawds re-seated rather than walking in.
