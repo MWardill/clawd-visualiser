@@ -397,27 +397,30 @@ shown, by core's visibility rule.
 
 ### 10.2 Stage 10's manual checks
 
-Walked by the maintainer on the packaged build, against scratch folders, with Claude sessions in two
-watched folders. Not yet done.
+Walked by the maintainer on 22 September 2026 on the packaged build, against scratch folders, with
+Claude sessions in two watched folders: every item passing. One change came out of the walk, made
+before it ended: a Clawd click focuses the session's terminal instead of opening the full window
+(§3.2). The walk's only false start was a session run from a terminal without `CLAUDE_CONFIG_DIR`,
+whose real-settings hooks carried an older install's token and got 401.
 
-- [ ] Settings: under View, the popup pair sits below the view pair; choosing on changes nothing on screen by itself.
-- [ ] Window view, popup on, an editor focused: a prompt's answer finishing raises a box for that folder at the bottom right, over the editor and over a maximised window, border and title green, and typing still goes to the editor.
-- [ ] The box has no pin on hover; its right-click menu is Open full window and Settings only.
-- [ ] A click on the box closes it at once; a drag first moves it, and the next popup for that folder appears where it was dropped.
-- [ ] Two folders finishing: two boxes, the second above the first.
-- [ ] A finish while the full window is focused shows nothing, then and later.
-- [ ] A finish, then a prompt sent in that session: the box's Clawd walks out and the box closes, without a click.
-- [ ] A finish, then the session left idle past ten minutes (asleep): the box stays up.
-- [ ] Widget view, popup on: a finish turns that folder's widget green and brings it above a maximised window; a pinned widget turns green too.
-- [ ] A click on the raised widget lowers it: a pinned one stays pinned, an unpinned one becomes ordinary and stays where it is.
-- [ ] The next prompt in that session lowers it without a click.
-- [ ] Popup off in Settings: every raised box lowers; a temporary one walks out and closes.
-- [ ] Quit and relaunch with a session still idle: nothing is raised (the first snapshot is the baseline).
-- [ ] Attached (the CLI agent holding the port), window view, popup on: the box still pops up within a second or so of the finish.
-- [ ] The log holds `desktop.popupChanged` with `on` and `remembered`, and `desktop.popupRaised` with `temporary`, and no folder name.
-- [ ] With boxes raised, Quit from the tray: every box goes and no `electron.exe` remains.
-- [ ] A click on a Clawd in a popup brings that session's terminal to the front (the log gains no `desktop.focusFailed`), the full window stays hidden, and the popup closes. In widget view a click on a Clawd does the same and the box stays.
-- [ ] Widget view, popup on: a raised widget sits above a pinned one and above the taskbar, or the two levels turn out to be one band on this Windows and the raise still shows (record which).
+- [x] Settings: under View, the popup pair sits below the view pair; choosing on changes nothing on screen by itself.
+- [x] Window view, popup on, an editor focused: a prompt's answer finishing raises a box for that folder at the bottom right, over the editor and over a maximised window, border and title green, and typing still goes to the editor.
+- [x] The box has no pin on hover; its right-click menu is Open full window and Settings only.
+- [x] A click on the box closes it at once; a drag first moves it, and the next popup for that folder appears where it was dropped.
+- [x] Two folders finishing: two boxes, the second above the first.
+- [x] A finish while the full window is focused shows nothing, then and later.
+- [x] A finish, then a prompt sent in that session: the box's Clawd walks out and the box closes, without a click.
+- [x] A finish, then the session left idle past ten minutes (asleep): the box stays up.
+- [x] Widget view, popup on: a finish turns that folder's widget green and brings it above a maximised window; a pinned widget turns green too.
+- [x] A click on the raised widget lowers it: a pinned one stays pinned, an unpinned one becomes ordinary and stays where it is.
+- [x] The next prompt in that session lowers it without a click.
+- [x] Popup off in Settings: every raised box lowers; a temporary one walks out and closes.
+- [x] Quit and relaunch with a session still idle: nothing is raised (the first snapshot is the baseline).
+- [x] Attached (the CLI agent holding the port), window view, popup on: the box still pops up within a second or so of the finish.
+- [x] The log holds `desktop.popupChanged` with `on` and `remembered`, and `desktop.popupRaised` with `temporary`, and no folder name.
+- [x] With boxes raised, Quit from the tray: every box goes and no `electron.exe` remains.
+- [x] A click on a Clawd in a popup brings that session's terminal to the front (the log gains no `desktop.focusFailed`), the full window stays hidden, and the popup closes. In widget view a click on a Clawd does the same and the box stays.
+- [x] Widget view, popup on: a raised widget sits above a pinned one and above the taskbar, or the two levels turn out to be one band on this Windows and the raise still shows (record which).
 
 ## 11. Tests
 
