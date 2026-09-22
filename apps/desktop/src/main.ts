@@ -169,7 +169,8 @@ function run(): void {
     });
     // A window that was already showing the page: the same URL with another hash is a navigation
     // inside the document, so nothing reloads, the feed stays connected and the page hears `hashchange`.
-    if (existed && alias !== undefined && !quitting && win !== null && !win.isDestroyed()) void win.loadURL(target);
+    // A load that is superseded or fails rejects; an unhandled rejection here would fault the host.
+    if (existed && alias !== undefined && !quitting && win !== null && !win.isDestroyed()) win.loadURL(target).catch(() => {});
   }
 
   /** What clicking the tray icon or launching the app a second time does: the widgets come forward in widget view, and the full window opens otherwise, or when no widget is open, so the click always does something. */
@@ -323,6 +324,12 @@ function run(): void {
     // Quitting began while desktop.json was loading: build nothing more.
     if (quitting) return;
 
+    // Every widget window sends on the same channels. The sender's id is the only thing that tells
+    // them apart, and the only identity main trusts. `handle` answers; `on` does not.
+    const widgetHandlers = createWidgetHandlers(widgets);
+    for (const [channel, handler] of Object.entries(widgetHandlers.invoke)) ipcMain.handle(channel, (event, arg: unknown) => handler(event.sender.id, arg));
+    for (const [channel, handler] of Object.entries(widgetHandlers.on)) ipcMain.on(channel, (event, arg: unknown) => handler(event.sender.id, arg));
+
     // desktop.json is read: the remembered view takes effect, and with it the question of whom to ask for snapshots.
     widgets.setView(view());
     followFeed();
@@ -336,12 +343,6 @@ function run(): void {
     for (const [channel, handler] of Object.entries(createHandlers(settingsActions, fallback))) {
       ipcMain.handle(channel, (_event, arg: unknown) => handler(arg));
     }
-
-    // Every widget window sends on the same channels. The sender's id is the only thing that tells
-    // them apart, and the only identity main trusts. `handle` answers; `on` does not.
-    const widgetHandlers = createWidgetHandlers(widgets);
-    for (const [channel, handler] of Object.entries(widgetHandlers.invoke)) ipcMain.handle(channel, (event, arg: unknown) => handler(event.sender.id, arg));
-    for (const [channel, handler] of Object.entries(widgetHandlers.on)) ipcMain.on(channel, (event, arg: unknown) => handler(event.sender.id, arg));
 
     refreshTray(host.state());
     refreshMenu();
@@ -406,9 +407,10 @@ function run(): void {
     // A rebuild waiting on the coalescer would only build state for a window that is going away.
     pushStateSoon.cancel();
     win?.hide();
-    // The flag is set, so followFeed asks nobody; the widgets go with the window.
+    // The flag is set, so followFeed asks nobody; the widgets go with the window, and a snapshot
+    // the agent still emits before it is stopped opens nothing.
     feed.stop();
-    widgets.closeAll();
+    widgets.shutdown();
   });
 
   // `will-quit` comes after every window has closed. The handler holds it until the agent has stopped

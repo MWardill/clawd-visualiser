@@ -448,3 +448,17 @@ describe("closeAll", () => {
     expect(h.windows.map((made) => made.calls)).toEqual([["close"], ["close"]]);
   });
 });
+
+describe("shutdown", () => {
+  it("closes every window and makes a later snapshot or view change open nothing", () => {
+    const h = shown();
+    h.c.shutdown();
+    expect(h.windows.map((made) => made.calls)).toEqual([["close"], ["close"]]);
+    h.c.setSnapshot(TWO, "own:2");
+    h.c.setView("window");
+    h.c.setView("widgets");
+    h.c.setSnapshot(TWO, "own:3");
+    expect(h.windows).toHaveLength(2);
+    expect(h.c.ready(999)).toBeNull();
+  });
+});

@@ -53,6 +53,11 @@ export type WidgetController = {
   /** Brings every widget already shown forward; answers how many are showing. */
   showAll(): number;
   closeAll(): void;
+  /**
+   * Closes every window and ignores everything after: snapshots, view changes and page calls that
+   * would make a window. For the quit, when the agent may still emit.
+   */
+  shutdown(): void;
   // What a page may ask, each with its sender's id. A sender no window has is ignored.
   ready(sender: number): WidgetState | null;
   resize(sender: number, size: WidgetSize | null): void;
@@ -100,6 +105,8 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
   let snapshot: Snapshot | null = null;
   let source: string | null = null;
   let generation = 0;
+  // Set by shutdown, for the quit: once true, nothing here opens a window again.
+  let down = false;
   const entries = new Map<string, Entry>();
   const tries = new Map<string, number>();
 
@@ -157,6 +164,7 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
   };
 
   const reconcile = (leaving: Snapshot | null = snapshot): void => {
+    if (down) return;
     const current = snapshot;
     const wanted = new Set<string>();
     if (current !== null) {
@@ -199,6 +207,7 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
 
   return {
     setView(next) {
+      if (down) return;
       if (next === view) return;
       view = next;
       if (view === "window") closeAll();
@@ -228,6 +237,10 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
       return showing;
     },
     closeAll,
+    shutdown() {
+      down = true;
+      closeAll();
+    },
     ready(sender) {
       const e = bySender(sender);
       if (e === undefined) return null;

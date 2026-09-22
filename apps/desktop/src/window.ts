@@ -41,7 +41,8 @@ function createHardenedWindow(spec: WindowSpec): BrowserWindow {
   win.webContents.on("will-navigate", (event, target) => {
     if (!sameOrigin(spec.url, target)) event.preventDefault();
   });
-  void win.loadURL(spec.url);
+  // A load that is superseded or fails rejects; an unhandled rejection here would fault the host.
+  win.loadURL(spec.url).catch(() => {});
   return win;
 }
 
