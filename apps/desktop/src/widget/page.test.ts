@@ -44,8 +44,17 @@ async function load(initial: WidgetState | null = STATE, hit: string | null = nu
       return scene;
     },
   }));
-  const frames: Array<() => void> = [];
-  (window as unknown as { requestAnimationFrame: (fn: FrameRequestCallback) => number }).requestAnimationFrame = (fn) => frames.push(() => fn(0));
+  let nextFrameId = 1;
+  const frames: Array<{ id: number; run: () => void }> = [];
+  (window as unknown as { requestAnimationFrame: (fn: FrameRequestCallback) => number }).requestAnimationFrame = (fn) => {
+    const id = nextFrameId++;
+    frames.push({ id, run: () => fn(0) });
+    return id;
+  };
+  (window as unknown as { cancelAnimationFrame: (id: number) => void }).cancelAnimationFrame = (id) => {
+    const i = frames.findIndex((f) => f.id === id);
+    if (i !== -1) frames.splice(i, 1);
+  };
   const listeners: Array<(s: WidgetState) => void> = [];
   const api: WidgetApi = {
     ready: async () => {
@@ -68,6 +77,8 @@ async function load(initial: WidgetState | null = STATE, hit: string | null = nu
   await import("./page");
   await flush();
   const canvas = document.getElementById("scene") as HTMLElement;
+  // Non-zero, so a test relying on the page's `clientX/Y - box.left/top` subtraction exercises it.
+  canvas.getBoundingClientRect = () => ({ left: 10, top: 20 }) as DOMRect;
   const pin = document.getElementById("pin") as HTMLElement;
   return {
     calls,
@@ -77,7 +88,7 @@ async function load(initial: WidgetState | null = STATE, hit: string | null = nu
     canvas,
     pin,
     push: (state: WidgetState): void => listeners.forEach((cb) => cb(state)),
-    frame: (): void => frames.splice(0).forEach((run) => run()),
+    frame: (): void => frames.splice(0).forEach((f) => f.run()),
   };
 }
 
@@ -135,7 +146,7 @@ describe("the widget page", () => {
     page.frame();
     page.canvas.dispatchEvent(pointer("pointerup", { screenX: 502, screenY: 302, clientX: 62, clientY: 72 }));
     expect(page.calls).toEqual(["dragStart", "dragEnd", "select agent-1"]);
-    expect(page.hits).toEqual([[62, 72]]);
+    expect(page.hits).toEqual([[52, 52]]);
   });
 
   it("selects nothing when the click was not on a Clawd", async () => {
@@ -170,6 +181,17 @@ describe("the widget page", () => {
     window.dispatchEvent(new Event("blur"));
     page.canvas.dispatchEvent(pointer("pointerup", { screenX: 500, screenY: 300 }));
     expect(page.calls).toEqual(["dragStart", "dragEnd", "dragStart", "dragEnd"]);
+  });
+
+  it("a press released and a new press moved inside one frame send at most one move in that frame", async () => {
+    const page = await load(STATE, "agent-1");
+    page.canvas.dispatchEvent(pointer("pointerdown", { screenX: 500, screenY: 300 }));
+    page.canvas.dispatchEvent(pointer("pointermove", { screenX: 520, screenY: 300 }));
+    page.canvas.dispatchEvent(pointer("pointerup", { screenX: 520, screenY: 300 }));
+    page.canvas.dispatchEvent(pointer("pointerdown", { screenX: 500, screenY: 300 }));
+    page.canvas.dispatchEvent(pointer("pointermove", { screenX: 520, screenY: 300 }));
+    page.frame();
+    expect(page.calls).toEqual(["dragStart", "dragEnd", "dragStart", "dragMove"]);
   });
 
   it("starts no drag with the right button, and asks main for the menu in place of the browser's", async () => {

@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 
 const read = (path: string): Promise<string> => readFile(new URL(path, import.meta.url), "utf8");
+const PAGES_RE = /const PAGES = \[([^\]]*)\]/;
 
 describe("the settings page's files", () => {
   it("loads only fonts the bundle step copies beside the page", async () => {
@@ -9,9 +10,12 @@ describe("the settings page's files", () => {
     const bundle = await read("../../build/bundle.mjs");
     const fonts = [...css.matchAll(/url\("([^"]+\.woff2)"\)/g)].map((match) => match[1] ?? "");
     expect(fonts).toEqual(["jetbrains-mono-400.woff2", "jetbrains-mono-700.woff2"]);
-    expect(bundle).toMatch(/const PAGES = \[([^\]]*)\]/);
-    expect(/const PAGES = \[([^\]]*)\]/.exec(bundle)?.[1] ?? "").toContain('"settings"');
-    for (const font of fonts) expect(bundle, font).toContain(`"${font}"]`);
+    expect(bundle).toMatch(PAGES_RE);
+    expect(PAGES_RE.exec(bundle)?.[1] ?? "").toContain('"settings"');
+    for (const font of fonts) {
+      expect(bundle, font).toContain(`"${font}"]`);
+      expect(bundle, font).toContain("dist/${page}/${name}");
+    }
   });
 
   it("keeps the preload free of the schema library: it imports the channel names and types, nothing else of ours", async () => {

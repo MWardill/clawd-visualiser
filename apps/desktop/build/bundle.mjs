@@ -21,7 +21,7 @@ await build({
 
 /** The pages served from their own app:// hosts, each built and given its files the same way. */
 const PAGES = ["settings", "widget"];
-/** The latin JetBrains Mono at 400 and 700, from the dev dependency rather than a checked-in binary: source in the package, name beside the page. */
+/** The latin JetBrains Mono at 400 and 700, from the dev dependency rather than a checked-in binary: source in the package, name beside the page; the licence (OFL 1.1) is copied beside the fonts too, because the licence asks it of a redistribution. */
 const PAGE_FONTS = [
   ["files/jetbrains-mono-latin-400-normal.woff2", "jetbrains-mono-400.woff2"],
   ["files/jetbrains-mono-latin-700-normal.woff2", "jetbrains-mono-700.woff2"],

@@ -75,7 +75,7 @@ function start(canvas: HTMLCanvasElement, pin: HTMLElement): void {
   void faces.then(mount, mount);
 
   let press: { id: number; x: number; y: number; moved: boolean } | null = null;
-  let moveQueued = false;
+  let moveFrame: number | null = null;
 
   canvas.addEventListener("pointerdown", (e) => {
     if (e.button !== 0 || press !== null) return;
@@ -89,11 +89,10 @@ function start(canvas: HTMLCanvasElement, pin: HTMLElement): void {
     if (press === null || e.pointerId !== press.id) return;
     if (!press.moved && Math.hypot(e.screenX - press.x, e.screenY - press.y) < CLICK_SLOP) return;
     press.moved = true;
-    if (moveQueued) return;
-    moveQueued = true;
+    if (moveFrame !== null) return;
     // One per frame. No coordinates: main reads the cursor itself, in the units it moves the window in.
-    requestAnimationFrame(() => {
-      moveQueued = false;
+    moveFrame = requestAnimationFrame(() => {
+      moveFrame = null;
       if (press !== null) api.dragMove();
     });
   });
@@ -102,7 +101,10 @@ function start(canvas: HTMLCanvasElement, pin: HTMLElement): void {
     if (press === null || e.pointerId !== press.id) return;
     const moved = press.moved;
     press = null;
-    moveQueued = false;
+    if (moveFrame !== null) {
+      cancelAnimationFrame(moveFrame);
+      moveFrame = null;
+    }
     api.dragEnd();
     if (!click || moved) return;
     const box = canvas.getBoundingClientRect();
@@ -115,7 +117,10 @@ function start(canvas: HTMLCanvasElement, pin: HTMLElement): void {
   window.addEventListener("blur", () => {
     if (press === null) return;
     press = null;
-    moveQueued = false;
+    if (moveFrame !== null) {
+      cancelAnimationFrame(moveFrame);
+      moveFrame = null;
+    }
     api.dragEnd();
   });
 
