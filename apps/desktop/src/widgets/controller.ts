@@ -189,16 +189,20 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     return e;
   };
 
-  /** Puts an entry's level where the raised set says, and brings a newly raised one forward. Called before its push, so the page hears of it in the same state. */
-  const settleLevel = (e: Entry): void => {
+  /**
+   * Puts an entry's level where the raised set says. Answers whether a reveal is due: newly raised
+   * and already shown, so the caller can bring it forward once its new state has been pushed, and the
+   * cue (green, raised) and the rise reach the page in the same moment.
+   */
+  const settleLevel = (e: Entry): boolean => {
     const shouldRaise = raised.has(e.label);
-    if (shouldRaise === e.raised) return;
+    if (shouldRaise === e.raised) return false;
     e.raised = shouldRaise;
     e.win.setLevel(levelOf(e));
-    if (!shouldRaise) return;
+    if (!shouldRaise) return false;
     deps.log("desktop.popupRaised", { temporary: e.temporary });
     // Not yet revealed: the first size report shows it, raised already.
-    if (e.revealed) e.win.reveal();
+    return e.revealed;
   };
 
   const reconcile = (leaving: Snapshot | null = snapshot): void => {
@@ -214,18 +218,20 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
         e.closing = null;
         e.pane = w.pane;
         e.shown = paneSnapshot(current, w.pane);
-        settleLevel(e);
+        const rise = settleLevel(e);
         push(e);
+        if (rise) e.win.reveal();
       }
     }
     for (const e of [...entries.values()]) {
       if (wanted.has(e.label)) continue;
       // Its pane has left (or there is no source at all): the page plays the walk out and then says it has nothing left to draw.
-      settleLevel(e);
+      const rise = settleLevel(e);
       if (leaving !== null) {
         e.shown = emptied(leaving);
         push(e);
       }
+      if (rise) e.win.reveal();
       if (e.closing === null) e.closing = setTimeout(() => close(e), CLOSE_CAP_MS);
     }
   };
@@ -245,6 +251,7 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
    * at once; an ordinary one drops to its own level where it stands.
    */
   const lowerByPress = (e: Entry): void => {
+    // Already lowered, walking out or otherwise: nothing to do.
     if (!e.raised) return;
     raised.delete(e.label);
     if (e.temporary) {
@@ -295,12 +302,18 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
         lowerAll();
       }
       if (popup) {
-        for (const turn of finishedTurns(previous, s)) {
-          // In window view the box would pop up over what the maintainer is looking at; a finish seen then is a finish seen.
-          if (view === "window" && deps.windowFocused()) continue;
-          const holders = raised.get(turn.label) ?? new Set<string>();
-          holders.add(turn.alias);
-          raised.set(turn.label, holders);
+        const turns = finishedTurns(previous, s);
+        if (turns.length > 0) {
+          // In window view the box would pop up over what the maintainer is looking at; a finish seen
+          // then is a finish seen. Checked once per snapshot, not once per turn.
+          const skip = view === "window" && deps.windowFocused();
+          if (!skip) {
+            for (const turn of turns) {
+              const holders = raised.get(turn.label) ?? new Set<string>();
+              holders.add(turn.alias);
+              raised.set(turn.label, holders);
+            }
+          }
         }
       }
       // A raise holds while any of its sessions is neither working nor waiting again, and still there.
@@ -333,6 +346,7 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     closeAll,
     shutdown() {
       down = true;
+      lowerAll();
       closeAll();
     },
     ready(sender) {
@@ -386,7 +400,8 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
         const b = e.win.bounds();
         const kept = clampDrop({ x: b.x, y: b.y, ...e.size }, deps.workAreas());
         if (kept.x !== b.x || kept.y !== b.y) e.win.setBounds(kept);
-        deps.savePlacement(e.label, { x: kept.x, y: kept.y, pinned: e.pinned });
+        // A temporary widget has no pin of its own, so a drag keeps whatever the folder's widget remembered.
+        deps.savePlacement(e.label, { x: kept.x, y: kept.y, pinned: e.temporary ? (deps.placement(e.label)?.pinned ?? false) : e.pinned });
       }
       // Every press ends here, moved or not: the one place a press lowers anything. After the save, so a moved popup is remembered before it goes.
       lowerByPress(e);

@@ -550,6 +550,17 @@ describe("the finished popup in widget view", () => {
     expect(h.w(0).calls.at(-1)).toBe("level normal");
     expect(h.w(0).sent.at(-1)).toMatchObject({ generation: 2, raised: false });
   });
+
+  it("keeps its baseline while the popup is off, so switching it on fires only for new transitions", () => {
+    const h = shown();
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    h.c.setPopup(true);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.w(0).calls).toEqual([]);
+    h.c.setSnapshot(TWO, "own:1");
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.w(0).calls).toEqual(["level raised", "reveal"]);
+  });
 });
 
 describe("the finished popup in window view", () => {
@@ -587,6 +598,17 @@ describe("the finished popup in window view", () => {
     expect(h.w(0).win.bounds()).toEqual({ x: 40, y: 60, ...DEFAULT_WIDGET_SIZE });
     // the remembered pin is not honoured: a temporary widget has no pin, and its level is raised anyway
     expect(h.w(0).calls).toEqual(["level raised"]);
+    const id = h.w(0).win.id;
+    h.c.ready(id);
+    h.c.resize(id, DEFAULT_WIDGET_SIZE);
+    h.setCursor(40, 60);
+    h.c.dragStart(id);
+    h.setCursor(-60, 60);
+    h.c.dragMove(id);
+    h.c.dragEnd(id);
+    // a temporary widget has no pin of its own: dragging it must not wipe the folder's remembered pin
+    expect(h.saved).toEqual([["repo", { x: -60, y: 60, pinned: true }]]);
+    expect(h.w(0).calls.at(-1)).toBe("close");
   });
 
   it("makes none while the full window is focused, and does not pop it up later when the focus moves", () => {
@@ -654,5 +676,21 @@ describe("the finished popup in window view", () => {
     h.c.setSnapshot(both, "own:1");
     expect(h.windows).toHaveLength(2);
     expect(h.w(1).win.bounds()).toEqual({ ...BOTTOM, y: BOTTOM.y - DEFAULT_WIDGET_SIZE.height - SLOT_GAP });
+  });
+
+  it("a press on a temporary widget already walking out does nothing, and it goes with the cap", () => {
+    const h = windowView();
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    const id = h.w(0).win.id;
+    h.c.ready(id);
+    h.c.resize(id, DEFAULT_WIDGET_SIZE);
+    h.c.setSnapshot(TWO, "own:1"); // walking out: agent-1 back at work, the raise is gone
+    expect(h.w(0).calls.at(-1)).toBe("level normal");
+    h.c.dragStart(id);
+    h.c.dragEnd(id);
+    expect(h.w(0).calls).not.toContain("close");
+    expect(h.saved).toEqual([]);
+    vi.advanceTimersByTime(CLOSE_CAP_MS);
+    expect(h.w(0).calls.at(-1)).toBe("close");
   });
 });
