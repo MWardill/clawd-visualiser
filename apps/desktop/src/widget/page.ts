@@ -102,6 +102,7 @@ function start(canvas: HTMLCanvasElement, pin: HTMLElement): void {
     if (press === null || e.pointerId !== press.id) return;
     const moved = press.moved;
     press = null;
+    moveQueued = false;
     api.dragEnd();
     if (!click || moved) return;
     const box = canvas.getBoundingClientRect();
@@ -114,6 +115,7 @@ function start(canvas: HTMLCanvasElement, pin: HTMLElement): void {
   window.addEventListener("blur", () => {
     if (press === null) return;
     press = null;
+    moveQueued = false;
     api.dragEnd();
   });
 

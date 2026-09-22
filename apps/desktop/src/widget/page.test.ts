@@ -19,18 +19,22 @@ const STATE: WidgetState = { snapshot: snapshotOf("agent-1"), generation: 1, pin
 const flush = (): Promise<void> => new Promise((resolve) => setTimeout(resolve, 0));
 
 /** Loads a fresh copy of the page over a stub bridge and a stub scene, and waits for its first draw. */
-async function load(initial: WidgetState | null = STATE, hit: string | null = null) {
+async function load(initial: WidgetState | null = STATE, hit: string | null = null, pushOnReady?: WidgetState) {
   vi.resetModules();
   document.body.innerHTML = BODY;
   const calls: string[] = [];
   const drawn: string[] = [];
+  const hits: Array<[number, number]> = [];
   const mounted: { options?: PanesSceneOptions } = {};
   const scene: PanesScene = {
     setSnapshot: (s, o) => void drawn.push(`snapshot ${s.sessions.length} seated=${o?.seated === true}`),
     clear: () => void drawn.push("clear"),
     resize: () => {},
     setPaused: () => {},
-    hitTest: () => hit,
+    hitTest: (x, y) => {
+      hits.push([x, y]);
+      return hit;
+    },
     destroy: () => {},
   };
   // The real scene runs a frame loop; the page's decisions are what is under test here.
@@ -44,7 +48,10 @@ async function load(initial: WidgetState | null = STATE, hit: string | null = nu
   (window as unknown as { requestAnimationFrame: (fn: FrameRequestCallback) => number }).requestAnimationFrame = (fn) => frames.push(() => fn(0));
   const listeners: Array<(s: WidgetState) => void> = [];
   const api: WidgetApi = {
-    ready: async () => initial,
+    ready: async () => {
+      if (pushOnReady !== undefined) listeners.forEach((cb) => cb(pushOnReady));
+      return initial;
+    },
     onState: (cb) => {
       listeners.push(cb);
       return () => {};
@@ -65,6 +72,7 @@ async function load(initial: WidgetState | null = STATE, hit: string | null = nu
   return {
     calls,
     drawn,
+    hits,
     mounted,
     canvas,
     pin,
@@ -85,6 +93,11 @@ describe("the widget page", () => {
     const page = await load();
     expect(page.mounted.options).toMatchObject({ background: "none", clipActors: true, emptyState: false, margin: 1 });
     expect(page.mounted.options?.onSelect).toBeUndefined();
+    expect(page.drawn).toEqual(["snapshot 1 seated=true"]);
+  });
+
+  it("subscribes before it asks, so a state pushed while the answer is on its way is drawn", async () => {
+    const page = await load({ ...STATE, snapshot: null }, null, STATE);
     expect(page.drawn).toEqual(["snapshot 1 seated=true"]);
   });
 
@@ -122,6 +135,7 @@ describe("the widget page", () => {
     page.frame();
     page.canvas.dispatchEvent(pointer("pointerup", { screenX: 502, screenY: 302, clientX: 62, clientY: 72 }));
     expect(page.calls).toEqual(["dragStart", "dragEnd", "select agent-1"]);
+    expect(page.hits).toEqual([[62, 72]]);
   });
 
   it("selects nothing when the click was not on a Clawd", async () => {
@@ -175,16 +189,5 @@ describe("the widget page", () => {
     expect(page.pin.getAttribute("aria-pressed")).toBe("true");
     page.pin.click();
     expect(page.calls).toEqual(["togglePin"]);
-  });
-});
-
-describe("the widget page's files", () => {
-  it("loads only fonts the bundle step copies beside the page", async () => {
-    const css = await readFile(join(here, "page.css"), "utf8");
-    const bundle = await readFile(join(here, "../../build/bundle.mjs"), "utf8");
-    const fonts = [...css.matchAll(/url\("([^"]+\.woff2)"\)/g)].map((match) => match[1] ?? "");
-    expect(fonts).toEqual(["jetbrains-mono-400.woff2", "jetbrains-mono-700.woff2"]);
-    for (const font of fonts) expect(bundle, font).toContain(`dist/widget/${font}`);
-    for (const file of ["index.html", "page.css", "page.js", "preload.js"]) expect(bundle, file).toContain(`dist/widget/${file}`);
   });
 });

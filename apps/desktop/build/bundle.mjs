@@ -19,70 +19,49 @@ await build({
   logLevel: "info",
 });
 
-// The preload runs in Electron's preload world, which is CommonJS; the page is an ordinary script.
-await build({
-  entryPoints: [here("../src/settings/preload.ts")],
-  outfile: here("../dist/settings/preload.js"),
-  bundle: true,
-  platform: "node",
-  format: "cjs",
-  target: "node22",
-  external: ["electron"],
-  sourcemap: true,
-  logLevel: "info",
-});
-await build({
-  entryPoints: [here("../src/settings/page.ts")],
-  outfile: here("../dist/settings/page.js"),
-  bundle: true,
-  platform: "browser",
-  format: "iife",
-  target: "chrome130",
-  sourcemap: true,
-  logLevel: "info",
-});
-await cp(here("../src/settings/page.html"), here("../dist/settings/index.html"));
-await cp(here("../src/settings/page.css"), here("../dist/settings/page.css"));
-
-// The settings page's font: the latin subset of JetBrains Mono, from a dev dependency rather than a
-// checked-in binary, with its licence (OFL 1.1) beside it, as the licence asks of a redistribution.
+/** The pages served from their own app:// hosts, each built and given its files the same way. */
+const PAGES = ["settings", "widget"];
+/** The latin JetBrains Mono at 400 and 700, from the dev dependency rather than a checked-in binary: source in the package, name beside the page. */
+const PAGE_FONTS = [
+  ["files/jetbrains-mono-latin-400-normal.woff2", "jetbrains-mono-400.woff2"],
+  ["files/jetbrains-mono-latin-700-normal.woff2", "jetbrains-mono-700.woff2"],
+];
 const font = (file) => here(`../node_modules/@fontsource/jetbrains-mono/${file}`);
-await cp(font("files/jetbrains-mono-latin-400-normal.woff2"), here("../dist/settings/jetbrains-mono-400.woff2"));
-await cp(font("files/jetbrains-mono-latin-700-normal.woff2"), here("../dist/settings/jetbrains-mono-700.woff2"));
-await cp(font("LICENSE"), here("../dist/settings/jetbrains-mono-LICENSE.txt"));
-
-// The widget page and its preload, built like the settings page's. The page bundles the scene.
-await build({
-  entryPoints: [here("../src/widget/preload.ts")],
-  outfile: here("../dist/widget/preload.js"),
-  bundle: true,
-  platform: "node",
-  format: "cjs",
-  target: "node22",
-  external: ["electron"],
-  sourcemap: true,
-  logLevel: "info",
-});
-await build({
-  entryPoints: [here("../src/widget/page.ts")],
-  outfile: here("../dist/widget/page.js"),
-  bundle: true,
-  platform: "browser",
-  format: "iife",
-  target: "chrome130",
-  sourcemap: true,
-  logLevel: "info",
-});
-await cp(here("../src/widget/page.html"), here("../dist/widget/index.html"));
-await cp(here("../src/widget/page.css"), here("../dist/widget/page.css"));
-await cp(font("files/jetbrains-mono-latin-400-normal.woff2"), here("../dist/widget/jetbrains-mono-400.woff2"));
-await cp(font("files/jetbrains-mono-latin-700-normal.woff2"), here("../dist/widget/jetbrains-mono-700.woff2"));
-await cp(font("LICENSE"), here("../dist/widget/jetbrains-mono-LICENSE.txt"));
 
 // A preload is parsed before every page it serves. It needs the channel names and Electron's bridge,
 // nothing more; if one grows past this, something has pulled a library into it again.
 const PRELOAD_LIMIT = 20_000;
-for (const page of ["settings", "widget"]) {
+
+for (const page of PAGES) {
+  // The preload runs in Electron's preload world, which is CommonJS; the page is an ordinary script.
+  await build({
+    entryPoints: [here(`../src/${page}/preload.ts`)],
+    outfile: here(`../dist/${page}/preload.js`),
+    bundle: true,
+    platform: "node",
+    format: "cjs",
+    target: "node22",
+    external: ["electron"],
+    sourcemap: true,
+    logLevel: "info",
+  });
+  await build({
+    entryPoints: [here(`../src/${page}/page.ts`)],
+    outfile: here(`../dist/${page}/page.js`),
+    bundle: true,
+    platform: "browser",
+    format: "iife",
+    target: "chrome130",
+    sourcemap: true,
+    logLevel: "info",
+  });
+  await cp(here(`../src/${page}/page.html`), here(`../dist/${page}/index.html`));
+  await cp(here(`../src/${page}/page.css`), here(`../dist/${page}/page.css`));
+  for (const [source, name] of PAGE_FONTS) {
+    await cp(font(source), here(`../dist/${page}/${name}`));
+  }
+  await cp(font("LICENSE"), here(`../dist/${page}/jetbrains-mono-LICENSE.txt`));
+
   const preloadSize = (await stat(here(`../dist/${page}/preload.js`))).size;
   if (preloadSize > PRELOAD_LIMIT) {
     console.error(`bundle: dist/${page}/preload.js is ${preloadSize} bytes, over the ${PRELOAD_LIMIT} it is allowed; check what src/${page}/preload.ts imports`);

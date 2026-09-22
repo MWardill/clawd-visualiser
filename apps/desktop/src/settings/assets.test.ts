@@ -9,7 +9,9 @@ describe("the settings page's files", () => {
     const bundle = await read("../../build/bundle.mjs");
     const fonts = [...css.matchAll(/url\("([^"]+\.woff2)"\)/g)].map((match) => match[1] ?? "");
     expect(fonts).toEqual(["jetbrains-mono-400.woff2", "jetbrains-mono-700.woff2"]);
-    for (const font of fonts) expect(bundle, font).toContain(`dist/settings/${font}`);
+    expect(bundle).toMatch(/const PAGES = \[([^\]]*)\]/);
+    expect(/const PAGES = \[([^\]]*)\]/.exec(bundle)?.[1] ?? "").toContain('"settings"');
+    for (const font of fonts) expect(bundle, font).toContain(`"${font}"]`);
   });
 
   it("keeps the preload free of the schema library: it imports the channel names and types, nothing else of ours", async () => {
