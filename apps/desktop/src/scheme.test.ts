@@ -14,6 +14,7 @@ import {
   mimeFor,
   SETTINGS_URL,
   SETTINGS_POLICY,
+  WIDGET_URL,
 } from "./scheme";
 
 const made: string[] = [];
@@ -28,7 +29,8 @@ async function tempDir(): Promise<string> {
 
 const ROOT = resolve("renderer-root");
 const SETTINGS = resolve("settings-root");
-const DIRS = { clawd: ROOT, settings: SETTINGS };
+const WIDGET = resolve("widget-root");
+const DIRS = { clawd: ROOT, settings: SETTINGS, widget: WIDGET };
 
 describe("the app origin", () => {
   it("is core's desktop origin, so the window and the agent's CORS check agree", () => {
@@ -108,6 +110,25 @@ describe("the settings host", () => {
   });
 });
 
+describe("the widget host", () => {
+  it("serves the widget page from its own directory, and nothing outside it", () => {
+    expect(WIDGET_URL).toBe("app://widget/");
+    expect(mapRequest("app://widget/", DIRS)).toBe(join(WIDGET, "index.html"));
+    expect(mapRequest("app://widget/page.js", DIRS)).toBe(join(WIDGET, "page.js"));
+    expect(mapRequest("app://widget/..%2Fsettings%2Fpage.js", DIRS)).toBeNull();
+  });
+
+  it("gives a widget the policy that lets a page reach nothing: it is sent its snapshot, and fetches none", async () => {
+    const dir = await tempDir();
+    await writeFile(join(dir, "index.html"), "<canvas></canvas>");
+    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir, widget: dir }, port: () => 4750, fallbackPort: 4750 });
+    const page = await handle({ url: "app://widget/" });
+    expect(page.status).toBe(200);
+    expect(page.headers.get("content-security-policy")).toBe(SETTINGS_POLICY);
+    expect(SETTINGS_POLICY).toContain("connect-src 'none'");
+  });
+});
+
 describe("mimeFor", () => {
   it("types the export's files from a fixed table, and nothing else", () => {
     expect(mimeFor(join(ROOT, "index.html"))).toBe("text/html; charset=utf-8");
@@ -136,7 +157,7 @@ describe("createSchemeHandler", () => {
     const dir = await tempDir();
     await writeFile(join(dir, "index.html"), "<p>hi</p>");
     await writeFile(join(dir, "setup.exe"), "MZ");
-    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => 4750, fallbackPort: 4750 });
+    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir, widget: dir }, port: () => 4750, fallbackPort: 4750 });
 
     const page = await handle({ url: "app://clawd/" });
     expect(page.status).toBe(200);
@@ -158,7 +179,7 @@ describe("createSchemeHandler", () => {
     const dir = await tempDir();
     await writeFile(join(dir, "index.html"), "");
     let port = 4750;
-    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => port, fallbackPort: 4750 });
+    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir, widget: dir }, port: () => port, fallbackPort: 4750 });
     port = 4800;
     expect((await handle({ url: "app://clawd/" })).headers.get("content-security-policy")).toContain("connect-src 'self' http://127.0.0.1:4800 http://localhost:4800;");
   });
@@ -166,7 +187,7 @@ describe("createSchemeHandler", () => {
   it("serves the settings page under its own policy", async () => {
     const dir = await tempDir();
     await writeFile(join(dir, "index.html"), "<p>settings</p>");
-    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => 4750, fallbackPort: 4750 });
+    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir, widget: dir }, port: () => 4750, fallbackPort: 4750 });
     const page = await handle({ url: "app://settings/" });
     expect(page.status).toBe(200);
     expect(page.headers.get("content-security-policy")).toBe(SETTINGS_POLICY);
@@ -174,7 +195,7 @@ describe("createSchemeHandler", () => {
 
   it("answers 404 under the settings host with the settings policy, and treats a host that merely starts with it as unknown", async () => {
     const dir = await tempDir();
-    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => 4750, fallbackPort: 4750 });
+    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir, widget: dir }, port: () => 4750, fallbackPort: 4750 });
     const missing = await handle({ url: "app://settings/missing.js" });
     expect(missing.status).toBe(404);
     expect(missing.headers.get("content-security-policy")).toBe(SETTINGS_POLICY);
@@ -187,7 +208,7 @@ describe("createSchemeHandler", () => {
     const dir = await tempDir();
     await writeFile(join(dir, "index.html"), "<p>hi</p>");
     const throwing = createSchemeHandler({
-      dirs: { clawd: dir, settings: dir },
+      dirs: { clawd: dir, settings: dir, widget: dir },
       port: () => {
         throw new Error("no host yet");
       },
@@ -198,7 +219,7 @@ describe("createSchemeHandler", () => {
     expect(page.headers.get("content-security-policy")).toBe(contentSecurityPolicy(4750));
 
     const unreadable = createSchemeHandler({
-      dirs: { clawd: dir, settings: dir },
+      dirs: { clawd: dir, settings: dir, widget: dir },
       port: () => 4750,
       fallbackPort: 4750,
       readFile: async () => {
@@ -213,7 +234,7 @@ describe("createSchemeHandler", () => {
   it("answers a missing page with the export's 404.html when there is one, and anything else with plain text", async () => {
     const dir = await tempDir();
     await writeFile(join(dir, "404.html"), "<p>gone</p>");
-    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir }, port: () => 4750, fallbackPort: 4750 });
+    const handle = createSchemeHandler({ dirs: { clawd: dir, settings: dir, widget: dir }, port: () => 4750, fallbackPort: 4750 });
     for (const url of ["app://clawd/nowhere", "app://clawd/nowhere.html", "app://clawd/a/b/"]) {
       const res = await handle({ url });
       expect(res.status, url).toBe(404);

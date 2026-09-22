@@ -72,6 +72,10 @@ for (const page of PAGES) {
 // The tray loads its icons from beside main.cjs, as the window loads the export.
 await cp(here("../resources/tray"), here("../dist/tray"), { recursive: true });
 
+// The app's own icon goes beside the tray's, so the one extraResources entry carries it: every
+// window is given it by path, and a development run is electron.exe, whose icon is Electron's.
+await cp(here("../resources/icon.ico"), here("../dist/tray/app.ico"));
+
 // The hook scripts ship as they are: the installer copies them into <home>/bin, where they read
 // ../config.json beside themselves, so they must not be bundled.
 await cp(here("../../agent/hooks"), here("../dist/hooks"), { recursive: true });

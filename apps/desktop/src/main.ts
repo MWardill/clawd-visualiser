@@ -114,7 +114,7 @@ function run(): void {
   function showWindow(): void {
     win = showOrCreate(win, quitting, () => {
       const workAreas = screen.getAllDisplays().map((display) => display.workArea);
-      const created = createMainWindow(url, statusText(host.state()), restoredBounds(store.get().bounds, workAreas), store.get().maximized === true);
+      const created = createMainWindow(url, statusText(host.state()), restoredBounds(store.get().bounds, workAreas), store.get().maximized === true, dist.appIcon);
       // Closing hides the window, and the app and its agent carry on in the tray. Once quitting has
       // begun the close goes through. Either way where it was, and whether it filled the screen, is remembered.
       created.on("close", (event) => {
@@ -242,7 +242,7 @@ function run(): void {
 
   function showSettings(): void {
     settingsWin = showOrCreate(settingsWin, quitting, () => {
-      const created = createSettingsWindow(join(dist.settings, "preload.js"));
+      const created = createSettingsWindow(join(dist.settings, "preload.js"), dist.appIcon);
       created.on("closed", () => {
         settingsWin = null;
       });
@@ -254,7 +254,7 @@ function run(): void {
   const started = app.whenReady().then(async () => {
     // Every app:// request is answered from the export beside main.cjs, under a CSP that lets the
     // page reach only the agent in use.
-    protocol.handle(APP_SCHEME, createSchemeHandler({ dirs: { clawd: dist.renderer, settings: dist.settings }, port: () => host.state().port ?? DEFAULT_PORT, fallbackPort: DEFAULT_PORT }));
+    protocol.handle(APP_SCHEME, createSchemeHandler({ dirs: { clawd: dist.renderer, settings: dist.settings, widget: dist.widget }, port: () => host.state().port ?? DEFAULT_PORT, fallbackPort: DEFAULT_PORT }));
     log("desktop.started", { packaged: app.isPackaged });
     host.start();
     await store.load();
