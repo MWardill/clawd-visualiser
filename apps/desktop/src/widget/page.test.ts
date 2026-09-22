@@ -29,6 +29,7 @@ async function load(initial: WidgetState | null = STATE, hit: string | null = nu
   const scene: PanesScene = {
     setSnapshot: (s, o) => void drawn.push(`snapshot ${s.sessions.length} seated=${o?.seated === true}`),
     clear: () => void drawn.push("clear"),
+    setFinished: () => {},
     resize: () => {},
     setPaused: () => {},
     hitTest: (x, y) => {
