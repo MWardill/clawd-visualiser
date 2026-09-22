@@ -1,7 +1,7 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import type { AddressInfo } from "node:net";
 import { afterEach, describe, expect, it } from "vitest";
-import { checkToken, countsOf, fetchCounts, fetchSnapshot, probeHealth } from "./agent-client";
+import { checkToken, countsOf, fetchCounts, fetchSnapshot, probeHealth, sendFocus } from "./agent-client";
 import { snapshot } from "./testing/snapshot";
 
 type Handler = (req: IncomingMessage, res: ServerResponse) => void;
@@ -125,5 +125,29 @@ describe("fetchSnapshot", () => {
     });
     await fetchSnapshot(port);
     expect(origin).toBeUndefined();
+  });
+});
+
+describe("sendFocus", () => {
+  it("posts a focus command for the alias as JSON with no origin, and reads the agent's 202 as sent", async () => {
+    const seen: { method?: string; url?: string; type?: string; origin?: string; body?: string } = {};
+    const port = await serve((req, res) => {
+      let body = "";
+      req.on("data", (chunk: Buffer) => (body += chunk.toString()));
+      req.on("end", () => {
+        Object.assign(seen, { method: req.method, url: req.url, type: req.headers["content-type"], origin: req.headers.origin, body });
+        res.writeHead(202);
+        res.end();
+      });
+    });
+    expect(await sendFocus(port, "agent-3")).toBe(true);
+    expect(seen).toEqual({ method: "POST", url: "/api/command", type: "application/json", origin: undefined, body: JSON.stringify({ type: "focus", alias: "agent-3" }) });
+  });
+
+  it("is false when the agent does not know the alias, refuses, is not there, or is too slow", async () => {
+    expect(await sendFocus(await serve(reply({ error: "unknown alias" }, 404)), "agent-9")).toBe(false);
+    expect(await sendFocus(await serve(reply({ error: "origin not allowed" }, 403)), "agent-1")).toBe(false);
+    expect(await sendFocus(await closedPort(), "agent-1")).toBe(false);
+    expect(await sendFocus(await serve(() => {}), "agent-1", 50)).toBe(false);
   });
 });

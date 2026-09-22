@@ -25,8 +25,9 @@ widgets, a deep link in the web app, the window icon, tests, staging.
 
 Out of scope: hiding a single folder's widget; resizing or scaling widgets; sounds and Windows toast
 notifications; popups for a session that waits or ends (waiting already turns the box amber and
-badges the tray); focusing the session's terminal from a widget (the agent's `focus` command exists,
-so it is a small later addition); macOS and Linux, as before.
+badges the tray); macOS and Linux, as before. Focusing the session's terminal from a widget was out
+of scope at first and came in on 22 September 2026, after stage 10's walk began: a Clawd click now
+sends the agent's `focus` command rather than opening the full window (§3.2).
 
 ## 2. Decisions
 
@@ -40,7 +41,7 @@ so it is a small later addition); macOS and Linux, as before.
 | The look | The box's interior in the night colour; everything outside it transparent; Clawds clipped to the box | Text stays legible on any wallpaper. A Clawd rises into view from behind the bottom border and leaves the same way, so nothing is ever drawn on the desktop and the window is exactly the box. |
 | What "finished" means | A session shown `working` in one snapshot and `idle` in the next | Claude Code's Stop hook. Core keeps a session working while its subagents or background tasks run, so the popup waits for them. A session that ends or waits does not pop up. |
 | How a raised box goes down | A press on it, or the session working or waiting again, or the session leaving the snapshot | Nothing timed: a popup that fired while the maintainer was away is still there on return. Going `asleep` does not lower it, for the same reason. |
-| The full window in widget view | Still there on demand | The ticker and the detail sheet live there. The tray menu opens it, and clicking a Clawd in a widget opens it on that session. |
+| The full window in widget view | Still there on demand | The ticker and the detail sheet live there. The tray menu and a widget's menu open it. A Clawd click does not: it focuses that session's terminal instead, which is what the maintainer reached for when a box came up (changed 22 September 2026). |
 | Pinning | Per widget: a pin in the title row on hover, and a native context menu | One folder can stay on top while the rest sit behind the editor, and a lit pin shows which at a glance. |
 | Defaults | View: window. Popup: off | A teammate who unzips a new version sees what they saw before. |
 
@@ -77,8 +78,12 @@ Turning the popup off lowers every raised box.
   display's work area, then starts a new column to the left. A remembered place that is no longer on
   any display falls back to that.
 - Press and move to drag; where it is dropped is remembered for that folder. A press that moves less
-  than four pixels is a click: on a Clawd or its nameplate it opens the full window on that session's
-  detail sheet (§7); anywhere else it does nothing.
+  than four pixels is a click: on a Clawd or its nameplate it sends the agent's `focus` command for
+  that session, which raises its terminal window, as the detail sheet's focus button does; anywhere
+  else it does nothing. Main posts the command to the agent in use, own or attached, without an
+  `Origin`, which the command route allows, with the alias that agent itself sent; a refusal or no
+  answer is logged as `desktop.focusFailed`. (Until 22 September 2026 a click opened the full window
+  on the session's sheet through §7's link; the maintainer changed it in stage 10's walk.)
 - The pin appears at the right of the title row while the pointer is over the widget, and stays, lit
   amber, while the widget is pinned. Pinned means always on top, and is remembered for that folder.
 - The right button opens a native menu: **Pin on top** (a checkbox), **Open full window**,
@@ -108,8 +113,8 @@ Turning the popup off lowers every raised box.
   that was pinned, and so already on top, still says so. Amber for a waiting session wins over green.
 - **What lowers it.** A press on the widget, when it is released: a click, or the end of a drag, so a
   temporary widget can be moved before it goes and the place is remembered. A click on a Clawd in a
-  temporary widget opens the full window on that session first, and the release then closes the
-  popup: the page sends the selection before the release. Or every session that
+  temporary widget focuses that session's terminal first, and the release then closes the popup:
+  the page sends the selection before the release. Or every session that
   raised it has since gone to `working` or `waiting`, which means it was answered in its terminal, or
   has left the snapshot. `asleep` does not lower it.
 - **Afterwards** a pinned widget stays on top at the pinned level, an unpinned one becomes an
@@ -301,7 +306,8 @@ src/attached-feed.ts   snapshots while attached: polls the agent on the port; te
   `desktop.widgetFailed` logged. The next snapshot makes it again, at most three times for a label in
   one run of the app.
 - New log codes, carrying numbers and booleans only, never a label: `desktop.viewChanged` (`widgets`),
-  `desktop.popupChanged` (`on`), `desktop.popupRaised` (`temporary`), `desktop.widgetFailed` (`tries`).
+  `desktop.popupChanged` (`on`), `desktop.popupRaised` (`temporary`), `desktop.widgetFailed` (`tries`),
+  `desktop.focusFailed` (no fields: the agent refused a clicked session's focus command or did not answer).
 
 ## 7. The web app (`apps/web`)
 
@@ -315,10 +321,10 @@ hand; a link belongs to the live feed running when it was read, or, read at load
 simulated feed, to the first live feed that starts afterwards, and never moves to another. The
 parsing and the rule are pure functions in `lib/`, tested; it works in a browser tab as well.
 
-Main uses it for a Clawd clicked in a widget: `showWindow()`, then the window is loaded at its own
-URL with the hash. For a window already showing the page that is a same-document navigation, so the
-page is not reloaded, the feed stays connected and `hashchange` fires. The alias is one main itself
-sent, and is URL-encoded.
+Stage 9 built it for a Clawd clicked in a widget, which loaded the full window at its own URL with
+the hash: a same-document navigation for a window already showing the page, so nothing reloaded and
+`hashchange` fired. Since 22 September 2026 a Clawd click focuses the terminal instead (§3.2) and
+the desktop no longer builds the link; it stays in the web app for the browser.
 
 ## 8. Privacy
 
@@ -410,7 +416,7 @@ watched folders. Not yet done.
 - [ ] Attached (the CLI agent holding the port), window view, popup on: the box still pops up within a second or so of the finish.
 - [ ] The log holds `desktop.popupChanged` with `on` and `remembered`, and `desktop.popupRaised` with `temporary`, and no folder name.
 - [ ] With boxes raised, Quit from the tray: every box goes and no `electron.exe` remains.
-- [ ] A click on a Clawd in a popup opens the full window on that session's sheet, and the popup closes.
+- [ ] A click on a Clawd in a popup brings that session's terminal to the front (the log gains no `desktop.focusFailed`), the full window stays hidden, and the popup closes. In widget view a click on a Clawd does the same and the box stays.
 - [ ] Widget view, popup on: a raised widget sits above a pinned one and above the taskbar, or the two levels turn out to be one band on this Windows and the raise still shows (record which).
 
 ## 11. Tests

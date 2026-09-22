@@ -40,8 +40,9 @@ alone. `CLAWD_HOME` and `CLAUDE_CONFIG_DIR` point it at scratch folders while te
 **Widget view.** Settings has a View choice: *window*, the whole scene in one window, or *widgets*,
 where each folder's box is its own frameless, transparent window. Drag a box anywhere; it is found
 again where it was left, by folder name, in `desktop.json`. The pin in its title row, or **Pin on
-top** in its right-click menu, keeps it above other windows. Clicking a Clawd opens the full window
-on that session's detail sheet, and the tray's **Open** opens it in either view. In widget view a
+top** in its right-click menu, keeps it above other windows. Clicking a Clawd brings that session's
+terminal to the front, as the sheet's focus button does; the tray's **Open** and a box's right-click
+menu open the full window in either view. In widget view a
 plain launch shows no window: the boxes appear with the sessions. Clicking the tray icon brings the
 boxes forward, or opens the full window when there are none.
 
@@ -446,9 +447,11 @@ on the other side. No handler may throw: an exception nothing catches in main re
 **`Menu.popup`.** The page cancels `contextmenu` and asks; main builds the native menu and pops it
 on that window.
 
-**Same-document navigation.** A Clawd clicked in a widget opens the full window at
+**Same-document navigation.** Until the walk, a Clawd clicked in a widget opened the full window at
 `app://clawd/#session=<alias>`. Loading the URL a window already shows, with only the hash changed,
-does not reload the page: it fires `hashchange`, which the web app reads as a link.
+does not reload the page: it fires `hashchange`, which the web app reads as a link. The link stays
+in the web app for the browser; the desktop now sends the agent's focus command for the click
+instead, since the terminal is what you reach for when a box comes up.
 
 **Shutting the widgets down.** Quitting closes every widget, but the app's own agent goes on emitting
 snapshots until `will-quit` stops it, and a snapshot arriving then would open a fresh window during

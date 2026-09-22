@@ -65,6 +65,7 @@ function harness(over: Partial<ControllerDeps> = {}) {
   const windows: FakeWindow[] = [];
   const saved: Array<[string, Placement]> = [];
   const opened: string[] = [];
+  const focused_: string[] = [];
   const logged: Array<[string, LogFields]> = [];
   let cursor = { x: 0, y: 0 };
   let focused = false;
@@ -80,7 +81,7 @@ function harness(over: Partial<ControllerDeps> = {}) {
     windowFocused: () => focused,
     placement: () => undefined,
     savePlacement: (label, placement) => void saved.push([label, placement]),
-    openSession: (alias) => void opened.push(`session ${alias}`),
+    focusSession: (alias) => void focused_.push(alias),
     openWindow: () => void opened.push("window"),
     openSettings: () => void opened.push("settings"),
     log: (code, fields = {}) => void logged.push([code, fields]),
@@ -92,7 +93,7 @@ function harness(over: Partial<ControllerDeps> = {}) {
     if (found === undefined) throw new Error(`no window ${n}`);
     return found;
   };
-  return { c, windows, w, saved, opened, logged, setCursor: (x: number, y: number) => (cursor = { x, y }), setFocused: (on: boolean) => (focused = on) };
+  return { c, windows, w, saved, opened, focused: focused_, logged, setCursor: (x: number, y: number) => (cursor = { x, y }), setFocused: (on: boolean) => (focused = on) };
 }
 
 /** Widget view, two panes, both pages ready and shown. */
@@ -380,13 +381,14 @@ describe("the pin, the menu and a clicked Clawd", () => {
     expect(h.opened).toEqual(["window", "settings"]);
   });
 
-  it("opens a clicked session only when it is one main sent that window", () => {
+  it("focuses a clicked session's terminal only when it is one main sent that window, and never opens the full window", () => {
     const h = shown();
     h.c.select(h.w(0).win.id, "agent-1");
     h.c.select(h.w(0).win.id, "agent-2"); // the other pane's
     h.c.select(h.w(0).win.id, "agent-9");
     h.c.select(999, "agent-1");
-    expect(h.opened).toEqual(["session agent-1"]);
+    expect(h.focused).toEqual(["agent-1"]);
+    expect(h.opened).toEqual([]);
   });
 
   it("a menu item clicked after its window has gone does nothing", () => {
@@ -639,7 +641,7 @@ describe("the finished popup in window view", () => {
     expect(h.windows).toHaveLength(1);
   });
 
-  it("opens the session a click on a temporary widget names, then closes the popup", () => {
+  it("focuses the session a click on a temporary widget names, then closes the popup", () => {
     const h = windowView();
     h.c.setSnapshot(REPO_IDLE, "own:1");
     const id = h.w(0).win.id;
@@ -648,7 +650,8 @@ describe("the finished popup in window view", () => {
     h.c.select(id, "agent-1");
     h.c.dragStart(id);
     h.c.dragEnd(id);
-    expect(h.opened).toEqual(["session agent-1"]);
+    expect(h.focused).toEqual(["agent-1"]);
+    expect(h.opened).toEqual([]);
     expect(h.w(0).calls.at(-1)).toBe("close");
   });
 

@@ -17,7 +17,7 @@ import {
 import { Menu, Tray, app, dialog, ipcMain, nativeImage, protocol, screen, shell, type BrowserWindow, type NativeImage, type OpenDialogOptions } from "electron";
 import { access } from "node:fs/promises";
 import { join } from "node:path";
-import { checkToken, fetchCounts, fetchSnapshot, probeHealth } from "./agent-client";
+import { checkToken, fetchCounts, fetchSnapshot, probeHealth, sendFocus } from "./agent-client";
 import { createAgentHost, statusText, type HostState } from "./agent-host";
 import { ownArgs, parseArgs, resolveRendererUrl } from "./args";
 import { restoredBounds } from "./bounds";
@@ -27,7 +27,6 @@ import { currentHookStatus, installedExe, launchRepair, readConfigState, runtime
 import { isQuitShortcut } from "./keys";
 import { createFileSink, readRetentionDays } from "./log";
 import { appUserModelId, loginItemTarget, loginOnLaunch, shownAtLogin } from "./login";
-import { sessionUrl } from "./navigation";
 import { distPaths } from "./paths";
 import { showOrCreate } from "./reveal";
 import { createQuitHandler, settleWithin } from "./quit";
@@ -104,7 +103,14 @@ function run(): void {
     windowFocused: () => win !== null && !win.isDestroyed() && win.isFocused(),
     placement: (label) => placementOf(store.get(), label),
     savePlacement: (label, placement) => store.update({ widgets: withPlacement(store.get().widgets, label, placement) }),
-    openSession: (alias) => showWindow(alias),
+    // A Clawd clicked: the agent in use, own or attached, raises that session's terminal; the alias is one it sent.
+    focusSession: (alias) => {
+      const port = host.state().port;
+      if (port === null) return;
+      void sendFocus(port, alias).then((sent) => {
+        if (!sent) log("desktop.focusFailed");
+      });
+    },
     openWindow: () => showWindow(),
     openSettings: () => showSettings(),
     log,
@@ -163,13 +169,11 @@ function run(): void {
   process.on("uncaughtException", () => host.fault());
   process.on("unhandledRejection", () => host.fault());
 
-  /** Shows the window, making it the first time; from the tray, a second launch, startup, or a Clawd clicked in a widget, which names the session to open it on. */
-  function showWindow(alias?: string): void {
-    const target = alias === undefined ? url : sessionUrl(url, alias);
-    const existed = win !== null && !win.isDestroyed();
+  /** Shows the window, making it the first time; from the tray, a second launch, startup, or a widget's menu. */
+  function showWindow(): void {
     win = showOrCreate(win, quitting, () => {
       const workAreas = screen.getAllDisplays().map((display) => display.workArea);
-      const created = createMainWindow(target, statusText(host.state()), restoredBounds(store.get().bounds, workAreas), store.get().maximized === true, dist.appIcon);
+      const created = createMainWindow(url, statusText(host.state()), restoredBounds(store.get().bounds, workAreas), store.get().maximized === true, dist.appIcon);
       // Closing hides the window, and the app and its agent carry on in the tray. Once quitting has
       // begun the close goes through. Either way where it was, and whether it filled the screen, is remembered.
       created.on("close", (event) => {
@@ -188,10 +192,6 @@ function run(): void {
       });
       return created;
     });
-    // A window that was already showing the page: the same URL with another hash is a navigation
-    // inside the document, so nothing reloads, the feed stays connected and the page hears `hashchange`.
-    // A load that is superseded or fails rejects; an unhandled rejection here would fault the host.
-    if (existed && alias !== undefined && !quitting && win !== null && !win.isDestroyed()) win.loadURL(target).catch(() => {});
   }
 
   /** What clicking the tray icon or launching the app a second time does: the widgets come forward in widget view, and the full window opens otherwise, or when no widget is open, so the click always does something. */

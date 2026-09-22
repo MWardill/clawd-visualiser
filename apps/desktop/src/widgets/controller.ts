@@ -44,8 +44,8 @@ export type ControllerDeps = {
   savePlacement(label: string, placement: Placement): void;
   /** Whether the full window has the keyboard: then the maintainer is already looking, and no popup is made. */
   windowFocused(): boolean;
-  /** A Clawd was clicked: the full window, on that session. */
-  openSession(alias: string): void;
+  /** A Clawd was clicked: bring that session's terminal to the front, as the sheet's focus button does. The full window stays where it is. */
+  focusSession(alias: string): void;
   openWindow(): void;
   openSettings(): void;
   log: Logger;
@@ -413,7 +413,7 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     select(sender, alias) {
       const e = bySender(sender);
       // Only an alias main itself sent this window.
-      if (e?.shown?.sessions.some((session) => session.alias === alias)) deps.openSession(alias);
+      if (e?.shown?.sessions.some((session) => session.alias === alias)) deps.focusSession(alias);
     },
     menu(sender) {
       const e = bySender(sender);

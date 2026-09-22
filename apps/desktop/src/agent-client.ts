@@ -1,5 +1,6 @@
-// What the main process asks of an agent it does not own: is it there, and how many sessions has
-// it? Plain HTTP to 127.0.0.1, as any client of the agent would. Neither function ever rejects.
+// What the main process asks of the agent over HTTP, owned or not: is it there, how many sessions
+// has it, its snapshot, and, for a Clawd clicked in a widget, to focus a session's terminal. Plain
+// HTTP to 127.0.0.1, as any client of the agent would. No function here ever rejects.
 import { TOKEN_HEADER } from "@clawd/agent";
 import { DESKTOP_ORIGIN, ENDPOINTS, SnapshotSchema, type Snapshot } from "@clawd/core";
 import { request } from "node:http";
@@ -79,4 +80,24 @@ export function checkToken(port: number, token: string, timeoutMs = COUNTS_TIMEO
     req.on("error", () => resolve("unknown"));
     req.end();
   });
+}
+
+/**
+ * Asks the agent on the port to focus a session's terminal: the command the detail sheet's "focus
+ * window" button sends, with the alias the agent itself put in the snapshot. Sent without an Origin,
+ * which the command route allows, so it reaches an attached agent too. True on the agent's 202;
+ * false when it does not know the alias, refuses, is not there or is too slow. Never rejects.
+ */
+export async function sendFocus(port: number, alias: string, timeoutMs = COUNTS_TIMEOUT_MS): Promise<boolean> {
+  try {
+    const res = await fetch(`http://127.0.0.1:${port}${ENDPOINTS.command}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ type: "focus", alias }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+    return res.status === 202;
+  } catch {
+    return false;
+  }
 }
