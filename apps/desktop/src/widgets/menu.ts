@@ -8,12 +8,13 @@ export type WidgetMenuActions = {
   settings(): void;
 };
 
-/** Pin on top, Open full window, Settings. */
-export function widgetMenuTemplate(pinned: boolean, actions: WidgetMenuActions): MenuItemConstructorOptions[] {
-  return [
-    { label: "Pin on top", type: "checkbox", checked: pinned, click: () => actions.togglePin() },
-    { type: "separator" },
-    { label: "Open full window", click: () => actions.openWindow() },
-    { label: "Settings", click: () => actions.settings() },
-  ];
+/** Pin on top, Open full window, Settings. A temporary widget, a popup in window view, has no pin: it goes when it is pressed. */
+export function widgetMenuTemplate(pinned: boolean, actions: WidgetMenuActions, temporary = false): MenuItemConstructorOptions[] {
+  const pin: MenuItemConstructorOptions[] = temporary
+    ? []
+    : [
+        { label: "Pin on top", type: "checkbox", checked: pinned, click: () => actions.togglePin() },
+        { type: "separator" },
+      ];
+  return [...pin, { label: "Open full window", click: () => actions.openWindow() }, { label: "Settings", click: () => actions.settings() }];
 }

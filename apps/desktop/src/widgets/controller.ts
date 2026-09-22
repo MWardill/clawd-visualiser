@@ -170,7 +170,7 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     const current = snapshot;
     const wanted = new Set<string>();
     if (current !== null) {
-      for (const w of planWidgets({ snapshot: current, view })) {
+      for (const w of planWidgets({ snapshot: current, view, raised: new Set() })) {
         const e = entries.get(w.label) ?? open(w.label, w.pane);
         if (e === undefined) continue;
         wanted.add(w.label);
