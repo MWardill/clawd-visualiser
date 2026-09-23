@@ -15,10 +15,19 @@ const snap = (...sessions: ReturnType<typeof session>[]): Snapshot => ({
 });
 
 describe("finishedTurns", () => {
-  it("names the pane and the session where working became idle, and nothing else", () => {
+  it("names the pane and the session where working became idle or waiting, and nothing else", () => {
     const before = snap(session("agent-1", "pane-1", "working"), session("agent-2", "pane-2", "working"), session("agent-3", "pane-1", "idle"));
     const after = snap(session("agent-1", "pane-1", "idle"), session("agent-2", "pane-2", "waiting"), session("agent-3", "pane-1", "idle"));
-    expect(finishedTurns(before, after)).toEqual([{ label: "repo", alias: "agent-1" }]);
+    expect(finishedTurns(before, after)).toEqual([
+      { label: "repo", alias: "agent-1" },
+      { label: "docs", alias: "agent-2" },
+    ]);
+  });
+
+  it("does not count a session still waiting, nor one first seen waiting", () => {
+    const before = snap(session("agent-1", "pane-1", "waiting"));
+    const after = snap(session("agent-1", "pane-1", "waiting"), session("agent-2", "pane-2", "waiting"));
+    expect(finishedTurns(before, after)).toEqual([]);
   });
 
   it("is the baseline with no previous snapshot: nothing has finished", () => {
@@ -50,9 +59,9 @@ describe("finishedTurns", () => {
 describe("stillRaising", () => {
   const raised = new Set(["agent-1", "agent-2"]);
 
-  it("keeps a session that is idle, asleep or done, and drops one working or waiting again, or gone", () => {
+  it("keeps a session that is idle, waiting, asleep or done, and drops one working again, or gone", () => {
     expect(stillRaising(raised, snap(session("agent-1", "pane-1", "idle"), session("agent-2", "pane-2", "working")))).toEqual(new Set(["agent-1"]));
-    expect(stillRaising(raised, snap(session("agent-1", "pane-1", "asleep"), session("agent-2", "pane-2", "waiting")))).toEqual(new Set(["agent-1"]));
+    expect(stillRaising(raised, snap(session("agent-1", "pane-1", "asleep"), session("agent-2", "pane-2", "waiting")))).toEqual(new Set(["agent-1", "agent-2"]));
     expect(stillRaising(raised, snap(session("agent-1", "pane-1", "done")))).toEqual(new Set(["agent-1"]));
     expect(stillRaising(raised, snap(session("agent-3", "pane-1", "idle")))).toEqual(new Set());
   });

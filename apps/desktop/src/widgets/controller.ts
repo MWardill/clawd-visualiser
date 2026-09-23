@@ -339,7 +339,7 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
           }
         }
       }
-      // A raise holds while any of its sessions is neither working nor waiting again, and still there.
+      // A raise holds while any of its sessions is not working again, and still there.
       for (const [label, holders] of [...raised]) {
         const kept = stillRaising(holders, s);
         if (kept.size === 0) raised.delete(label);
