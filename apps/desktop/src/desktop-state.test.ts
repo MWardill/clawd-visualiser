@@ -88,6 +88,11 @@ describe("parseDesktopState", () => {
     expect(parseDesktopState({ version: 2, finishedPopup: true })).toEqual({ finishedPopup: true });
     expect(parseDesktopState({ version: 2, finishedPopup: "yes", view: "widgets" })).toEqual({ view: "widgets" });
   });
+
+  it("keeps where a box pops up, a boolean judged on its own", () => {
+    expect(parseDesktopState({ version: 2, popupInCorner: false })).toEqual({ popupInCorner: false });
+    expect(parseDesktopState({ version: 2, popupInCorner: "no", finishedPopup: true })).toEqual({ finishedPopup: true });
+  });
 });
 
 describe("createDesktopStore", () => {

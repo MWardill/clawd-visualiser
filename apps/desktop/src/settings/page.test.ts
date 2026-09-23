@@ -14,6 +14,7 @@ const STATE: SettingsState = {
   openAtLogin: false,
   view: "window",
   finishedPopup: false,
+  popupInCorner: true,
   logDir: "C:\\logs",
   notice: null,
 };
@@ -49,6 +50,7 @@ async function load(over: Partial<SettingsApi> = {}, initial: SettingsState = ST
     setOpenAtLogin: async () => initial,
     setView: async () => initial,
     setFinishedPopup: async () => initial,
+    setPopupInCorner: async () => initial,
     retryAgent: async () => initial,
     openLogs: async () => {},
     onState: (cb) => {
@@ -333,5 +335,22 @@ describe("the settings page", () => {
     expect(asked).toEqual([true]);
     expect(radio("popup:on").checked).toBe(true);
     expect(radio("view:window").checked).toBe(true);
+  });
+
+  it("offers where a box pops up as a corner/in place pair in the View section, and asks main for the one chosen", async () => {
+    const asked: boolean[] = [];
+    await load({
+      setPopupInCorner: async (on) => {
+        asked.push(on);
+        return { ...STATE, popupInCorner: on };
+      },
+    });
+    expect(radio("corner:corner").checked).toBe(true);
+    expect(radio("corner:corner").closest("section")?.querySelector("h2")?.textContent).toBe("View");
+    choose("corner:in-place");
+    await flush();
+    expect(asked).toEqual([false]);
+    expect(radio("corner:in-place").checked).toBe(true);
+    expect(radio("popup:off").checked).toBe(true);
   });
 });

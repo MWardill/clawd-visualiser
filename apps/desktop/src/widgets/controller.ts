@@ -57,6 +57,8 @@ export type WidgetController = {
   setView(view: View): void;
   /** Whether a finished turn raises its pane's box. Off lowers every raised one. */
   setPopup(on: boolean): void;
+  /** Whether a raised box goes to the bottom-right corner, or rises where it is. A box already raised stays put. */
+  setPopupCorner(on: boolean): void;
   /** `source` names the agent the snapshot came from (`own:<run>`, `attached:<port>`); a new name is a new generation. */
   setSnapshot(s: Snapshot, source: string): void;
   /** There is no agent to hear from: the Clawds walk out, same as any pane that leaves, and what is shown goes after the cap. */
@@ -122,6 +124,7 @@ const levelOf = (e: Entry): WidgetLevel => (e.raised ? "raised" : e.pinned ? "pi
 export function createWidgetController(deps: ControllerDeps): WidgetController {
   let view: View = "window";
   let popup = false;
+  let corner = true;
   let snapshot: Snapshot | null = null;
   /** The snapshot before `snapshot`, from the same source: what a finish is measured against. Null at a source's first. */
   let previous: Snapshot | null = null;
@@ -166,8 +169,8 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     if ((tries.get(label) ?? 0) >= MAX_TRIES) return undefined;
     const remembered = deps.placement(label);
     const bounds = placeWidget({
-      // A popup is always at the bottom right, wherever the folder's own widget lives.
-      remembered: temporary ? undefined : remembered,
+      // A popup for the corner goes there, wherever the folder's own widget lives.
+      remembered: temporary && corner ? undefined : remembered,
       size: DEFAULT_WIDGET_SIZE,
       workAreas: deps.workAreas(),
       primary: deps.primaryWorkArea(),
@@ -208,8 +211,8 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     });
 
   /**
-   * Puts an entry's level where the raised set says, and brings a newly raised box to the corner:
-   * a pinned one stays where it was pinned, since the pin is a promise about where it sits. Answers
+   * Puts an entry's level where the raised set says, and brings a newly raised box to the corner
+   * when the corner is on: a pinned one stays where it was pinned, since the pin is a promise about where it sits. Answers
    * whether a reveal is due: newly raised and already shown, so the caller can bring it forward once
    * its new state has been pushed, and the cue (green, raised) and the rise reach the page in the
    * same moment. A box lowered afterwards stays in the corner; only a drag is remembered.
@@ -220,7 +223,7 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     e.raised = shouldRaise;
     e.win.setLevel(levelOf(e));
     if (!shouldRaise) return false;
-    if (!e.pinned) {
+    if (corner && !e.pinned) {
       const slot = popupSlot(e);
       const now = e.win.bounds();
       if (slot.x !== now.x || slot.y !== now.y) e.win.setBounds(slot);
@@ -313,6 +316,9 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
       closeAll();
       if (view === "widgets") reconcile();
     },
+    setPopupCorner(on) {
+      corner = on;
+    },
     setPopup(on) {
       if (on === popup) return;
       popup = on;
@@ -394,9 +400,9 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
       }
       e.size = size;
       const b = e.win.bounds();
-      // A box grows from its top-left corner, except while it is raised: that one is held at the
-      // corner it was raised to, so a session joining its folder cannot grow it off the bottom edge.
-      e.win.setBounds(e.raised && !e.pinned ? popupSlot(e) : { x: b.x, y: b.y, ...size });
+      // A box grows from its top-left corner, except while it is raised to the corner: held there, so
+      // a session joining its folder cannot grow it off the bottom edge.
+      e.win.setBounds(e.raised && corner && !e.pinned ? popupSlot(e) : { x: b.x, y: b.y, ...size });
       if (e.revealed) return;
       e.revealed = true;
       e.win.reveal();

@@ -91,6 +91,8 @@ function run(): void {
 
   /** Whether a finished turn pops its box up. Read fresh, as `view` is. */
   const popup = (): boolean => store.get().finishedPopup ?? false;
+  /** Whether a popped-up box goes to the corner; on unless turned off. */
+  const popupInCorner = (): boolean => store.get().popupInCorner ?? true;
 
   // The widgets: one frameless window per pane. Every rule is in the controller; this hands it Electron.
   const widgets = createWidgetController({
@@ -259,6 +261,13 @@ function run(): void {
     return store.usable();
   }
 
+  /** Where a box pops up, from the settings window: remembered, and applied from the next popup on. */
+  function applyPopupCorner(on: boolean): boolean {
+    store.update({ popupInCorner: on });
+    widgets.setPopupCorner(on);
+    return store.usable();
+  }
+
   /** The menu is rebuilt whenever the login checkbox or the view could have changed. */
   function refreshMenu(): void {
     tray?.setContextMenu(
@@ -299,6 +308,7 @@ function run(): void {
       openAtLogin: openAtLogin(),
       view: store.get().view ?? "window",
       finishedPopup: store.get().finishedPopup ?? false,
+      popupInCorner: popupInCorner(),
       logDir: agentPaths(home).logs,
       notice: null,
     });
@@ -332,6 +342,7 @@ function run(): void {
     applyOpenAtLogin,
     applyView,
     applyPopup,
+    applyPopupCorner,
     openLogs: () => shell.openPath(agentPaths(home).logs).then(() => {}),
     log,
   });
@@ -375,6 +386,7 @@ function run(): void {
 
     // desktop.json is read: the remembered view and popup choice take effect, and with them the question of whom to ask for snapshots.
     widgets.setPopup(popup());
+    widgets.setPopupCorner(popupInCorner());
     widgets.setView(view());
     followFeed();
 

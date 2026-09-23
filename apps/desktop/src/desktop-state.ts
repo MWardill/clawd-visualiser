@@ -20,7 +20,7 @@ export type Placement = { x: number; y: number; pinned: boolean };
  * were written in, and a folder may be called `2024`.
  */
 export type StoredPlacement = Placement & { label: string };
-export type DesktopState = { bounds?: Bounds; maximized?: boolean; openAtLogin?: boolean; view?: View; finishedPopup?: boolean; widgets?: StoredPlacement[] };
+export type DesktopState = { bounds?: Bounds; maximized?: boolean; openAtLogin?: boolean; view?: View; finishedPopup?: boolean; popupInCorner?: boolean; widgets?: StoredPlacement[] };
 
 /** Folders come and go; the file does not grow for ever. */
 export const MAX_PLACEMENTS = 200;
@@ -74,7 +74,7 @@ export function withPlacement(all: readonly StoredPlacement[] | undefined, label
 /** The valid fields of a version 2 file, each judged on its own; anything else is dropped. */
 export function parseDesktopState(value: unknown): DesktopState {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return {};
-  const file = value as { version?: unknown; bounds?: unknown; maximized?: unknown; openAtLogin?: unknown; view?: unknown; finishedPopup?: unknown; widgets?: unknown };
+  const file = value as { version?: unknown; bounds?: unknown; maximized?: unknown; openAtLogin?: unknown; view?: unknown; finishedPopup?: unknown; popupInCorner?: unknown; widgets?: unknown };
   if (file.version !== VERSION) return {};
   const state: DesktopState = {};
   const b = file.bounds;
@@ -86,6 +86,7 @@ export function parseDesktopState(value: unknown): DesktopState {
   if (typeof file.openAtLogin === "boolean") state.openAtLogin = file.openAtLogin;
   if (file.view === "window" || file.view === "widgets") state.view = file.view;
   if (typeof file.finishedPopup === "boolean") state.finishedPopup = file.finishedPopup;
+  if (typeof file.popupInCorner === "boolean") state.popupInCorner = file.popupInCorner;
   const widgets = parsePlacements(file.widgets);
   if (widgets !== undefined) state.widgets = widgets;
   return state;

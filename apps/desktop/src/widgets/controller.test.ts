@@ -626,6 +626,17 @@ describe("the finished popup in widget view", () => {
     expect(h.w(0).calls).toEqual([]);
   });
 
+  it("with the corner off, raises a widget where it stands and grows it from its top-left corner", () => {
+    const h = shown();
+    h.c.setPopup(true);
+    h.c.setPopupCorner(false);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    expect(h.w(0).calls).toEqual(["level raised", "reveal"]);
+    const size = { width: DEFAULT_WIDGET_SIZE.width, height: 300 };
+    h.c.resize(h.w(0).win.id, size);
+    expect(h.w(0).win.bounds()).toEqual({ x: FIRST.x, y: FIRST.y, ...size });
+  });
+
   it("leaves a pinned widget where it was pinned", () => {
     const h = shown();
     h.c.togglePin(h.w(0).win.id);
@@ -708,6 +719,14 @@ describe("the finished popup in window view", () => {
     expect(h.w(0).win.bounds()).toEqual(BOTTOM);
     // the remembered pin is not honoured either: a temporary widget has no pin, and its level is raised anyway
     expect(h.w(0).calls).toEqual(["level raised"]);
+  });
+
+  it("with the corner off, makes a temporary widget where the folder's widget was left, and at the corner when it was never placed", () => {
+    const h = windowView({ placement: (label) => (label === "repo" ? { x: 40, y: 60, pinned: true } : undefined) });
+    h.c.setPopupCorner(false);
+    h.c.setSnapshot(BOTH_IDLE, "own:1");
+    expect(h.w(0).win.bounds()).toEqual({ x: 40, y: 60, ...DEFAULT_WIDGET_SIZE });
+    expect(h.w(1).win.bounds()).toEqual(BOTTOM);
   });
 
   it("makes none while the full window is focused, and does not pop it up later when the focus moves", () => {

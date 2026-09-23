@@ -20,6 +20,8 @@ export type SettingsState = {
   view: "window" | "widgets";
   /** Whether a finished turn pops its pane's box up over everything until it is looked at. */
   finishedPopup: boolean;
+  /** Whether a popped-up box goes to the bottom-right corner of the main display, or rises where it is. */
+  popupInCorner: boolean;
   logDir: string;
   /** One sentence about the last action, when it was refused, failed, or was saved but not applied; null otherwise. */
   notice: string | null;
@@ -41,6 +43,7 @@ export type SettingsApi = {
   setOpenAtLogin(on: boolean): Promise<SettingsState>;
   setView(view: SettingsState["view"]): Promise<SettingsState>;
   setFinishedPopup(on: boolean): Promise<SettingsState>;
+  setPopupInCorner(on: boolean): Promise<SettingsState>;
   retryAgent(): Promise<SettingsState>;
   openLogs(): Promise<void>;
   /** Subscribes to the states main pushes on its own; returns the unsubscribe. */

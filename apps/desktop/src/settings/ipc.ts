@@ -55,6 +55,7 @@ export function createHandlers(actions: BridgeActions, fallback: SettingsState):
     [CHANNELS.setOpenAtLogin]: checked(z.boolean(), (on) => actions.setOpenAtLogin(on)),
     [CHANNELS.setView]: checked(z.enum(["window", "widgets"]), (view) => actions.setView(view)),
     [CHANNELS.setFinishedPopup]: checked(z.boolean(), (on) => actions.setFinishedPopup(on)),
+    [CHANNELS.setPopupInCorner]: checked(z.boolean(), (on) => actions.setPopupInCorner(on)),
     [CHANNELS.retryAgent]: () => answer(() => actions.retryAgent()),
     [CHANNELS.openLogs]: async () => {
       try {

@@ -57,6 +57,10 @@ A new section in the settings window, **View**, between "this app" and "watched 
 - A second radio pair, off or on, **Pop a box up when a turn finishes**: the page has radio groups
   and no checkbox control, and one kind of control reads better than two (decided in stage 10's
   plan).
+- A third pair, **Where a box pops up**: **corner** (the default) or **in place** (added 23 September
+  2026). In place, a raised widget rises where it stands and grows from its top-left corner as any
+  other, and a popup in window view opens where the folder's widget was last left, or at the corner
+  when it never was. A change applies from the next popup; a box already raised stays put.
 
 Both apply at once, with no restart. Turning widgets on creates a widget for every pane now shown and
 leaves the full window as it is; turning them off closes the widgets and shows the full window.
@@ -104,8 +108,8 @@ Turning the popup off lowers every raised box.
   new: the wait already did. The snapshot carries the displayed state, which core holds for `minDisplayMs`, so a short turn
   still shows as working first. The first snapshot from a source only sets the baseline, so nothing
   fires at launch, at an agent restart or at a takeover.
-- **The corner.** A box raised in either view goes to the bottom-right corner of the primary work
-  area, stacking upward when more than one is raised at a time. Only the boxes already raised are
+- **The corner.** Unless **Where a box pops up** is **in place** (§3.1), a box raised in either
+  view goes to the bottom-right corner of the primary work area, stacking upward when more than one is raised at a time. Only the boxes already raised are
   stacked around: an ordinary widget parked in the corner is not, since a raised box sits above it
   anyway. One corner is the point — the maintainer watches it, not wherever a folder's widget lives.
   A **pinned** widget is the exception and stays where it is: the pin is a promise about where it sits.

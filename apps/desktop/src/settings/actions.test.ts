@@ -14,6 +14,7 @@ const STATE: SettingsState = {
   openAtLogin: false,
   view: "window",
   finishedPopup: false,
+  popupInCorner: true,
   logDir: "C:\\logs",
   notice: null,
 };
@@ -52,6 +53,10 @@ function harness(over: Partial<ActionDeps> & { mode?: HostMode; config?: boolean
     },
     applyPopup: (on) => {
       calls.push(`popup ${on}`);
+      return true;
+    },
+    applyPopupCorner: (on) => {
+      calls.push(`corner ${on}`);
       return true;
     },
     openLogs: async () => void calls.push("logs"),
@@ -378,6 +383,23 @@ describe("createSettingsActions", () => {
       },
     });
     expect((await broken.actions.setFinishedPopup(true)).notice).toContain("see the log");
+    expect(broken.fields).toEqual([{ on: true, failed: true }]);
+  });
+
+  it("applies where a box pops up, logs it, and says so when it holds for this run only or could not be applied", async () => {
+    const { calls, codes, fields, actions } = harness();
+    expect(await actions.setPopupInCorner(false)).toEqual(STATE);
+    expect(calls).toEqual(["corner false"]);
+    expect(codes).toEqual(["desktop.popupCornerChanged"]);
+    expect(fields).toEqual([{ on: false, remembered: true }]);
+    const held = harness({ applyPopupCorner: () => false });
+    expect((await held.actions.setPopupInCorner(true)).notice).toBe(VIEW_NOT_REMEMBERED);
+    const broken = harness({
+      applyPopupCorner: () => {
+        throw new Error("no store");
+      },
+    });
+    expect((await broken.actions.setPopupInCorner(true)).notice).toContain("see the log");
     expect(broken.fields).toEqual([{ on: true, failed: true }]);
   });
 });

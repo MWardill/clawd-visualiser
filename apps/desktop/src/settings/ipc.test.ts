@@ -12,6 +12,7 @@ const STATE: SettingsState = {
   openAtLogin: false,
   view: "window",
   finishedPopup: false,
+  popupInCorner: true,
   logDir: "C:\\logs",
   notice: null,
 };
@@ -55,6 +56,10 @@ function actions(over: Partial<BridgeActions> = {}, fallback: SettingsState = ST
     },
     setFinishedPopup: async (on) => {
       calls.push(`setFinishedPopup ${on}`);
+      return STATE;
+    },
+    setPopupInCorner: async (on) => {
+      calls.push(`setPopupInCorner ${on}`);
       return STATE;
     },
     retryAgent: async () => {
@@ -193,5 +198,12 @@ describe("createHandlers", () => {
     await handlers[CHANNELS.setFinishedPopup]!(false);
     expect(await handlers[CHANNELS.setFinishedPopup]!("yes")).toEqual(STATE);
     expect(calls).toEqual(["setFinishedPopup true", "setFinishedPopup false"]);
+  });
+
+  it("passes where a box pops up on, and answers anything that is not a boolean with the state as it is", async () => {
+    const { calls, handlers } = actions();
+    await handlers[CHANNELS.setPopupInCorner]!(false);
+    expect(await handlers[CHANNELS.setPopupInCorner]!("corner")).toEqual(STATE);
+    expect(calls).toEqual(["setPopupInCorner false"]);
   });
 });

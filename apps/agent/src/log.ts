@@ -28,6 +28,7 @@ export type LogCode =
   | "desktop.viewChanged"
   | "desktop.widgetFailed"
   | "desktop.popupChanged"
+  | "desktop.popupCornerChanged"
   | "desktop.popupRaised"
   | "desktop.sendToBackFailed"
   | "desktop.focusFailed"

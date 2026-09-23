@@ -11,6 +11,7 @@ type Detail = SettingsState["detail"];
 type Login = "on" | "off";
 type Mode = SettingsState["view"];
 type Popup = "off" | "on";
+type Corner = "corner" | "in-place";
 
 const AGENT_WORDS: Record<SettingsState["agent"]["mode"], string> = {
   starting: "starting",
@@ -40,7 +41,11 @@ const MODE_CHOICES: readonly { value: Mode; label: string }[] = [
 ];
 const POPUP_CHOICES: readonly { value: Popup; label: string }[] = [
   { value: "off", label: "off" },
-  { value: "on", label: "on: a finished turn pops its box up over everything until it is clicked or prompted again" },
+  { value: "on", label: "on: a finished turn or a question pops its box up over everything until it is clicked or answered" },
+];
+const CORNER_CHOICES: readonly { value: Corner; label: string }[] = [
+  { value: "corner", label: "corner: the bottom-right of the main display" },
+  { value: "in-place", label: "in place: where the folder's widget already is" },
 ];
 
 /** The state last drawn, which a failed request draws again, so a radio the browser already moved goes back. */
@@ -145,6 +150,7 @@ const SECTION_OF: Readonly<Record<string, string>> = {
   login: "login",
   view: "view",
   popup: "view",
+  corner: "view",
 };
 
 function sectionOf(key: string | undefined): string | null {
@@ -194,6 +200,7 @@ type View = {
   login: Choices<Login>;
   mode: Choices<Mode>;
   popup: Choices<Popup>;
+  corner: Choices<Corner>;
   /** One live region per section that owns a control, by the name `sectionOf` returns. */
   notices: ReadonlyMap<string, HTMLElement>;
 };
@@ -220,17 +227,18 @@ function build(app: HTMLElement): View {
   const login = choices<Login>("login", "Start the app when you sign in", LOGIN_CHOICES, (value) => window.clawd.setOpenAtLogin(value === "on"));
   const mode = choices<Mode>("view", "How sessions are shown", MODE_CHOICES, (value) => window.clawd.setView(value));
   const popup = choices<Popup>("popup", "Pop a box up when a turn finishes", POPUP_CHOICES, (value) => window.clawd.setFinishedPopup(value === "on"));
+  const corner = choices<Corner>("corner", "Where a box pops up", CORNER_CHOICES, (value) => window.clawd.setPopupInCorner(value === "corner"));
   const notices = new Map(["agent", "view", "folders", "hooks", "detail", "login"].map((name) => [name, noticeRegion(name)]));
   app.replaceChildren(
     section("Agent", [row("state", agent), reasonRow, row("sessions", sessions), row("logs", logs), row("", button("open-logs", "Open logs folder", () => window.clawd.openLogs())), retryRow], notices.get("agent")),
     section("This app", [row("version", version), row("runs from", exe)]),
-    section("View", [mode.group, popup.group], notices.get("view")),
+    section("View", [mode.group, popup.group, corner.group], notices.get("view")),
     section("Watched folders", [folders, row("", addFolder)], notices.get("folders")),
     section("Hooks", [row("status", hooks), installRow, removeRow], notices.get("hooks")),
     section("Detail level", [detail.group], notices.get("detail")),
     section("Start on login", [login.group], notices.get("login")),
   );
-  return { agent, reasonRow, reason, sessions, logs, retryRow, version, exe, folders, addFolder, hooks, installRow, install, removeRow, detail, login, mode, popup, notices };
+  return { agent, reasonRow, reason, sessions, logs, retryRow, version, exe, folders, addFolder, hooks, installRow, install, removeRow, detail, login, mode, popup, corner, notices };
 }
 
 /** The folder list is the one thing rebuilt, and only when it differs. Focus inside it goes to the same folder's button, or to Add folder when that folder has gone. */
@@ -308,6 +316,7 @@ function render(state: SettingsState, answered?: string, announceAgain = false):
   check(v.login, "login", state.openAtLogin ? "on" : "off", answered);
   check(v.mode, "view", state.view, answered);
   check(v.popup, "popup", state.finishedPopup ? "on" : "off", answered);
+  check(v.corner, "corner", state.popupInCorner ? "corner" : "in-place", answered);
 
   // A row that has just been hidden may hold the focus, which would strand a keyboard or screen
   // reader user: hand it to the first button still showing in the same section.
