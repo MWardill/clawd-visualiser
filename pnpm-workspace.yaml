@@ -12,3 +12,6 @@ allowBuilds:
   # Installed with electron-builder; its install script only copies a bundled 7-Zip binary for the
   # Squirrel installer target, which this app does not build, so it is not run.
   electron-winstaller: false
+  # Ships prebuilt binaries for every platform in its tarball; its install script only re-checks
+  # them, so it is not run.
+  koffi: false

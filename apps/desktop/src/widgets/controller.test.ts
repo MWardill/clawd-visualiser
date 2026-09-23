@@ -28,12 +28,13 @@ function snap(folders: Record<string, string[]>, generatedAt = at(0)): Snapshot 
 }
 const TWO = snap({ repo: ["agent-1"], docs: ["agent-2"] });
 
-type FakeWindow = { win: WidgetWindow; calls: string[]; sent: WidgetState[]; menus: MenuItemConstructorOptions[][]; fail(): void; closedByUser(): void };
+type FakeWindow = { win: WidgetWindow; calls: string[]; sent: WidgetState[]; menus: MenuItemConstructorOptions[][]; fail(): void; closedByUser(): void; backFails(): void };
 
 function fakeWindow(id: number, initial: Bounds): FakeWindow {
   let bounds = initial;
   let failed: () => void = () => {};
   let closed: () => void = () => {};
+  let backWorks = true;
   const calls: string[] = [];
   const sent: WidgetState[] = [];
   const menus: MenuItemConstructorOptions[][] = [];
@@ -46,6 +47,10 @@ function fakeWindow(id: number, initial: Bounds): FakeWindow {
     },
     setLevel: (level: WidgetLevel) => void calls.push(`level ${level}`),
     reveal: () => void calls.push("reveal"),
+    sendToBack: () => {
+      calls.push("back");
+      return backWorks;
+    },
     send: (state) => void sent.push(state),
     popupMenu: (template) => void menus.push(template),
     close: () => {
@@ -59,7 +64,7 @@ function fakeWindow(id: number, initial: Bounds): FakeWindow {
       closed = cb;
     },
   };
-  return { win, calls, sent, menus, fail: () => failed(), closedByUser: () => closed() };
+  return { win, calls, sent, menus, fail: () => failed(), closedByUser: () => closed(), backFails: () => (backWorks = false) };
 }
 
 function harness(over: Partial<ControllerDeps> = {}) {
@@ -500,7 +505,7 @@ describe("the finished popup in widget view", () => {
     expect(h.logged).toEqual([]);
   });
 
-  it("lowers the widget when the session works or waits again, or leaves, and not when it falls asleep", () => {
+  it("lowers the widget when the session works again, or leaves, and not when it falls asleep", () => {
     const h = shown();
     h.c.setPopup(true);
     h.c.setSnapshot(REPO_IDLE, "own:1");
@@ -577,6 +582,48 @@ describe("the finished popup in widget view", () => {
     h.c.dragEnd(h.w(0).win.id);
     expect(h.w(0).win.bounds()).toEqual(BOTTOM);
     expect(h.saved).toEqual([]);
+  });
+
+  it("sends a clicked widget behind every other window, and one dragged or pinned stays in front", () => {
+    const h = shown();
+    h.c.setPopup(true);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    h.c.dragStart(h.w(0).win.id);
+    h.c.dragEnd(h.w(0).win.id);
+    expect(h.w(0).calls.slice(-2)).toEqual(["level normal", "back"]);
+
+    h.c.setSnapshot(TWO, "own:1");
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    h.setCursor(BOTTOM.x, BOTTOM.y);
+    h.c.dragStart(h.w(0).win.id);
+    h.setCursor(BOTTOM.x - 100, BOTTOM.y - 50);
+    h.c.dragMove(h.w(0).win.id);
+    h.c.dragEnd(h.w(0).win.id);
+    expect(h.w(0).calls.at(-1)).toBe("level normal");
+
+    h.c.togglePin(h.w(1).win.id);
+    h.c.setSnapshot({ ...TWO, sessions: TWO.sessions.map((s) => (s.alias === "agent-2" ? { ...s, state: "working" as const } : s)) }, "own:1");
+    h.c.setSnapshot(BOTH_IDLE, "own:1");
+    h.c.dragStart(h.w(1).win.id);
+    h.c.dragEnd(h.w(1).win.id);
+    expect(h.w(1).calls.at(-1)).toBe("level pinned");
+  });
+
+  it("logs a click that could not send the widget back", () => {
+    const h = shown();
+    h.w(0).backFails();
+    h.c.setPopup(true);
+    h.c.setSnapshot(REPO_IDLE, "own:1");
+    h.c.dragStart(h.w(0).win.id);
+    h.c.dragEnd(h.w(0).win.id);
+    expect(h.logged.at(-1)).toEqual(["desktop.sendToBackFailed", {}]);
+  });
+
+  it("sends nothing back when a widget that was not raised is clicked", () => {
+    const h = shown();
+    h.c.dragStart(h.w(0).win.id);
+    h.c.dragEnd(h.w(0).win.id);
+    expect(h.w(0).calls).toEqual([]);
   });
 
   it("leaves a pinned widget where it was pinned", () => {

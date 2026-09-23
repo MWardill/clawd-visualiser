@@ -6,6 +6,18 @@ import { fileURLToPath } from "node:url";
 
 const here = (p) => fileURLToPath(new URL(p, import.meta.url));
 
+/**
+ * koffi's JavaScript is bundled, its binary is not: the require of its own `.node` fails at run time
+ * and koffi then looks under process.resourcesPath, where electron-builder.yml puts the binary, or
+ * under node_modules in a development run.
+ */
+const nativeBinariesStayOut = {
+  name: "native-binaries-stay-out",
+  setup(b) {
+    b.onResolve({ filter: /\.node$/ }, (args) => ({ path: args.path, external: true }));
+  },
+};
+
 await build({
   entryPoints: [here("../src/main.ts")],
   outfile: here("../dist/main.cjs"),
@@ -15,6 +27,7 @@ await build({
   target: "node22",
   // The runtime provides Electron's module; bundling it would break it.
   external: ["electron"],
+  plugins: [nativeBinariesStayOut],
   sourcemap: true,
   logLevel: "info",
 });

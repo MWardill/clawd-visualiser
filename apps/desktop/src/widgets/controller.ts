@@ -25,6 +25,8 @@ export type WidgetWindow = {
   setLevel(level: WidgetLevel): void;
   /** Shows the window, or brings it above its neighbours, without giving it the keyboard. */
   reveal(): void;
+  /** Puts the window behind every other window, without giving it the keyboard. False when it could not. */
+  sendToBack(): boolean;
   send(state: WidgetState): void;
   popupMenu(template: MenuItemConstructorOptions[]): void;
   close(): void;
@@ -271,9 +273,10 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
   /**
    * A press on a raised box lowers it: the maintainer has looked. The label leaves the set, so the
    * next snapshot does not raise it again, until a new turn finishes there. A temporary widget goes
-   * at once; an ordinary one drops to its own level where it stands.
+   * at once; an ordinary one drops to its own level where it stands, and a click (not a drag) on an
+   * unpinned one also sends it behind everything: seen, and out of the way.
    */
-  const lowerByPress = (e: Entry): void => {
+  const lowerByPress = (e: Entry, moved: boolean): void => {
     // Already lowered, walking out or otherwise: nothing to do.
     if (!e.raised) return;
     raised.delete(e.label);
@@ -283,6 +286,7 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
     }
     e.raised = false;
     e.win.setLevel(levelOf(e));
+    if (!moved && !e.pinned && !e.win.sendToBack()) deps.log("desktop.sendToBackFailed", {});
     push(e);
   };
 
@@ -430,7 +434,7 @@ export function createWidgetController(deps: ControllerDeps): WidgetController {
         if (!e.temporary) deps.savePlacement(e.label, { x: kept.x, y: kept.y, pinned: e.pinned });
       }
       // Every press ends here, moved or not: the one place a press lowers anything. After the save, so a dragged widget is remembered before a press can close it.
-      lowerByPress(e);
+      lowerByPress(e, moved);
     },
     togglePin(sender) {
       const e = bySender(sender);

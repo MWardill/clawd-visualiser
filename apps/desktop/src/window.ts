@@ -4,6 +4,7 @@ import { sameOrigin } from "./navigation";
 import { SETTINGS_URL, WIDGET_URL } from "./scheme";
 import { WIDGET_CHANNELS } from "./widget/channels";
 import type { WidgetWindow } from "./widgets/controller";
+import { sendToBack } from "./zorder";
 
 export const WINDOW_SIZE = { width: 1280, height: 800 } as const;
 /** The scene's night background, so the window never flashes white before the page paints. */
@@ -137,6 +138,7 @@ export function asWidgetWindow(win: BrowserWindow): WidgetWindow {
       win.setAlwaysOnTop(true, "floating");
       win.setAlwaysOnTop(false);
     },
+    sendToBack: () => !win.isDestroyed() && sendToBack(win),
     send: (state) => {
       if (!win.isDestroyed()) win.webContents.send(WIDGET_CHANNELS.state, state);
     },

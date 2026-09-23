@@ -131,7 +131,9 @@ Turning the popup off lowers every raised box.
   raised it has since gone to `working`, which means it was answered in its terminal, or has left
   the snapshot. `asleep` and `waiting` do not lower it.
 - **Afterwards** a pinned widget stays on top at the pinned level where it was pinned, an unpinned
-  one becomes an ordinary window in the corner it was raised to, and a temporary one closes: at once when a press lowered it,
+  one becomes an ordinary window in the corner it was raised to, sent behind every other window when
+  it was clicked rather than dragged (Win32 `SetWindowPos` to `HWND_BOTTOM` through koffi, since
+  Electron's `blur()` only swaps it with the next visible window, which may be another widget), and a temporary one closes: at once when a press lowered it,
   after its Clawds walk out when the session being prompted again or leaving did. The popup going
   off, a change of view and a new agent lower everything too: a temporary widget then walks out and
   closes, or closes at once on a change of view.
