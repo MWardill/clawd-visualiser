@@ -3,7 +3,7 @@ import type { RedactedEvent } from "../schema/events";
 import type { StateConfig } from "./config";
 import { newSession, reduceSession, tickSession, type SessionState } from "./session";
 
-/** `name` is the working directory's last segment from the latest event that carried one, or null. */
+/** `name` is the working directory's last segment from the latest event from that directory that carried one, or null. */
 export type PaneState = { paneKey: string; firstSeenAt: number; sessionIds: string[]; name: string | null };
 
 /** Plain records rather than Maps so a fleet is JSON-serialisable and trivially comparable in tests. */
@@ -35,7 +35,8 @@ export function reduceFleet(f: Fleet, e: RedactedEvent, now: number, cfg: StateC
   const existing = own(f.sessions, e.sessionId);
   if (!existing && createsNothing(e)) return f;
   const s = existing ?? newSession(e.sessionId, e.paneKey, now, idleSince(e, now));
-  return withSession(f, reduceSession(s, e, now, cfg), e.paneName);
+  // A session stays in the pane it was first seen in, so an event from a directory it has moved to must not rename that pane.
+  return withSession(f, reduceSession(s, e, now, cfg), e.paneKey === s.paneKey ? e.paneName : undefined);
 }
 
 /** Pure: applies timers to every session and drops what has lingered long enough. */

@@ -31,6 +31,13 @@ describe("reduceFleet", () => {
     expect(f.panes["k1"]).toMatchObject({ name: "visualiser", sessionIds: ["s1", "s2"] });
   });
 
+  it("keeps a pane's name when its session works from another directory", () => {
+    let f = reduceFleet(emptyFleet(), event("prompt", T0, {}, { sessionId: "s1", paneKey: "k1", paneName: "b2b" }), T0, DEFAULT_CONFIG);
+    f = reduceFleet(f, event("tool.start", T0 + 1, { tool: "Bash", category: "run", toolUseId: "t1" }, { sessionId: "s1", paneKey: "k2", paneName: "nightly-tests" }), T0 + 1, DEFAULT_CONFIG);
+    expect(f.panes["k1"]?.name).toBe("b2b");
+    expect(f.panes["k2"]).toBeUndefined();
+  });
+
   it("seeds a session from a live presence but ignores presence for unknown dead sessions", () => {
     let f = reduceFleet(emptyFleet(), event("presence", T0, { alive: true }, { sessionId: "s1", paneKey: "k1" }), T0, DEFAULT_CONFIG);
     expect(f.sessions["s1"]?.state).toBe("idle");
